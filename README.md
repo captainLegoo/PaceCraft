@@ -422,15 +422,20 @@ server/
       race.ts          比赛日分析：复盘判据、掉速规律、赛前/赛后 prompt
       race-ai.ts        比赛日一键分析 + 追问对话
     index.ts           Elysia API + 托管前端产物
-  drizzle/             迁移 SQL
+  drizzle/             迁移 SQL（手写，启动时按文件名顺序自动应用）
 web/
   src/
     theme.tsx          主题 hook + 切换按钮
     icons.tsx          线性图标集
     charts.tsx         手写 SVG 图表（零图表依赖）
     pages/             训练 / 场次详情 / 单条详情 / 自建预测 / 比赛日 / 备赛 / 恢复 / 体能 / 设置
-.shots/shoot.ts        本地 UI 截图工具（playwright-core，仅开发用）
+.shots/shoot.ts        本地 UI 截图工具（bun run shoot，截图不入库）
 ```
+
+**加一份迁移**：在 `server/drizzle/` 新建 `0010_你的说明.sql`，多条语句用
+`--> statement-breakpoint` 分隔。服务下次启动会自动应用，执行过的记在库里
+`_migrations` 表，不会重复跑。迁移是**手写**的 —— 仓库里没有 `drizzle.config`，
+别用 `drizzle-kit generate` 去生成，它会和这些已上线的 SQL 对不上。
 
 ## 常用命令
 
@@ -438,7 +443,8 @@ web/
 bun run auth          # 重新授权
 bun run sync          # 命令行同步（可加 --days=180）
 bun run probe schema  # 导出全部 34 个 MCP 工具的 schema
-cd server && bun run src/cli/test-parse.ts       # 解析层断言（真实数据）
+bun run shoot         # 截图到 .shots/（需先起服务；缺浏览器就 bunx playwright install chromium）
+cd server && bun run src/cli/test-parse.ts       # 解析层断言（读本地探针快照，无硬编码数值）
 cd server && bun run src/cli/test-sessions.ts    # 场次聚合 + 组识别断言
 cd server && bun run src/cli/test-prediction.ts  # 预测引擎断言
 ```

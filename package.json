@@ -12,7 +12,8 @@
     "dev:web": "bun run --cwd web dev",
     "build": "bun run --cwd web build",
     "sync": "bun run --cwd server sync",
-    "probe": "bun run --cwd server probe"
+    "probe": "bun run --cwd server probe",
+    "shoot": "bun run .shots/shoot.ts"
   },
   "devDependencies": {
     "playwright-core": "^1.63.0"

@@ -8,8 +8,9 @@ dist/
 *.log
 *.pid
 
-# 我做视觉验收时的临时截图（31MB，不进版本库）
-.shots/
+# 我做视觉验收时的临时截图。截图里是本人真实训练数据，只放行工具脚本本身。
+.shots/*
+!.shots/shoot.ts
 
 # macOS
 .DS_Store
