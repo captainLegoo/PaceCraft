@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#1a1d23" />
+    <title>COROS 训练看板</title>
+    <script>
+      // 必须在内联样式之前跑：否则深色用户刷新时会先闪一下白底
+      (function () {
+        try {
+          var saved = localStorage.getItem("coros-dashboard-theme");
+          var t = saved || (matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark");
+          document.documentElement.setAttribute("data-theme", t);
+          document.querySelector('meta[name="theme-color"]')
+            .setAttribute("content", t === "light" ? "#e8e7e3" : "#1a1d23");
+        } catch (e) {}
+      })();
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

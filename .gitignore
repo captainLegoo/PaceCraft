@@ -1,0 +1,27 @@
+# 依赖与构建产物
+node_modules/
+dist/
+*.tsbuildinfo
+
+# 运行时产物
+.logs/
+*.log
+*.pid
+
+# 我做视觉验收时的临时截图（31MB，不进版本库）
+.shots/
+
+# macOS
+.DS_Store
+
+# 凭证与本地数据 —— 双重保险。
+# 正常情况下这些文件在 ~/.coros-dashboard/，根本不在项目目录里。
+# 这里再加一层，是为了防止哪天有人改了 COROS_DATA_DIR 或手动拷了一份进来，
+# 然后 git add . 一把提交上去（tokens.json 是明文 OAuth token）。
+.env
+.env.*
+*.db
+*.db-shm
+*.db-wal
+*.db.bak-*
+tokens.json

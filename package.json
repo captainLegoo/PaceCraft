@@ -1,0 +1,20 @@
+{
+  "name": "coros-dashboard",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "server",
+    "web"
+  ],
+  "scripts": {
+    "auth": "bun run --cwd server auth",
+    "dev:server": "bun run --cwd server dev",
+    "dev:web": "bun run --cwd web dev",
+    "build": "bun run --cwd web build",
+    "sync": "bun run --cwd server sync",
+    "probe": "bun run --cwd server probe"
+  },
+  "devDependencies": {
+    "playwright-core": "^1.63.0"
+  }
+}

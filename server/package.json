@@ -1,0 +1,20 @@
+{
+  "name": "@coros-dashboard/server",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "bun run --watch src/index.ts",
+    "start": "bun run src/index.ts",
+    "auth": "bun run src/cli/auth.ts",
+    "sync": "bun run src/cli/sync.ts",
+    "probe": "bun run src/cli/probe.ts"
+  },
+  "dependencies": {
+    "drizzle-orm": "^0.44.2",
+    "elysia": "^1.4.0"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "drizzle-kit": "^0.31.4"
+  }
+}

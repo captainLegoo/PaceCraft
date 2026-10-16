@@ -1,0 +1,22 @@
+# ---------- 换行符 ----------
+# 统一 LF。这个项目在 macOS 上跑，start.sh / stop.sh / dev.sh 一旦被
+# checkout 成 CRLF，执行时会报 "bad interpreter: ^M"。
+* text=auto eol=lf
+
+# ---------- 二进制 ----------
+# 明确声明，避免 Git 把它们当文本做 diff / merge。
+*.png   binary
+*.jpg   binary
+*.jpeg  binary
+*.gif   binary
+*.webp  binary
+*.ico   binary
+*.woff  binary
+*.woff2 binary
+*.ttf   binary
+
+# ---------- 生成物 ----------
+# 标注为「生成的文件」：GitHub 默认折叠 diff，也不计入语言统计。
+# 注意 bun.lock 仍然参与 diff —— 依赖变更需要能 review。
+bun.lock          linguist-generated=true
+server/drizzle/** linguist-generated=true
