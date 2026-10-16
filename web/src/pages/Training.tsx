@@ -121,8 +121,8 @@ export default function Training({ onOpen, onOpenSession, onOpenWeek }: { onOpen
           <LineChart
             labels={recentLoad.map((p) => p.date)}
             series={[
-              { key: "short", label: "短期负荷", color: "var(--accent)", values: recentLoad.map((p) => p.shortLoad) },
-              { key: "long", label: "长期负荷", color: "var(--text-faint)", values: recentLoad.map((p) => p.longLoad) },
+              { key: "short", label: "短期负荷", color: "var(--chart-accent)", values: recentLoad.map((p) => p.shortLoad) },
+              { key: "long", label: "长期负荷", color: "var(--chart-muted)", values: recentLoad.map((p) => p.longLoad) },
             ]}
             height={230}
             yFmt={(n) => String(Math.round(n))}
@@ -135,8 +135,8 @@ export default function Training({ onOpen, onOpenSession, onOpenWeek }: { onOpen
         <p className="card-sub">负荷比 = 短期负荷 / 长期负荷。连续高于 1.3 有累积疲劳风险，长期低于 0.8 刺激不足</p>
         <LineChart
           labels={recentLoad.map((p) => p.date)}
-          series={[{ key: "ratio", label: "负荷比（7日均）", color: "var(--warn)", values: recentLoad.map((p) => p.ratioAvg7 ?? p.ratio) }]}
-          bands={[{ from: 0.8, to: 1.3, color: "var(--good)" }]}
+          series={[{ key: "ratio", label: "负荷比（7日均）", color: "var(--chart-warn)", values: recentLoad.map((p) => p.ratioAvg7 ?? p.ratio) }]}
+          bands={[{ from: 0.8, to: 1.3, color: "var(--chart-good)" }]}
           height={150}
           yMin={0.4}
           yMax={1.6}

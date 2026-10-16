@@ -39,6 +39,21 @@
   --z4: #fbbf24;
   --z5: #f87171;
 
+  /* 图表专用色（--chart-*）：只给线/柱/点/色块用，不要拿去当文字色。
+     暗色底下主题色本身已经够亮够鲜，直接沿用；浅色底下才需要另给一套，见下。 */
+  --chart-accent: var(--accent);
+  --chart-accent-dim: var(--accent-dim);
+  --chart-hr: var(--hr);
+  --chart-warn: var(--warn);
+  --chart-good: var(--good);
+  --chart-bad: var(--bad);
+  --chart-muted: var(--text-faint);
+  --chart-z1: var(--z1);
+  --chart-z2: var(--z2);
+  --chart-z3: var(--z3);
+  --chart-z4: var(--z4);
+  --chart-z5: var(--z5);
+
   --input-bg: #1e222a;
   --tooltip-bg: #1f242c;
   --tooltip-border: #414955;
@@ -85,6 +100,22 @@
   --z3: #55730c;
   --z4: #8f5606;
   --z5: #a81c1c;
+
+  /* 图表专用色：浅底上「文字」要 4.5:1，所以上面的 --accent 之类被压成了深橄榄绿；
+     但「线条」只要 3:1 就够看清，按 3.5:1 重新取每个色相的彩度上限，曲线才不会发闷、
+     同一张图里的两条线也才分得开。z3/z4/z5 与 accent/warn/bad 同色，跟暗色保持一致。 */
+  --chart-accent: #7b8c02;
+  --chart-accent-dim: #9db303;
+  --chart-hr: #038ebe;
+  --chart-warn: #bd7200;
+  --chart-good: #019945;
+  --chart-bad: #fe1803;
+  --chart-muted: #565d68;
+  --chart-z1: #0180ff;
+  --chart-z2: #029678;
+  --chart-z3: #7b8c02;
+  --chart-z4: #bd7200;
+  --chart-z5: #fe1803;
 
   --input-bg: #fbfaf7;
   --tooltip-bg: #ffffff;

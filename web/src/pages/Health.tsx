@@ -79,8 +79,8 @@ export default function Health() {
         <p className="card-sub">日均压力值，背景带为 60–80 的中等区间</p>
         <LineChart
           labels={stress.map((s: any) => s.date)}
-          series={[{ key: "s", label: "日均压力", color: "var(--warn)", values: stress.map((s: any) => s.avgStress) }]}
-          bands={[{ from: 60, to: 80, color: "var(--good)" }]}
+          series={[{ key: "s", label: "日均压力", color: "var(--chart-warn)", values: stress.map((s: any) => s.avgStress) }]}
+          bands={[{ from: 60, to: 80, color: "var(--chart-good)" }]}
           height={180}
           yFmt={(n) => String(Math.round(n))}
         />
@@ -92,9 +92,9 @@ export default function Health() {
         <LineChart
           labels={hr.map((h: any) => h.date)}
           series={[
-            { key: "max", label: "最高心率", color: "var(--bad)", values: hr.map((h: any) => h.maxHr) },
-            { key: "avg", label: "平均心率", color: "var(--hr)", values: hr.map((h: any) => h.avgHr) },
-            { key: "min", label: "最低心率", color: "var(--z2)", values: hr.map((h: any) => h.minHr) },
+            { key: "max", label: "最高心率", color: "var(--chart-bad)", values: hr.map((h: any) => h.maxHr) },
+            { key: "avg", label: "平均心率", color: "var(--chart-hr)", values: hr.map((h: any) => h.avgHr) },
+            { key: "min", label: "最低心率", color: "var(--chart-z2)", values: hr.map((h: any) => h.minHr) },
           ]}
           height={210}
           yFmt={(n) => String(Math.round(n))}
@@ -107,7 +107,7 @@ export default function Health() {
           <p className="card-sub">训练日之外的活动量</p>
           <LineChart
             labels={dates}
-            series={[{ key: "steps", label: "步数", color: "var(--accent)", values: health.map((h: any) => h.steps) }]}
+            series={[{ key: "steps", label: "步数", color: "var(--chart-accent)", values: health.map((h: any) => h.steps) }]}
             height={170}
             yFmt={(n) => (n >= 1000 ? (n / 1000).toFixed(0) + "k" : String(Math.round(n)))}
           />
@@ -117,7 +117,7 @@ export default function Health() {
           <p className="card-sub">COROS 记录的当日运动分钟数</p>
           <LineChart
             labels={dates}
-            series={[{ key: "ex", label: "运动分钟", color: "var(--z2)", values: health.map((h: any) => h.exerciseMin) }]}
+            series={[{ key: "ex", label: "运动分钟", color: "var(--chart-z2)", values: health.map((h: any) => h.exerciseMin) }]}
             height={170}
             yFmt={(n) => String(Math.round(n))}
           />

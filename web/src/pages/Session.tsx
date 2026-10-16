@@ -146,9 +146,11 @@ export default function SessionView({
               xValues={chartX}
               xFmt={(n) => `${Math.floor(n / 60)}′${String(Math.round(n % 60)).padStart(2, "0")}″`}
               series={[
-                { key: "pace", label: "配速（秒/km，左轴）", color: "var(--accent)", values: paceSeries },
-                { key: "hr", label: "平均心率（右轴）", color: "var(--hr)", axis: "right", values: hrSeries },
+                { key: "pace", label: "配速（左轴）", color: "var(--chart-accent)", values: paceSeries },
+                { key: "hr", label: "平均心率（右轴）", color: "var(--chart-hr)", axis: "right", values: hrSeries },
               ]}
+              yFmt={fmtPace}
+              yFmtRight={(n) => String(Math.round(n))}
               height={230}
               fill={false}
             />

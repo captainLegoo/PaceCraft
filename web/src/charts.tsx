@@ -80,11 +80,61 @@ const TipRows = ({ title, rows }: { title: string; rows: [string, string][] }) =
   </>
 );
 
+// ---------- 轴刻度 ----------
+
+/**
+ * 轴刻度：步长取 1/2/5 × 10^k 这类整齐值（读数是 0/20/40，而不是把区间
+ * 三等分得到的 0/14.57/29.1），刻度全部落在 [lo, hi] 内。
+ *
+ * 有两条约束会打架，所以这里从小步长到大步长扫一遍候选，取「格式化后文字
+ * 互不重复、且条数最接近 count」的那一档：
+ *   步长太细 → 0.5 和 1 都被 Math.round 成 "1"，两个标签会叠在一起；
+ *   步长太粗 → 区间起点不在整数倍上时只剩两个端点，网格线全挤在顶部。
+ * 由粗到细遍历，条数一样接近时保留更粗的那档，读数更干净。
+ */
+function axisTicks(
+  lo: number, hi: number, fmt: (n: number) => string, count = 4,
+): { v: number; label: string }[] {
+  if (!Number.isFinite(lo) || !Number.isFinite(hi) || hi <= lo) return [{ v: lo, label: fmt(lo) }];
+
+  const raw = (hi - lo) / Math.max(1, count - 1);
+  const mag = 10 ** Math.floor(Math.log10(raw));
+  const norm = raw / mag;
+  // 阈值取 1.5/3/7 而不是 1/2/5：后者在 norm≈2.3 这种边界上会直接跳到
+  // 下一档，把 0–70 压成只剩 0/50 两个刻度。
+  const base = (norm < 1.5 ? 1 : norm < 3 ? 2 : norm < 7 ? 5 : 10) * mag;
+
+  let best: { v: number; label: string }[] | null = null;
+  for (const step of [base * 4, base * 2, base, base / 2, base / 4]) {
+    const vs = ticksWithStep(lo, hi, step);
+    if (vs.length < 2) continue;
+    const labels = vs.map(fmt);
+    if (new Set(labels).size !== labels.length) continue;
+    if (!best || Math.abs(vs.length - count) < Math.abs(best.length - count)) {
+      best = vs.map((v, i) => ({ v, label: labels[i] ?? "" }));
+    }
+  }
+  // 一档都不合格时退回首尾两点（极端窄区间，例如整段数据只有一个值）
+  return best ?? [{ v: lo, label: fmt(lo) }, { v: hi, label: fmt(hi) }];
+}
+
+/** 取 [lo, hi] 内所有 step 的整数倍。 */
+function ticksWithStep(lo: number, hi: number, step: number): number[] {
+  const out: number[] = [];
+  for (let i = 0; ; i++) {
+    const v = Math.ceil(lo / step - 1e-9) * step + i * step;
+    if (v > hi + step * 1e-9) break;
+    // 累加会漂（0.1+0.2 → 0.30000000000000004），按精度截一下
+    out.push(Number(v.toPrecision(12)));
+  }
+  return out;
+}
+
 // ---------- 柱状图（可叠加第二条指标曲线）----------
 export type BarDatum = { label: string; value: number; extra?: number; tip?: [string, string][] };
 
 export function BarChart({
-  data, height = 190, color = "var(--accent)", overlayColor, overlayLabel, valueFmt = (n: number) => String(Math.round(n * 10) / 10),
+  data, height = 190, color = "var(--chart-accent)", overlayColor, overlayLabel, valueFmt = (n: number) => String(Math.round(n * 10) / 10),
   onSelect, selectedIndex,
 }: {
   data: BarDatum[];
@@ -98,7 +148,8 @@ export function BarChart({
 }) {
   const [ref, w] = useWidth<HTMLDivElement>();
   const tip = useChartTooltip();
-  const padL = 34, padR = 10, padT = 12, padB = 22;
+  // 有叠加曲线时右边要放它的刻度，先让出右边距
+  const padL = 34, padR = overlayColor ? 38 : 10, padT = 12, padB = 22;
   const iw = Math.max(10, w - padL - padR);
   const ih = height - padT - padB;
 
@@ -108,7 +159,10 @@ export function BarChart({
   const barW = Math.min(bw * 0.62, 34);
 
   const y = (v: number, max: number) => padT + ih - (v / max) * ih;
-  const ticks = [0, 0.5, 1].map((t) => ({ v: maxV * t, y: y(maxV * t, maxV) }));
+  const ticks = axisTicks(0, maxV, (n) => String(Math.round(n)), 4);
+  // 叠加曲线走的是自己的量纲（例如心率），以前只有 legend 没有刻度，
+  // 绝对数值读不出来 —— 这里给它补一条右轴，颜色与曲线、legend 一致。
+  const oTicks = overlayColor ? axisTicks(0, maxO, (n) => String(Math.round(n)), 4) : [];
 
   const overlayPts = data
     .map((d, i) => `${padL + bw * i + bw / 2},${y(d.extra ?? 0, maxO)}`)
@@ -119,20 +173,35 @@ export function BarChart({
       <svg className="chart-svg" height={height} role="img">
         {ticks.map((t, i) => (
           <g key={i}>
-            <line className="grid-line" x1={padL} x2={w - padR} y1={t.y} y2={t.y} />
-            <text className="axis-label" x={padL - 6} y={t.y + 3} textAnchor="end">{Math.round(t.v)}</text>
+            <line className="grid-line" x1={padL} x2={w - padR} y1={y(t.v, maxV)} y2={y(t.v, maxV)} />
+            {/* 只有两条量纲并存时才给刻度上色，否则纯属噪点 */}
+            <text
+              className="axis-label" x={padL - 6} y={y(t.v, maxV) + 3} textAnchor="end"
+              fill={overlayColor ? color : undefined}
+            >
+              {t.label}
+            </text>
           </g>
+        ))}
+        {oTicks.map((t, i) => (
+          <text
+            key={`o${i}`} className="axis-label" x={w - padR + 6} y={y(t.v, maxO) + 3}
+            textAnchor="start" fill={overlayColor}
+          >
+            {t.label}
+          </text>
         ))}
         {data.map((d, i) => {
           const h = Math.max((d.value / maxV) * ih, d.value > 0 ? 2 : 0);
           const x = padL + bw * i + (bw - barW) / 2;
           return (
             <g key={i}>
+              {/* 不选中时保持不透明，柱子颜色与 legend 色块完全一致（以前是 0.82，对不上） */}
               <rect
                 x={x} y={padT + ih - h} width={barW} height={h}
                 rx={3}
                 fill={color}
-                opacity={selectedIndex === i ? 1 : selectedIndex == null ? 0.82 : 0.3}
+                opacity={selectedIndex == null || selectedIndex === i ? 1 : 0.3}
                 style={{ cursor: onSelect ? "pointer" : "default" }}
                 onMouseMove={(e) => tip.show(e, <TipRows title={d.label} rows={[[valueFmt(d.value), d.tip?.[0]?.[1] ?? ""], ...(d.tip?.slice(1) ?? [])].filter((r) => r[1] !== "") as [string, string][]} />)}
                 onMouseLeave={tip.hide}
@@ -195,6 +264,12 @@ export function LineChart({
   const [ref, w] = useWidth<HTMLDivElement>();
   const tip = useChartTooltip();
   const hasRight = series.some((s) => s.axis === "right");
+  // 某一侧只有一条线时，把该侧刻度染成线的颜色。双轴图里光看刻度数字
+  // 分不清哪边属于哪条线，尤其是通道图那种「左轴配速、右轴心率」。
+  const leftSeries = series.filter((s) => s.axis !== "right");
+  const rightSeries = series.filter((s) => s.axis === "right");
+  const leftTickColor = leftSeries.length === 1 ? leftSeries[0]?.color : undefined;
+  const rightTickColor = rightSeries.length === 1 ? rightSeries[0]?.color : undefined;
   const padL = 34, padR = hasRight ? 38 : 10, padT = 12, padB = 22;
   const iw = Math.max(10, w - padL - padR);
   const ih = height - padT - padB;
@@ -211,6 +286,8 @@ export function LineChart({
   };
   const L = rangeOf(leftVals.length ? leftVals : [0, 1], yMin, yMax);
   const R = rangeOf(rightVals.length ? rightVals : [0, 1]);
+  const lTicks = axisTicks(L.lo, L.hi, yFmt, 4);
+  const rTicks = hasRight ? axisTicks(R.lo, R.hi, yFmtRight ?? yFmt, 4) : [];
 
   // 横轴：给定 xValues 时按数值缩放，否则按索引等距
   const X = useMemo(() => {
@@ -239,15 +316,17 @@ export function LineChart({
             fill={b.color} opacity={0.1} />
         ))}
 
-        {[L.lo, L.lo + L.span / 2, L.hi].map((t, i) => (
+        {lTicks.map((t, i) => (
           <g key={`l${i}`}>
-            <line className="grid-line" x1={padL} x2={padL + iw} y1={y(t)} y2={y(t)} />
-            <text className="axis-label" x={padL - 6} y={y(t) + 3} textAnchor="end">{yFmt(t)}</text>
+            <line className="grid-line" x1={padL} x2={padL + iw} y1={y(t.v)} y2={y(t.v)} />
+            <text className="axis-label" x={padL - 6} y={y(t.v) + 3} textAnchor="end" fill={leftTickColor}>
+              {t.label}
+            </text>
           </g>
         ))}
-        {hasRight && [R.lo, R.lo + R.span / 2, R.hi].map((t, i) => (
-          <text key={`r${i}`} className="axis-label" x={padL + iw + 6} y={padT + ih - ((t - R.lo) / R.span) * ih + 3} textAnchor="start">
-            {(yFmtRight ?? yFmt)(t)}
+        {rTicks.map((t, i) => (
+          <text key={`r${i}`} className="axis-label" x={padL + iw + 6} y={padT + ih - ((t.v - R.lo) / R.span) * ih + 3} textAnchor="start" fill={rightTickColor}>
+            {t.label}
           </text>
         ))}
 
@@ -438,12 +517,12 @@ export function paceHrResidual(rows: ResidualRow[], height = 240) {
           const cx = padL + slot * i + slot / 2;
           const top = up ? yFor(r.residual) : zero;
           const h = Math.max(Math.abs(yFor(r.residual) - zero), 1.5);
-          const fill = up ? "var(--bad)" : "var(--good)";
+          const fill = up ? "var(--chart-bad)" : "var(--chart-good)";
           return (
             <g key={i}>
               <rect
                 x={cx - barW / 2} y={top} width={barW} height={h} rx={2.5}
-                fill={fill} opacity={0.82}
+                fill={fill} opacity={1}
                 onMouseMove={(e) => tip.show(e, <TipRows title={r.label} rows={r.tip} />)}
                 onMouseLeave={tip.hide}
               />
@@ -478,8 +557,8 @@ export function paceHrResidual(rows: ResidualRow[], height = 240) {
         ))}
       </svg>
       <div className="legend">
-        <div className="legend-item"><span className="legend-swatch" style={{ background: "var(--bad)" }} />心率高于该配速应有值（硬顶）</div>
-        <div className="legend-item"><span className="legend-swatch" style={{ background: "var(--good)" }} />心率低于该配速应有值（有余量）</div>
+        <div className="legend-item"><span className="legend-swatch" style={{ background: "var(--chart-bad)" }} />心率高于该配速应有值（硬顶）</div>
+        <div className="legend-item"><span className="legend-swatch" style={{ background: "var(--chart-good)" }} />心率低于该配速应有值（有余量）</div>
       </div>
       {tip.el}
     </div>
@@ -559,7 +638,7 @@ export function ZoneBar({ zones, basis }: { zones: ZoneInput[]; basis: number | 
             title={`区间外（< ${zones[0]?.hrLo ?? 136} bpm，热身/恢复）— ${belowPct}%`}
             style={{
               width: `${belowPct}%`,
-              background: "var(--text-faint)",
+              background: "var(--chart-muted)",
               opacity: 0.35,
               transition: "opacity .15s",
             }}
@@ -571,8 +650,8 @@ export function ZoneBar({ zones, basis }: { zones: ZoneInput[]; basis: number | 
             title={`${z.zone} ${z.label}${z.hrLo ? ` ${z.hrLo}–${z.hrHi} bpm（${z.pctLabel ?? ""}）` : ""} — ${fmtDur(z.seconds)} (${z.pct}%)`}
             style={{
               width: `${(z.seconds / total) * 100}%`,
-              background: `var(--${z.zone.toLowerCase()})`,
-              opacity: z.seconds > 0 ? 0.88 : 0.12,
+              background: `var(--chart-${z.zone.toLowerCase()})`,
+              opacity: z.seconds > 0 ? 1 : 0.12,
               transition: "opacity .15s",
             }}
           />
@@ -581,7 +660,7 @@ export function ZoneBar({ zones, basis }: { zones: ZoneInput[]; basis: number | 
       <div className="legend" style={{ marginTop: 10 }}>
         {zones.map((z) => (
           <div className="legend-item" key={z.zone} style={{ opacity: z.seconds > 0 ? 1 : 0.4 }}>
-            <span className="legend-swatch" style={{ background: `var(--${z.zone.toLowerCase()})` }} />
+            <span className="legend-swatch" style={{ background: `var(--chart-${z.zone.toLowerCase()})` }} />
             {z.zone} {z.label}
             {hasHrRange && z.hrLo != null && (
               <span className="num" style={{ color: "var(--text-faint)", fontSize: 11 }}>
@@ -593,7 +672,7 @@ export function ZoneBar({ zones, basis }: { zones: ZoneInput[]; basis: number | 
         ))}
         {belowPct > 0 && (
           <div className="legend-item" style={{ opacity: 0.7 }}>
-            <span className="legend-swatch" style={{ background: "var(--text-faint)", opacity: 0.35 }} />
+            <span className="legend-swatch" style={{ background: "var(--chart-muted)", opacity: 0.35 }} />
             热身/恢复
             <span className="num" style={{ color: "var(--text-faint)", fontSize: 11 }}>
               &lt; {zones[0]?.hrLo ?? 136}

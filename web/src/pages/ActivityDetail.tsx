@@ -98,11 +98,11 @@ export default function ActivityDetailView({
             <LineChart
               labels={fullLaps.map((l) => `${(l.distanceM / 1000).toFixed(1)}km`)}
               series={[
-                { key: "pace", label: "配速（秒/km，左轴）", color: "var(--accent)", values: fullLaps.map((l) => l.avgPaceSec) },
-                { key: "hr", label: "平均心率（右轴）", color: "var(--hr)", axis: "right", values: fullLaps.map((l) => l.avgHr) },
+                { key: "pace", label: "配速（左轴）", color: "var(--chart-accent)", values: fullLaps.map((l) => l.avgPaceSec) },
+                { key: "hr", label: "平均心率（右轴）", color: "var(--chart-hr)", axis: "right", values: fullLaps.map((l) => l.avgHr) },
               ]}
               height={220}
-              yFmt={(n) => String(Math.round(n))}
+              yFmt={fmtPace}
               yFmtRight={(n) => String(Math.round(n))}
             />
           </div>

@@ -453,28 +453,28 @@ function SplitChart({ splits, hasGoal }: { splits: Split[]; hasGoal: boolean }) 
           <line
             x1={padX} x2={padX + iw} y1={yPace(splits[0].paceSec - splits[0].vsGoalSec)}
             y2={yPace(splits[0].paceSec - splits[0].vsGoalSec)}
-            stroke="var(--good)" strokeWidth={1.4} strokeDasharray="5 4"
+            stroke="var(--chart-good)" strokeWidth={1.4} strokeDasharray="5 4"
           />
         )}
         <polyline
           points={splits.map((s, i) => `${cx(i)},${yPace(s.paceSec)}`).join(" ")}
-          fill="none" stroke="var(--accent)" strokeWidth={2} strokeLinejoin="round" strokeLinecap="round"
+          fill="none" stroke="var(--chart-accent)" strokeWidth={2} strokeLinejoin="round" strokeLinecap="round"
         />
         <polyline
           points={splits.map((s, i) => `${cx(i)},${yHr(s.hr)}`).join(" ")}
-          fill="none" stroke="var(--hr)" strokeWidth={1.6} strokeLinejoin="round" strokeLinecap="round"
+          fill="none" stroke="var(--chart-hr)" strokeWidth={1.6} strokeLinejoin="round" strokeLinecap="round"
         />
         {splits.map((s, i) => (
-          <circle key={s.km} cx={cx(i)} cy={yHr(s.hr)} r={3} fill="var(--hr)" stroke="var(--surface)" strokeWidth={1} />
+          <circle key={s.km} cx={cx(i)} cy={yHr(s.hr)} r={3} fill="var(--chart-hr)" stroke="var(--surface)" strokeWidth={1} />
         ))}
       </svg>
       <div className="split-axis">
         {[1, Math.ceil(n / 2), n].map((k) => <span key={k}>{k} km</span>)}
       </div>
       <div className="legend">
-        <div className="legend-item"><span className="legend-swatch" style={{ background: "var(--accent)" }} />配速（越往下越慢）</div>
-        <div className="legend-item"><span className="legend-swatch" style={{ background: "var(--hr)" }} />心率（越往下越高）</div>
-        {hasGoal && <div className="legend-item"><span className="legend-swatch" style={{ background: "var(--good)" }} />目标配速</div>}
+        <div className="legend-item"><span className="legend-swatch" style={{ background: "var(--chart-accent)" }} />配速（越往下越慢）</div>
+        <div className="legend-item"><span className="legend-swatch" style={{ background: "var(--chart-hr)" }} />心率（越往下越高）</div>
+        {hasGoal && <div className="legend-item"><span className="legend-swatch" style={{ background: "var(--chart-good)" }} />目标配速</div>}
       </div>
     </div>
   );

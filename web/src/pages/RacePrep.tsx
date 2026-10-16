@@ -342,7 +342,7 @@ function WeeklyChart({ weekly }: { weekly: Weekly[] }) {
               <rect x={padL + slot * i} y={0} width={slot} height={H - padB} fill="transparent" />
               <rect
                 x={cx(i) - bw / 2} y={H - padB - h} width={bw} height={h} rx={3}
-                fill={x.distanceKm >= maxKm * 0.9 ? "var(--accent)" : "var(--accent-dim)"}
+                fill={x.distanceKm >= maxKm * 0.9 ? "var(--chart-accent)" : "var(--chart-accent-dim)"}
                 opacity={hover == null || on ? 0.9 : 0.4}
               />
             </g>
@@ -351,12 +351,12 @@ function WeeklyChart({ weekly }: { weekly: Weekly[] }) {
         {/* 最长单跑：用右轴语义，固定占 0~0.78 的高度带，避免和柱子的量纲混淆 */}
         <polyline
           points={weekly.map((x, i) => `${cx(i)},${H - padB - (x.longestRunKm / maxLong) * ih * 0.78}`).join(" ")}
-          fill="none" stroke="var(--hr)" strokeWidth={1.8} strokeLinejoin="round" strokeLinecap="round"
+          fill="none" stroke="var(--chart-hr)" strokeWidth={1.8} strokeLinejoin="round" strokeLinecap="round"
         />
         {weekly.map((x, i) => (
           <circle
             key={x.weekStart} cx={cx(i)} cy={H - padB - (x.longestRunKm / maxLong) * ih * 0.78}
-            r={hover === i ? 5 : 3.5} fill="var(--hr)" stroke="var(--surface)" strokeWidth={1.5}
+            r={hover === i ? 5 : 3.5} fill="var(--chart-hr)" stroke="var(--surface)" strokeWidth={1.5}
           />
         ))}
         <line x1={padL} x2={padL + iw} y1={H - padB} y2={H - padB} stroke="var(--border-strong)" strokeWidth={1} />
@@ -380,8 +380,8 @@ function WeeklyChart({ weekly }: { weekly: Weekly[] }) {
         ))}
       </div>
       <div className="legend">
-        <div className="legend-item"><span className="legend-swatch" style={{ background: "var(--accent)" }} />周跑量</div>
-        <div className="legend-item"><span className="legend-swatch" style={{ background: "var(--hr)", borderRadius: "50%" }} />最长单跑</div>
+        <div className="legend-item"><span className="legend-swatch" style={{ background: "var(--chart-accent)" }} />周跑量</div>
+        <div className="legend-item"><span className="legend-swatch" style={{ background: "var(--chart-hr)", borderRadius: "50%" }} />最长单跑</div>
       </div>
     </div>
   );

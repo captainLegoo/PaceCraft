@@ -97,10 +97,10 @@ function ElevationChart({ d }: { d: RaceDetail }) {
         {/* 高程线下方填充 */}
         <path
           d={`${path} L${x(seriesKm)},${H - PAD.b} L${x(0)},${H - PAD.b} Z`}
-          fill="var(--accent)"
+          fill="var(--chart-accent)"
           opacity="0.12"
         />
-        <path d={path} fill="none" stroke="var(--accent)" strokeWidth="1.8" strokeLinejoin="round" />
+        <path d={path} fill="none" stroke="var(--chart-accent)" strokeWidth="1.8" strokeLinejoin="round" />
       </svg>
       <div className="hint" style={{ marginTop: 6 }}>
         {isGpx
