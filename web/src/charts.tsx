@@ -331,16 +331,36 @@ export function LineChart({
         ))}
 
         {series.map((s) => {
-          const pts = s.values.map((v, i) => (v == null ? null : `${x(i)},${yFor(s, v)}`)).filter(Boolean) as string[];
-          if (pts.length === 0) return null;
-          const idxs = s.values.map((v, i) => (v == null ? -1 : i)).filter((i) => i >= 0);
-          const firstX = x(idxs[0]), lastX = x(idxs[idxs.length - 1]);
+          // 连续的非空点各自成段。null 必须真的把线切断 —— 若只是跳过该点再首尾相连，
+          // 就会跨过空档画出一条「数据并不存在」的假线（例如两条记录之间的休息段）。
+          const runs: { i: number; v: number }[][] = [];
+          for (let i = 0; i < s.values.length; i++) {
+            const v = s.values[i];
+            if (v == null) {
+              if (runs.length && runs[runs.length - 1].length) runs.push([]);
+            } else {
+              if (!runs.length) runs.push([]);
+              runs[runs.length - 1].push({ i, v });
+            }
+          }
+          const segs = runs.filter((r) => r.length > 0);
+          if (segs.length === 0) return null;
+          const ptsOf = (r: { i: number; v: number }[]) => r.map((p) => `${x(p.i)},${yFor(s, p.v)}`).join(" ");
           return (
             <g key={s.key}>
-              {fill && s.axis !== "right" && (
-                <polygon points={`${pts.join(" ")} ${lastX},${bottom} ${firstX},${bottom}`} fill={s.color} opacity={0.07} />
-              )}
-              <polyline points={pts.join(" ")} fill="none" stroke={s.color} strokeWidth={1.9} strokeLinejoin="round" strokeLinecap="round" />
+              {fill && s.axis !== "right" && segs.map((r, ri) => (
+                <polygon
+                  key={`f${ri}`}
+                  points={`${ptsOf(r)} ${x(r[r.length - 1].i)},${bottom} ${x(r[0].i)},${bottom}`}
+                  fill={s.color} opacity={0.07}
+                />
+              ))}
+              {segs.map((r, ri) => (
+                <polyline
+                  key={`p${ri}`} points={ptsOf(r)} fill="none"
+                  stroke={s.color} strokeWidth={1.9} strokeLinejoin="round" strokeLinecap="round"
+                />
+              ))}
               {s.values.map((v, i) => v == null ? null : (
                 <circle key={i} cx={x(i)} cy={yFor(s, v)} r={s.values.length > 40 ? 0 : 2.4} fill={s.color}>
                   <title>{`${labels[i]} ${s.label} ${(yFmtRight ?? yFmt)(v)}`}</title>

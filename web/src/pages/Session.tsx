@@ -27,11 +27,25 @@ export default function SessionView({
   const multi = s.activityCount > 1;
   const setCount = s.sets.reduce((a, x) => a + x.reps, 0);
 
-  // 整场连贯曲线：x 用累计时间，含组间休息；null 段断开避免连出假线
-  const chartLabels = laps.map((l) => `${l.labelId.slice(-4)}#${l.lapIndex}`);
-  const chartX = laps.map((l) => l.elapsedSec);
-  const paceSeries = laps.map((l) => (l.distanceM >= 900 ? l.avgPaceSec : null));
-  const hrSeries = laps.map((l) => (l.avgHr > 0 ? l.avgHr : null));
+  // 整场连贯曲线：x 用累计时间，含组间休息。换记录处插一个空点，让休息段在曲线上真的断开
+  // —— 否则两条记录会被一条直线连起来，看着像这段时间一直在跑。
+  const chartLabels: string[] = [];
+  const chartX: number[] = [];
+  const paceSeries: (number | null)[] = [];
+  const hrSeries: (number | null)[] = [];
+  laps.forEach((l, i) => {
+    const prev = laps[i - 1];
+    if (prev && prev.labelId !== l.labelId) {
+      chartLabels.push(`组间休息 ${fmtDur(l.elapsedSec - prev.elapsedSec)}`);
+      chartX.push((prev.elapsedSec + l.elapsedSec) / 2);
+      paceSeries.push(null);
+      hrSeries.push(null);
+    }
+    chartLabels.push(`${l.labelId.slice(-4)}#${l.lapIndex}`);
+    chartX.push(l.elapsedSec);
+    paceSeries.push(l.distanceM >= 900 ? l.avgPaceSec : null);
+    hrSeries.push(l.avgHr > 0 ? l.avgHr : null);
+  });
 
   const runAnalyze = async () => {
     setBusy(true); setAiErr(null);
@@ -138,8 +152,10 @@ export default function SessionView({
           <div className="card" style={{ marginBottom: 14 }}>
             <h3 className="card-title">整场连贯曲线</h3>
             <p className="card-sub">
-              横轴是<strong>整场累计时间</strong>（含组间休息），所以多条记录会连成一条完整的曲线。
-              短于 900m 的分段不参与配速线，避免最后一小段把均值拉偏。
+              这张图回答的问题是：<strong>整场跑下来，状态是怎么变化的？</strong>
+              手表常把间歇、放松、拉伸拆成多条记录，单看每条只看到片段；这里把它们并到同一条
+              <strong>累计时间轴</strong>（含组间休息）上，配速起伏、心率漂移、组与组之间歇了多久，一眼可见。
+              短于 900m 的分段不参与配速线，所以配速线常比心率线短。
             </p>
             <LineChart
               labels={chartLabels}
