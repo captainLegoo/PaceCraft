@@ -434,8 +434,9 @@ web/
 
 **加一份迁移**：在 `server/drizzle/` 新建 `0010_你的说明.sql`，多条语句用
 `--> statement-breakpoint` 分隔。服务下次启动会自动应用，执行过的记在库里
-`_migrations` 表，不会重复跑。迁移是**手写**的 —— 仓库里没有 `drizzle.config`，
-别用 `drizzle-kit generate` 去生成，它会和这些已上线的 SQL 对不上。
+`_migrations` 表，不会重复跑。迁移是**手写**的 —— `server/drizzle.config.ts` 只是给
+`drizzle-kit` 自己的 CLI（generate / push / studio）看的，**别用 `drizzle-kit generate`
+生成迁移**，它按 schema 反推出来的 SQL 和这些已上线的迁移对不上。
 
 ## 常用命令
 
