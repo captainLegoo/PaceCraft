@@ -167,6 +167,7 @@ export default function SessionView({
               ]}
               yFmt={fmtPace}
               yFmtRight={(n) => String(Math.round(n))}
+              yInvert
               height={230}
               fill={false}
             />

@@ -241,7 +241,7 @@ export type Series = { key: string; label: string; color: string; values: (numbe
 
 export function LineChart({
   labels, series, height = 200, yFmt = (n: number) => String(Math.round(n)), yFmtRight, bands, yMin, yMax, fill = true,
-  xValues, xFmt, xTickEvery,
+  xValues, xFmt, xTickEvery, yInvert = false,
 }: {
   labels: string[];
   series: Series[];
@@ -253,6 +253,15 @@ export function LineChart({
   yMin?: number;
   yMax?: number;
   fill?: boolean;
+  /**
+   * 左轴翻转：值小的在上。
+   *
+   * 专给配速轴用。默认映射是「值大在上」，对配速就成了「慢的在上、快的在下」，
+   * 与跑步圈的惯例（Strava / Garmin 都是越快越高）相反；而且配速图基本都配一条
+   * 右轴心率，翻转之后两条线统一成「往上 = 更用力」，读图只需要一个方向。
+   * 只影响左轴 —— 右轴（心率/负荷）保持原样。
+   */
+  yInvert?: boolean;
   /**
    * 按数值定位横轴（例如训练次详情里的「累计秒」）。
    * 不传时按索引等距排布。传入后 labels 仅用于 tooltip 标题。
@@ -302,9 +311,13 @@ export function LineChart({
   };
   const yFor = (s: Series, v: number) => {
     const r = s.axis === "right" ? R : L;
-    return padT + ih - ((v - r.lo) / r.span) * ih;
+    const t = (v - r.lo) / r.span;
+    return padT + (yInvert && s.axis !== "right" ? t : 1 - t) * ih;
   };
-  const y = (v: number) => padT + ih - ((v - L.lo) / L.span) * ih;
+  const y = (v: number) => {
+    const t = (v - L.lo) / L.span;
+    return padT + (yInvert ? t : 1 - t) * ih;
+  };
   const bottom = padT + ih;
 
   return (
@@ -348,7 +361,9 @@ export function LineChart({
           const ptsOf = (r: { i: number; v: number }[]) => r.map((p) => `${x(p.i)},${yFor(s, p.v)}`).join(" ");
           return (
             <g key={s.key}>
-              {fill && s.axis !== "right" && segs.map((r, ri) => (
+              {/* 面积填充的语义是「线以下到基线」，只在常规方向下成立。翻转后它会变成
+                  一整块「比这条线更慢的配速」的色带，盖住大半个图，是错的 —— 所以不画。 */}
+              {fill && !yInvert && s.axis !== "right" && segs.map((r, ri) => (
                 <polygon
                   key={`f${ri}`}
                   points={`${ptsOf(r)} ${x(r[r.length - 1].i)},${bottom} ${x(r[0].i)},${bottom}`}

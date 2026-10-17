@@ -104,6 +104,7 @@ export default function ActivityDetailView({
               height={220}
               yFmt={fmtPace}
               yFmtRight={(n) => String(Math.round(n))}
+              yInvert
             />
           </div>
 
