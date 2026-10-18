@@ -301,10 +301,13 @@ export const users = sqliteTable("users", {
  * 为什么要有这张表：比赛日分析需要一个「目标赛事」，
  * 而 COROS 那边拿不到赛事信息（比赛不在训练记录里）。
  *
- * 路线来源分两档，精度差很多，必须区分：
- *  - gpx：用户上传 GPX 轨迹。GPX 自带 <ele>，是**实测海拔**，最准。
+ * 路线来源分三档，精度差很多，必须区分：
+ *  - gpx：用户导入的轨迹文件（GPX / KML）。自带高度，是**实测海拔**，最准。
+ *    这里的 "gpx" 是"轨迹文件"的统称，不是文件后缀 —— 真实格式写在 source_note 里。
  *  - waypoints：只知道路书（经过哪些道路），用 DEM 反查高程。
  *    30m 分辨率的 DEM 看不到路面微起伏，只能当趋势看，误差可达 ±50%。
+ *  - none：先登记赛事、路线之后再补。这是**正常状态**不是错误，
+ *    但 UI 必须显式标出来，否则用户会以为爬升已经算过了。
  */
 export const races = sqliteTable(
   "races",
@@ -337,7 +340,7 @@ export const races = sqliteTable(
     distanceKm: real("distance_km").notNull(),
     /** 目标成绩（秒），可空 */
     goalSec: integer("goal_sec"),
-    /** gpx | waypoints */
+    /** gpx | waypoints | none（none = 先登记、之后补路线） */
     routeSource: text("route_source").notNull().default("waypoints"),
     /** 路线原始数据：GPX 全文，或路书路点的 JSON */
     routeData: text("route_data"),

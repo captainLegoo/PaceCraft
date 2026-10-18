@@ -190,12 +190,37 @@ export type RaceDetail = {
 
 export type Race = RaceDetail["race"];
 
+/**
+ * 轨迹文件预检结果（POST /api/races/parse-route，只解析不���库）。
+ *
+ * 存在的理由：让用户在填完整张表之前就知道这份文件能不能用。
+ * 导错格式是这一步最高频的失败原因，而"填了 8 个字段才报错"体验极差。
+ */
+export type RouteFilePreview = {
+  ok: boolean;
+  kind: "gpx" | "kml" | "kmz" | "unknown";
+  error?: string;
+  hasElevation?: boolean;
+  pointCount?: number;
+  /** 存库后的点数（已抽稀） */
+  storedPointCount?: number;
+  distanceKm?: number;
+  gainM?: number;
+  lossM?: number;
+  eleMin?: number;
+  eleMax?: number;
+  sourceNote?: string;
+};
+
 export const api = {
   races: () => req<Race[]>("/api/races"),
   race: (id: number) => req<RaceDetail>(`/api/races/${id}`),
   raceByDate: (date: string) => req<RaceDetail | null>(`/api/races/date/${date}`),
   createRace: (body: Record<string, unknown>) =>
     req<RaceDetail>("/api/races", { method: "POST", body: JSON.stringify(body) }),
+  /** 只解析不入库，用来在填表阶段就核对文件对不对 */
+  parseRouteFile: (body: { text: string; fileName?: string; routeKind?: string }) =>
+    req<RouteFilePreview>("/api/races/parse-route", { method: "POST", body: JSON.stringify(body) }),
   uploadRaceRoute: (id: number, body: Record<string, unknown>) =>
     req<RaceDetail>(`/api/races/${id}/route`, { method: "POST", body: JSON.stringify(body) }),
   deleteRace: (id: number) => req<{ ok: boolean }>(`/api/races/${id}`, { method: "DELETE" }),

@@ -371,6 +371,19 @@ input, select, textarea {
   font-family: inherit;
 }
 input:focus, select:focus, textarea:focus { outline: none; border-color: var(--accent-dim); }
+
+/*
+ * select 的原生行盒比 input 高 2px（同样 12.5px 字号下两者的 line box 不同），
+ * 放在同一行栅格里时，下拉框会比输入框高 2px，看着就是"没对齐"。
+ * select 不吃 line-height，只能从上下内边距各减 1px 把它压到和 input 同高。
+ *
+ * 范围只限 .stat 里的下拉框：别顺手加到全局的 input/select 规则上 ——
+ * 站点其它地方的下拉框都是单独一行，单独显示时这点差异看不出来，
+ * 改全局反而会让它们整体变矮。
+ */
+.stat select { padding-top: 6px; padding-bottom: 6px; }
+/* 同理：原生 date input 的内边盒也比普通输入框高 2px，同一行里会看出错位 */
+.stat input[type="date"] { padding-top: 6px; padding-bottom: 6px; }
 label.field { display: block; margin-bottom: 12px; }
 label.field > span { display: block; font-size: 11.5px; color: var(--text-dim); margin-bottom: 4px; }
 .hint { font-size: 11px; color: var(--text-faint); margin-top: 4px; }

@@ -1,8 +1,55 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { api, type Activity, type RaceDetail } from "../api";
+import { api, type Activity, type RaceDetail, type RouteFilePreview } from "../api";
 import RouteProfileCard from "./RaceRouteProfile";
 import RaceBriefingCard, { type RaceBriefing } from "./RaceBriefing";
 import { fmtPace } from "../charts";
+
+/**
+ * 距离预设。
+ *
+ * 为什么要预设而不是让用户手填：21.0975 和 42.195 这两个数**手打很难打对**
+ * （少一位小数就变成半程，事后很难发现）。写成选项让用户点一下，
+ * 写入时也保持原值不四舍五入 —— 官方距离就该是官方距离。
+ * 其它项目的距离（越野、 trail、半程以外的自测）走「其他」手填。
+ */
+const DIST_PRESETS = [
+  { key: "5", label: "5 公里", km: "5" },
+  { key: "10", label: "10 公里", km: "10" },
+  { key: "half", label: "半程马拉松 21.0975", km: "21.0975" },
+  { key: "full", label: "全程马拉松 42.195", km: "42.195" },
+] as const;
+
+/** 路线来源的三种选择。默认是"先不填" */
+type RouteMode = "none" | "file" | "lib";
+
+/**
+ * 北京时间今天（yyyy-mm-dd）。
+ *
+ * 为什么不能用 toISOString()：那是 UTC。北京时间凌晨 0 点到 8 点之间，
+ * UTC 还停在前一天，于是"今天"会算成昨天 —— 表现为比赛日过了午夜却还显示，
+ * 或者当天训练还没被算进来。差一天在这里就是错的。
+ *
+ * 用 Intl 按时区格式化，不引日期库（也就一行，还能正确处理夏令时规则）。
+ */
+const todayBeijing = (): string =>
+  new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Shanghai",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date());
+
+/**
+ * 从 sourceNote 里取回导入时的文件名。
+ *
+ * 只认 routeSourceNote 自己写的那一种格式（"…｜来自 <文件名>"），
+ * 解析不出来就返回 null 隐藏这行 —— 宁可少显示，也不要显示错名字：
+ * 一个错的文件名会让人以为路线是另一场比赛的。
+ */
+const fileNameFromNote = (note: string | null | undefined): string | null => {
+  const m = (note ?? "").match(/｜来自\s*([^｜\n]+?)\s*$/);
+  return m ? m[1] : null;
+};
 
 /** 秒 → h:mm:ss 或 m:ss。必须处理秒的进位（见 format.ts 的说明）。 */
 const fmtDurInput = (s: number) => {
@@ -53,6 +100,13 @@ const parseDur = (t: string, km: number): number | null => {
  * 刻意不做「自动搜路线」——搜出来的坐标无法保证准确，
  * 一个错的起点会让整条剖面失真，比没有更糟。
  */
+/** 距离数值 → 预设 key；匹配不上就算「其他」 */
+const presetKeyFor = (km: number | null | undefined): string => {
+  if (km == null) return "other";
+  const hit = DIST_PRESETS.find((p) => Math.abs(Number(p.km) - Number(km)) < 0.001);
+  return hit ? hit.key : "other";
+};
+
 export default function RaceSetup({
   onChanged,
 }: {
@@ -74,12 +128,20 @@ export default function RaceSetup({
   const [name, setName] = useState("");
   const [city, setCity] = useState("");
   const [dist, setDist] = useState("42.195");
+  /** 当前选中的距离预设；选「其他」或从训练里带出非预设距离时置为 "other" */
+  const [distPreset, setDistPreset] = useState<string>("full");
   const [goal, setGoal] = useState("");
-  const [useGpx, setUseGpx] = useState(false);
+  /** 路线来源。默认"先不填" —— 先登记赛事是正当需求，不该逼人先有轨迹 */
+  const [routeMode, setRouteMode] = useState<RouteMode>("none");
+  /** 轨迹文件全文（文件框与粘贴框写同一份，谁先填谁生效） */
   const [gpxText, setGpxText] = useState("");
-  // 关联的训练 + 主观体感备注
+  /** 选中的文件名，用于回显确认选对了哪条轨迹 */
+  const [routeFileName, setRouteFileName] = useState<string | null>(null);
+  /** 预检结果：让用户在保存前就看到"这份文件解析出来是什么样" */
+  const [preview, setPreview] = useState<RouteFilePreview | null>(null);
+  const [previewing, setPreviewing] = useState(false);
+  // 关联的那次训练
   const [labelId, setLabelId] = useState<string | null>(null);
-  const [notes, setNotes] = useState("");
   // 选比赛用：历史训练候选
   const [acts, setActs] = useState<Activity[]>([]);
 
@@ -94,9 +156,22 @@ export default function RaceSetup({
     api
       .races()
       .then((list) => {
-        if (list.length === 0) return null;
-        const last = list[list.length - 1];
-        return Promise.all([api.race(last.id).then(setDetail), loadBriefing(last.id)]);
+        /*
+         * 这一页是**赛前**工具：预测、备赛、配速方案，赛后就失去意义了。
+         * 所以只显示还没比的那场 —— 比赛日期过了今天（北京时间）就不再出现，
+         * 否则页面会一直停在上个月那场比赛上，让人以为预测还在针对它。
+         *
+         * 今天当天仍然显示：比赛当天还要用来核对当天分段数据。
+         * 判定用 yyyy-mm-dd 字符串比较，不解析 Date —— 避免时区把
+         * "2026-11-08" 变成 UTC 前一天那种坑。
+         */
+        const today = todayBeijing();
+        const upcoming = list.filter((r) => r.date >= today);
+        if (upcoming.length === 0) return null;
+        // 取日期最近的那场，而不是 list 的最后一条：
+        // 按 id 排序不等于按日期排序，补登一场更早的比赛就会排到后面去
+        const next = upcoming.reduce((a, b) => (b.date > a.date ? b : a));
+        return Promise.all([api.race(next.id).then(setDetail), loadBriefing(next.id)]);
       })
       .catch((e) => setErr(e.message))
       .finally(() => setLoading(false));
@@ -120,10 +195,20 @@ export default function RaceSetup({
       setName(r.name);
       setCity(r.city ?? "");
       setDist(String(r.distanceKm));
+      setDistPreset(presetKeyFor(r.distanceKm));
       setGoal(r.goalSec ? fmtDurInput(r.goalSec) : "");
       setLabelId(r.labelId ?? null);
-      setNotes(r.notes ?? "");
+      // 路线来源要跟着库里已有的值回填，否则打开「修改」会看到"先不填"，
+      // 用户随手一存就以为把已上传的轨迹弄丢了
+      setRouteMode(r.routeSource === "gpx" ? "file" : r.routeSource === "waypoints" ? "lib" : "none");
+    } else {
+      setRouteMode("none");
     }
+    // 文件内容不进 state 回填（库里存的是抽稀后的剖面，不是原始文件）：
+    // 编辑时不重新导入就保持原样，显式选新文件才算替换
+    setGpxText("");
+    setRouteFileName(null);
+    setPreview(null);
     setErr(null);
     setOpen(true);
   };
@@ -160,16 +245,60 @@ export default function RaceSetup({
         if (!okToReplace) { setBusy(false); return; }
       }
 
+      /*
+       * 路线来源三选一 → 请求参数。
+       *
+       * "先不填路线"必须是**真的能存下来**（routeSource='none'），
+       * 而不是让后端去查内置库然后报错 —— 先登记赛事、后补轨迹是正当需求。
+       *
+       * 编辑已有赛事时，如果用户选了"先不填"而库里本来有路线，
+       * 那是一次**删除**，得先确认。其它情况一律保留原路线
+       * （服务端也这么判：没提交路线字段就当"这次没提"）。
+       */
+      const clearingRoute =
+        routeMode === "none" &&
+        !!detail &&
+        detail.race.routeSource !== "none" &&
+        gpxText.trim().length === 0;
+      if (clearingRoute) {
+        const ok = confirm(
+          `这场比赛已经有一份路线（${detail.race.routeSource === "gpx" ? "轨迹文件" : "路书"}）。\n\n` +
+            `选「先不填路线」会把它清掉，之后只能重新导入才能恢复。\n` +
+            `确定要清掉吗？`,
+        );
+        if (!ok) { setBusy(false); return; }
+      }
+
+      // 选了"上传/粘贴"却什么都没给：说清楚，别静默存成一条没路线的赛事
+      const keepingExistingRoute = !!detail && detail.race.routeSource === "gpx" && gpxText.trim().length === 0;
+      if (routeMode === "file" && gpxText.trim().length === 0 && !keepingExistingRoute) {
+        setErr(
+          "你选了「上传/粘贴轨迹文件」，但还没有选文件。\n" +
+            "点上面的框选一个 .gpx（或 .kml）文件，或者把内容直接粘进下面的文本框。\n" +
+            "如果只是想先登记这场比赛、把路线留到之后补，把「路线来源」改成「先不填路线」就行。",
+        );
+        setBusy(false);
+        return;
+      }
+
       const payload = {
         date,
         name,
         city: city || null,
         distanceKm: Number(dist),
         goalSec,
-        gpx: useGpx ? gpxText : null,
-        useLibraryRoute: !useGpx,
+        // routeText 走新字段，gpx 旧字段保留兼容（服务端以 routeText 为准）
+        routeText: routeMode === "file" ? gpxText || null : null,
+        routeKind: "auto",
+        // 文件名跟着一起提交，服务端会写进 sourceNote，
+        // 编辑时才能显示"来源文件：xxx.gpx"，确认自己没导错那一条
+        routeFileName: routeFileName,
+        gpx: null,
+        useLibraryRoute: routeMode === "lib",
+        clearRoute: clearingRoute,
         labelId,
-        notes: notes.trim() || null,
+        // 刻意不发 notes：这一页不再编辑备注，而 undefined = 服务端保留原值。
+        // 发 null 会把库里已有的备注清掉 —— 这正是原来每点一次「修改」就丢一次的原因。
       };
 
       const d = detail
@@ -192,8 +321,24 @@ export default function RaceSetup({
     setBusy(true);
     setErr(null);
     try {
+      // 详情卡这个框也走同一套前端即时检查，免得选错格式要等服务端才报错
+      if (/\.kmz$/i.test(file.name)) {
+        setErr("KMZ 是压缩包，服务端读不了。请在两步路导出时改选「GPX格式」，或先解压出 .kml。");
+        return;
+      }
       const text = await file.text();
-      const d = await api.uploadRaceRoute(detail.race.id, { gpx: text });
+      // 预检一次：解析不了就别去覆盖已有的路线
+      const p = await api.parseRouteFile({ text, fileName: file.name, routeKind: "auto" });
+      if (!p.ok) {
+        setErr(p.error ?? "这个文件解析失败");
+        return;
+      }
+      const d = await api.uploadRaceRoute(detail.race.id, {
+        routeText: text,
+        routeKind: "auto",
+        routeFileName: file.name,
+        clearRoute: false,
+      });
       setDetail(d);
       void loadBriefing(d.race.id);
       onChanged?.();
@@ -202,6 +347,78 @@ export default function RaceSetup({
     } finally {
       setBusy(false);
     }
+  };
+
+  /**
+   * 读一份轨迹文件：先做本地即时检查，再交给服务端预检。
+   *
+   * 分两步是有意的：
+   *  - 本地能立刻判断的（空文件、选了 .kmz）先拦下来，**不产生任何网络请求**，
+   *    用户点完文件就看到提示，不用等;
+   *  - 真正判断"这份文件能不能用"必须问服务端（经纬度写反、段间跳跃、
+   *    到底有没有高程这些都在服务端才判断得准），所以走 parse-route。
+   *
+   * 前端**不自己解析**轨迹：两份解析逻辑必然漂移，
+   * 用户在预检里看到的数字必须和保存后算出来的完全一致。
+   */
+  const readRouteFile = async (file: File) => {
+    setErr(null);
+    setPreview(null);
+    setPreviewing(true);
+    try {
+      // 后缀名的判断只用来提前给出**更具体**的提示，不能替代内容嗅探：
+      // .gp 里装 KML、.kmz 改名成 .gpx 的情况都真实存在
+      if (/\.kmz$/i.test(file.name)) {
+        setRouteFileName(file.name);
+        setGpxText("");
+        setErr(
+          `${file.name} 是 KMZ（压缩包），服务端读不了里面的内容。\n` +
+            `请在两步路导出时改选「GPX格式」，或先解压出里面的 .kml 再选。`,
+        );
+        return;
+      }
+      if (/\.(fit|tcx|csv|zip)$/i.test(file.name)) {
+        setRouteFileName(file.name);
+        setGpxText("");
+        setErr(
+          `${file.name} 看起来不是轨迹文件（GPX/KML）。\n` +
+            `请在两步路 / Strava / Garmin 里导出时选「GPX格式」。`,
+        );
+        return;
+      }
+      const text = await file.text();
+      setRouteFileName(file.name);
+      if (text.trim().length === 0) {
+        setGpxText("");
+        setErr(`${file.name} 是空文件，没有读到内容。请确认导出成功。`);
+        return;
+      }
+      setGpxText(text);
+      const p = await api.parseRouteFile({ text, fileName: file.name, routeKind: "auto" });
+      setPreview(p);
+      if (!p.ok) setErr(p.error ?? "这个文件解析失败");
+    } catch (e) {
+      setErr((e as Error).message);
+    } finally {
+      setPreviewing(false);
+    }
+  };
+
+  /** 粘贴框内容变化后同样做一次预检（只在内容够长时才查，避免每敲一个字打一次接口） */
+  const onPasteChange = (text: string) => {
+    setGpxText(text);
+    setRouteFileName(null);
+    setPreview(null);
+    if (text.trim().length < 200) return;
+    setPreviewing(true);
+    void api
+      .parseRouteFile({ text, routeKind: "auto" })
+      .then((p) => {
+        setPreview(p);
+        if (!p.ok) setErr(p.error ?? "内容解析失败");
+      })
+      .catch(() => setErr("预检失败，请检查粘贴的内容是否完整"))
+      .finally(() => setPreviewing(false));
   };
 
   const remove = async () => {
@@ -255,14 +472,20 @@ export default function RaceSetup({
             {detail.race.date} · {detail.race.distanceKm} km
             {detail.race.goalSec ? ` · 目标 ${fmtDurInput(detail.race.goalSec)}` : ""}
           </p>
+          {/* 未填路线要显式标出来：不标的话用户看到"没有剖面图"会以为功能坏了 */}
+          {detail.race.routeSource === "none" && (
+            <span className="pill" style={{ display: "inline-block", marginTop: 6, fontSize: 11 }}>
+              未填路线 · 爬升还没算
+            </span>
+          )}
         </div>
         <div style={{ display: "flex", gap: 8 }}>
           <label className="pill" style={{ cursor: "pointer" }}>
-            上传 GPX
+            上传轨迹文件
             <input
               ref={fileRef}
               type="file"
-              accept=".gpx"
+              accept=".gpx,.kml"
               style={{ display: "none" }}
               onChange={(e) => {
                 const f = e.target.files?.[0];
@@ -363,59 +586,202 @@ export default function RaceSetup({
             <input value={city} onChange={(e) => setCity(e.target.value)} placeholder="城市，如 上海" />
           </label>
           <label className="stat">
-            <span className="label">距离 km</span>
-            <input value={dist} onChange={(e) => setDist(e.target.value)} placeholder="42.195" />
+            <span className="label">距离</span>
+            <select
+              value={distPreset}
+              onChange={(e) => {
+                const key = e.target.value;
+                setDistPreset(key);
+                const hit = DIST_PRESETS.find((p) => p.key === key);
+                // 选「其他」时保留当前值让用户接着改，不要清空
+                if (hit) setDist(hit.km);
+              }}
+            >
+              {DIST_PRESETS.map((p) => (
+                <option key={p.key} value={p.key}>{p.label}</option>
+              ))}
+              <option value="other">其他（自定义）</option>
+            </select>
+            {distPreset === "other" && (
+              <input
+                value={dist}
+                onChange={(e) => setDist(e.target.value)}
+                placeholder="公里数，如 25"
+                style={{ marginTop: 6 }}
+              />
+            )}
           </label>
         </div>
         <div className="grid g4" style={{ marginBottom: 10 }}>
           <label className="stat">
             <span className="label">目标成绩</span>
             <input value={goal} onChange={(e) => setGoal(e.target.value)} placeholder="3:00 或 3:05:37" />
-          </label>
-          <div className="stat" style={{ justifyContent: "flex-end" }}>
-            <span className="label">路线来源</span>
-            <select value={useGpx ? "gpx" : "lib"} onChange={(e) => setUseGpx(e.target.value === "gpx")} style={{ marginTop: 4 }}>
-              <option value="lib">内置路书库（DEM 估算）</option>
-              <option value="gpx">我上传 GPX（实测海拔）</option>
-            </select>
-          </div>
-        </div>
-
-        <label className="stat" style={{ display: "block" }}>
-          <span className="label">主观体感备注</span>
-          <textarea
-            value={notes}
-            onChange={(e) => setNotes(e.target.value)}
-            placeholder={"跑完后的真实感受，AI 复盘时会读这段：\n例：前 10km 状态不错；15-18km 右侧小腿抽筋；最后 5km 靠意志撑住，明显掉速。\n全程六成累 / 后半程呼吸变浅。"}
-            style={{ minHeight: 84, fontSize: 12.5, lineHeight: 1.7 }}
-          />
-          <span className="hint">
-            这类信息 COROS 完全不会记录，只有你知道，而它往往是解释客观数据的关键 ——
-            配速掉了到底是疲劳、上坡、还是抽筋。写在这里，AI 分析这场比赛时会参考它。
-          </span>
-        </label>
-
-        {useGpx ? (
-          <label className="stat" style={{ display: "block" }}>
-            <span className="label">粘贴 GPX 内容</span>
-            <textarea
-              value={gpxText}
-              onChange={(e) => setGpxText(e.target.value)}
-              placeholder="把 .gpx 文件内容粘贴到这里，或直接在卡片右上角上传文件"
-              style={{ minHeight: 90, fontFamily: "ui-monospace, monospace", fontSize: 11 }}
-            />
+            {/* 这条提示原来被放在 GPX 粘贴框底下（放错字段了），挪回它该在的地方 */}
             <span className="hint">格式：3:00 = 3 小时；185:37 = 3:05:37</span>
           </label>
-        ) : (
-          <div className="stat" style={{ display: "block" }}>
+          <label className="stat">
+            <span className="label">路线来源</span>
+            <select value={routeMode} onChange={(e) => setRouteMode(e.target.value as RouteMode)}>
+              <option value="none">先不填路线（之后可补）</option>
+              <option value="file">上传 / 粘贴轨迹文件（实测海拔）</option>
+              <option value="lib">内置路书库（DEM 估算）</option>
+            </select>
+          </label>
+        </div>
+
+        {/*
+         * 轨迹文件区 —— **新建赛事时的主路径就在这里**，不是只藏在详情卡里。
+         * 用户刚导完文件就顺手导入是最自然的动作，让他先去保存、
+         * 再去卡片右上角找上传框，是把一步能做完的事拆成两步。
+         */}
+        {routeMode === "file" && (
+          <div className="stat" style={{ display: "block", marginBottom: 10 }}>
+            {/* 先说清"已有一份"这件事，再放文件框。
+                不说的话，用户打开「修改」看到空白的文件框和空白的粘贴框，
+                合理推断是路线丢了，然后就会手滑再导一次把现有数据覆盖掉。 */}
+            {detail && detail.race.routeSource === "gpx" && (
+              <div className="banner info" style={{ marginBottom: 10, lineHeight: 1.7 }}>
+                <strong>这场比赛已经有一份轨迹文件。</strong>
+                {detail.profile && (
+                  <>
+                    {" "}当前这份：
+                    {detail.profile.distanceKm != null ? `${detail.profile.distanceKm} km ／ ` : ""}
+                    {detail.profile.gainM} m 爬升 ／ {detail.profile.profile?.length ?? 0} 个剖面点
+                    {detail.profile.eleMin != null
+                      ? ` ／ 海拔 ${detail.profile.eleMin}–${detail.profile.eleMax} m`
+                      : ""}
+                    。
+                  </>
+                )}
+                {fileNameFromNote(detail.race.sourceNote) && (
+                  <>来源文件：{fileNameFromNote(detail.race.sourceNote)}。</>
+                )}
+                {/KML/.test(detail.race.sourceNote ?? "") ? "格式：KML 轨迹。" : "格式：GPX。"}
+                <br />
+                <span style={{ color: "var(--text-dim)" }}>
+                  库里只存了抽稀后的剖面（最多 900 个点），原始文件没有入库，所以这里回显不了全文。
+                  <strong>什么都不选直接保存 = 保留现在这份</strong>；
+                  选了新文件或粘了新内容 = 用它覆盖。
+                </span>
+              </div>
+            )}
+            <span className="label">导入轨迹文件</span>
+            <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+              <label className="pill" style={{ cursor: "pointer" }}>
+                选择文件…
+                <input
+                  type="file"
+                  accept=".gpx,.kml"
+                  style={{ display: "none" }}
+                  onChange={(e) => {
+                    const f = e.target.files?.[0];
+                    if (f) void readRouteFile(f);
+                    // 清掉 value：否则连选同一个文件不会触发 change，用户以为没反应
+                    e.target.value = "";
+                  }}
+                />
+              </label>
+              {routeFileName && (
+                <span style={{ fontSize: 12.5 }}>已选：<strong>{routeFileName}</strong></span>
+              )}
+              {previewing && <span className="hint">正在核对文件…</span>}
+            </div>
+            <div className="hint" style={{ marginTop: 6, lineHeight: 1.7 }}>
+              <strong>两步路里怎么导：</strong>打开那条轨迹 → 导出 → 格式选「<strong>GPX格式</strong>」→
+              得到一个 .gpx 文件（一条轨迹一个文件）→ 回到这里选中它。
+              GPX 每个点都带实测海拔，是算爬升最准的一种。
+            </div>
+
+            {preview && preview.ok && (
+              <div className="banner info" style={{ marginTop: 8, lineHeight: 1.7 }}>
+                已解析：{preview.distanceKm} km ／ 累计爬升 {preview.gainM} m ／{" "}
+                {preview.pointCount} 个点
+                {preview.storedPointCount && preview.storedPointCount !== preview.pointCount
+                  ? `（存库时抽稀到 ${preview.storedPointCount}）`
+                  : ""}
+                <br />
+                海拔来源：{preview.kind === "kml" ? "KML 轨迹" : "GPX 实测"}（±5-10m）
+                {dist && Number(dist) > 0 && preview.distanceKm != null &&
+                  (() => {
+                    const drift = Math.abs(preview.distanceKm - Number(dist)) / Number(dist);
+                    if (drift <= 0.005) return null;
+                    // 分档说人话。GPS 漂移解释不了 10% 以上的偏差 ——
+                    // 那种情况几乎一定是选错了轨迹（导了另一天的、或者只有半程那一段），
+                    // 硬说成"漂移"会让用户以为没事，白白拿一份错路线去算配速。
+                    const big = drift > 0.05;
+                    return (
+                      <>
+                        <br />
+                        <span style={{ color: "var(--warn)" }}>
+                          ⚠ 文件距离与官方距离差 {(drift * 100).toFixed(1)}%。
+                          {big
+                            ? `这已经「不是」 GPS 漂移能解释的范围（通常 ±0.5% 以内）——` +
+                              `多半是选错了轨迹，比如导了另一天的记录，或只导了其中一段。` +
+                              `请确认这个文件对应当天那一场再保存。`
+                            : `属于 GPS 漂移的常见范围。`}
+                          这里填的仍按官方距离 {dist} km 计算，剖面图的横轴用文件自己的距离。
+                        </span>
+                      </>
+                    );
+                  })()}
+              </div>
+            )}
+            {preview && !preview.ok && (
+              <div className="banner error" style={{ marginTop: 8, whiteSpace: "pre-wrap", lineHeight: 1.7 }}>
+                {preview.error}
+              </div>
+            )}
+
+            <label className="stat" style={{ display: "block", marginTop: 10 }}>
+              <span className="label">或粘贴 GPX / KML 内容</span>
+              <textarea
+                value={gpxText}
+                onChange={(e) => onPasteChange(e.target.value)}
+                placeholder={
+                  detail && detail.race.routeSource === "gpx"
+                    ? "粘贴新的轨迹内容会覆盖现在这份。不粘贴就是保留。"
+                    : "手机上只有文本、或者要排查解析问题时，可以直接把文件内容粘到这里"
+                }
+                style={{ minHeight: 90, fontFamily: "ui-monospace, monospace", fontSize: 11 }}
+              />
+              <span className="hint">
+                文件框与粘贴框写的是同一份内容，谁先填谁生效。
+                {detail && detail.race.routeSource === "gpx" && gpxText.trim().length === 0 &&
+                  "（这场赛事已有轨迹文件，不选新文件直接保存会保留原来的。）"}
+              </span>
+            </label>
+          </div>
+        )}
+
+        {routeMode === "none" && (
+          <div className="hint" style={{ margin: "0 0 10px", lineHeight: 1.7 }}>
+            先把赛事登记下来就好，路线之后随时能补 ——
+            到时候在卡片右上角点「上传轨迹文件」，或点「修改」回到这里导入。
+            现在不填路线不影响其它功能，只是不会有赛道剖面与爬升。
+          </div>
+        )}
+
+        {routeMode === "lib" && (
+          <div className="stat" style={{ display: "block", marginBottom: 10 }}>
             <span className="label">路线来源</span>
             <div className="hint" style={{ marginTop: 5, lineHeight: 1.6 }}>
               保存时按<strong>赛事全名 + 日期</strong>去内置路线库查找，不会按城市匹配 ——
               同一城市可能有多场不同赛事（主赛事 / 另一场同名系列赛），按城市找必然选错。<br />
+              本项目的内置库<strong>默认为空</strong>（刻意不预置任何赛事路线），
+              所以这一项通常会报错，并给出「自己导入轨迹文件」的指引。<br />
               找不到就明确报错，不会拿同城其它赛事的路线顶替。
             </div>
           </div>
         )}
+
+        {/*
+          「主观体感备注」已从这一页移除。
+          这一页是赛前设定，而体感备注（累不累、抽筋、掉速）是**跑完之后**才写得出来的；
+          赛前摆一个填不了的框，只会让人以为有什么该填但填不了。
+          字段本身保留在库里，服务端预测仍会读它（见 prediction/race.ts）。
+          注意：本表单现在**不下发 notes**（undefined = 服务端保留原值），
+          别再加回去，否则又会变成"每次保存都清空备注"。
+        */}
 
         <div style={{ display: "flex", gap: 10, marginTop: 14 }}>
           <button className="sync-btn" style={{ maxWidth: 160 }} onClick={() => void save()} disabled={busy}>

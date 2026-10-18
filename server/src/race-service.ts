@@ -17,7 +17,8 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { and, asc, desc, eq } from "drizzle-orm";
 import { db } from "./db/client.ts";
 import { races } from "./db/schema.ts";
-import { downsample, parseGpx, type GpxTrack } from "./gpx.ts";
+import { downsample, usableForProfile, type GpxTrack } from "./gpx.ts";
+import { parseRouteFile, routeSourceNote, type RouteFileHint } from "./route-file.ts";
 import { buildGpxProfile, pacePlan, type GpxProfile } from "./route-profile.ts";
 import { fmtDuration } from "./format.ts";
 import { densifyWaypoints, findKnownRace, knownRacesInCity, KNOWN_RACES } from "./race-routes.ts";
@@ -69,12 +70,33 @@ export function findRaceByDate(date: string): RaceRow | null {
 export type CreateRaceInput = {
   date: string;
   name: string;
-  /** 是否尝试用内置路线库（默认 true）。false 表示明确只要 GPX */
+  /**
+   * 是否尝试用内置路线库（默认 true）。false 表示用户明确说"先不填路线"。
+   *
+   * 这个字段以前是**接不上的**：前端一直在传，但 HTTP 层没往这里透传，
+   * 于是服务端拿到的永远是 undefined，`!== false` 恒成立，空库必然抛错。
+   * 结果就是"先登记、后补轨迹"这条路在表单里根本走不通。
+   */
   useLibraryRoute?: boolean;
   city?: string | null;
   distanceKm: number;
   goalSec?: number | null;
-  /** 可选：直接带 GPX 文本 */
+  /**
+   * 轨迹文件全文（GPX 或 KML 的 XML 文本）。
+   *
+   * 这是现在的主字段；`gpx` 是旧字段，保留只为兼容，两者都传时以本字段为准。
+   */
+  routeText?: string | null;
+  /** 显式声明格式。默认 "auto"（按内容嗅探）—— 后缀名会骗人，嗅探更可靠 */
+  routeKind?: RouteFileHint;
+  /**
+   * 导入时的文件名，只用于回显"这份路线来自哪个文件"。
+   *
+   * 不存原文（原文动辄几 MB，存了也不会用），但名字必须留着：
+   * 编辑时能看到"来源：track.gpx"，用户才敢确认自己没导错那一条。
+   */
+  routeFileName?: string | null;
+  /** 可选：直接带 GPX 文本（旧字段，等价于 routeText + routeKind:"gpx"） */
   gpx?: string | null;
   /** 可选：内置路线库 key */
   routeKey?: string | null;
@@ -83,6 +105,34 @@ export type CreateRaceInput = {
   /** 可选：主观体感备注（累不累、抽筋、哪里不舒服） */
   notes?: string | null;
 };
+
+/**
+ * 把一份轨迹文件解析成可入库的路线数据。
+ *
+ * 抽稀放在这里做（存库前），因为原始轨迹文件动辄几 MB，
+ * 剖面图只需要每 50m 一个点，全存进去只是浪费空间和加载时间。
+ */
+function buildRouteFromFile(
+  routeText: string | null | undefined,
+  legacyGpx: string | null | undefined,
+  hint: RouteFileHint | undefined,
+  fileName?: string | null,
+): { routeData: string; sourceNote: string } {
+  // 文件名会进 sourceNote 并长期展示，这里去掉控制字符并限长：
+  // 换行/零宽字符能让一整段伪造的说明混进来源标注里
+  const safeName = (fileName ?? "").replace(/[\u0000-\u001f\u007f]/g, "").trim().slice(0, 120);
+  const text = (routeText ?? legacyGpx ?? "").trim();
+  const parsed = parseRouteFile(text, hint ?? "auto");
+  // 解析失败一律抛错，**绝不**退化成"建一条没有路线的赛事"——
+  // 用户刚上传完文件，看到的却是"已保存"，然后疑惑为什么没有剖面图
+  if (parsed.error || !parsed.track) {
+    throw new Error(parsed.error ?? "轨迹文件解析失败");
+  }
+  return {
+    routeData: JSON.stringify(downsample(parsed.track)),
+    sourceNote: routeSourceNote(parsed.kind, safeName || null),
+  };
+}
 
 export function createRace(input: CreateRaceInput): RaceRow {
   let routeSource = "none";
@@ -102,15 +152,11 @@ export function createRace(input: CreateRaceInput): RaceRow {
     );
   }
 
-  if (input.gpx && input.gpx.trim()) {
-    const track = parseGpx(input.gpx);
-    if (!track) {
-      throw new Error("GPX 解析失败：没找到有效的轨迹点（需要 <trkpt> 或 <rtept> 且带 <ele>）");
-    }
+  if ((input.routeText ?? input.gpx ?? "").trim()) {
+    const route = buildRouteFromFile(input.routeText, input.gpx, input.routeKind, input.routeFileName);
     routeSource = "gpx";
-    // 抽稀后存，避免 GPX 原文过大（原始动辄几 MB）
-    routeData = JSON.stringify(downsample(track));
-    sourceNote = "GPX 实测海拔（已阈值滤波，误差 ±5-10m）";
+    routeData = route.routeData;
+    sourceNote = route.sourceNote;
   } else if (input.useLibraryRoute !== false) {
     // 路线必须与「赛事全名 + 日期」绑定，不能只按城市找 ——
     // 同城的不同赛事（如主赛事和山地赛）按城市匹配必然选错。
@@ -128,8 +174,17 @@ export function createRace(input: CreateRaceInput): RaceRow {
         ? `（${city}已收录：${sameCity.map((r) => r.name).join("、")}）`
         : city ? `（${city}暂无收录路线）` : "";
       throw new Error(
-        `没有找到「${input.name}」的路书${hint}。` +
-        `不会拿同城其它赛事的路线顶替 —— 请上传 GPX，或让我补录路书。`,
+        `内置路书库里没有「${input.name}」这场比赛${hint}。` +
+          `\n（该库默认为空 —— 本项目刻意不预置任何赛事路线，避免塞进没核实过的坐标。）\n\n` +
+          `两条路：\n` +
+          `① 上传轨迹文件：在两步路 / Strava / Garmin 里导出时选「GPX格式」` +
+          `（一条轨迹一个文件，自带实测海拔，爬升最准），` +
+          `回到本页用「上传/粘贴轨迹文件」提交；\n` +
+          `② 自己补录路书：在 server/src/race-routes.ts 里按文件头注释的格式加一条，` +
+          `再用 \`bun run src/cli/race-route.ts <key>\` 核对算出来的爬升。\n\n` +
+          `不会拿同城其它赛事的路线顶替 —— 猜错起点会让整条剖面失真，比没有更糟。\n` +
+          `（如果只是想先把这场赛事登记下来、之后有空再补轨迹，` +
+          `把「路线来源」选成「先不填路线」保存即可，现在不用决定。）`,
       );
     }
     // 名称能匹配上但日期对不上，要提醒：不同年份的路线可能已经改过
@@ -215,12 +270,11 @@ export function updateRace(
   if (patch.distanceKm !== undefined) next.distanceKm = patch.distanceKm;
   if (patch.goalSec !== undefined) next.goalSec = patch.goalSec;
 
-  if (patch.gpx && patch.gpx.trim()) {
-    const track = parseGpx(patch.gpx);
-    if (!track) throw new Error("GPX 解析失败：没找到有效的轨迹点");
+  if ((patch.routeText ?? patch.gpx ?? "").trim()) {
+    const route = buildRouteFromFile(patch.routeText, patch.gpx, patch.routeKind, patch.routeFileName);
     next.routeSource = "gpx";
-    next.routeData = JSON.stringify(downsample(track));
-    next.sourceNote = "GPX 实测海拔（已阈值滤波，误差 ±5-10m）";
+    next.routeData = route.routeData;
+    next.sourceNote = route.sourceNote;
   } else if (patch.routeKey && KNOWN_RACES[patch.routeKey]) {
     const known = KNOWN_RACES[patch.routeKey];
     next.routeSource = "waypoints";
@@ -231,6 +285,13 @@ export function updateRace(
     next.routeData = null;
     next.sourceNote = null;
   }
+  /*
+   * 以上都没命中 → 路线保持原样。
+   *
+   * 这是刻意的：编辑表单里改个目标成绩，不该顺手把已经上传好的 GPX 冲掉。
+   * 用户想清空路线时必须显式选「先不填路线」（对应 clearRoute），
+   * 否则一律当"这次没提路线"。宁可少做，不可误删。
+   */
 
   // 改日期可能撞上"同一天已有一场" —— 那是真实冲突，要说清楚
   if (next.date !== undefined && next.date !== cur.date) {
@@ -470,6 +531,16 @@ export async function buildRaceProfile(row: RaceRow): Promise<RaceProfile> {
       goalSec: row.goalSec,
       routeSource: row.routeSource,
       sourceNote: row.sourceNote,
+      /*
+       * labelId / notes 必须一并返回。
+       *
+       * 以前这里漏了这两个字段，而前端类型里是有的 —— 结果编辑表单打开时
+       * `r.notes ?? ""` 恒为空串，保存时又把 `notes: null` 提交回去，
+       * **每次点「修改」都会静默清掉已有的备注和训练关联**。
+       * 类型声明不会报错，运行也不会报错，只有数据悄悄没了 —— 最坏的一类 bug。
+       */
+      labelId: row.labelId,
+      notes: row.notes,
     },
   };
 
@@ -478,8 +549,12 @@ export async function buildRaceProfile(row: RaceRow): Promise<RaceProfile> {
 
   if (row.routeSource === "gpx") {
     const track = readGpxTrack(row.routeData);
-    if (track) profile = buildGpxProfile(row.name, track);
-    else missingRoute = "GPX 数据已损坏或为空，请重新上传";
+    // usableForProfile 而不是直接信任 track 非空：
+    // 库里可能躺着没有高程的旧数据（早期解析器会把这类文件当空文件处理，
+    // 但更常见的是手工导入过没带 <ele> 的文件）。那种数据画出来的剖面
+    // 会是一条贴地的直线 —— 比"缺路线"更像真的，却更没用。
+    if (usableForProfile(track)) profile = buildGpxProfile(row.name, track);
+    else missingRoute = "已存的轨迹数据里没有可用的高程，无法计算爬升。请重新上传带海拔的 GPX。";
   } else if (row.routeSource === "waypoints") {
     // 城市基准海拔：优先用内置路书里登记的值
     const known = Object.values(KNOWN_RACES).find(
@@ -510,7 +585,9 @@ export async function buildRaceProfile(row: RaceRow): Promise<RaceProfile> {
       missingRoute = "路书数据无法解析，请重新设置路线。";
     }
   } else {
-    missingRoute = "尚未设置路线。可上传 GPX，或从内置路书库中选择。";
+    missingRoute =
+      "尚未设置路线。可以先用「修改」里的「导入 .gpx 文件」补上 —— " +
+      "在两步路 / Strava / Garmin 导出时选「GPX格式」即可。";
   }
 
   const plan = (() => {

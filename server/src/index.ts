@@ -22,6 +22,8 @@ import {
   updateRace,
 } from "./race-service.ts";
 import { buildBriefing } from "./race-briefing.ts";
+import { downsample } from "./gpx.ts";
+import { parseRouteFile, routeSourceNote } from "./route-file.ts";
 import "./workflow/steps.ts";
 import {
   describeSteps,
@@ -216,6 +218,12 @@ const app = new Elysia()
         city: b.city ?? null,
         distanceKm: Number(b.distanceKm),
         goalSec: b.goalSec ? Number(b.goalSec) : null,
+        // useLibraryRoute 必须透传：前端「先不填路线」就靠它。
+        // 以前这里漏了它，服务端永远拿到 undefined → 永远去查内置库 → 空库必报错
+        useLibraryRoute: b.useLibraryRoute,
+        routeText: b.routeText ?? null,
+        routeKind: b.routeKind ?? "auto",
+        routeFileName: b.routeFileName ?? null,
         gpx: b.gpx ?? null,
         routeKey: b.routeKey ?? null,
         labelId: b.labelId ?? null,
@@ -270,11 +278,52 @@ const app = new Elysia()
     return db.select().from(races).where(eq(races.id, id)).get();
   })
 
+  /**
+   * 轨迹文件预检 —— 只解析，不入库。
+   *
+   * 为什么要有这个独立端点：让用户在填完整张表**之前**就知道这份文件能不能用。
+   * 否则常见体验是"填了 8 个字段 → 点保存 → 报错 → 不知道是文件选错了还是别的"，
+   * 而导错格式是这一步最高频的失败原因。
+   *
+   * 返回的距离/爬升来自同一套解析器，与真正入库时算出来的完全一致 ——
+   * 预检说 42.31km，保存后就不会变成别的数。
+   */
+  .post("/api/races/parse-route", async ({ body }) => {
+    const b = (body ?? {}) as any;
+    const parsed = parseRouteFile(String(b.text ?? ""), b.routeKind ?? "auto");
+    if (parsed.error || !parsed.track) {
+      return {
+        ok: false,
+        kind: parsed.kind,
+        error: parsed.error ?? "轨迹文件解析失败",
+      };
+    }
+    // 抽稀后的点数才是入库后的规模，提前告诉用户
+    const thin = downsample(parsed.track);
+    const track = parsed.track;
+    return {
+      ok: true,
+      kind: parsed.kind,
+      hasElevation: parsed.hasElevation,
+      pointCount: track.points.length,
+      storedPointCount: thin.points.length,
+      distanceKm: Number((track.distanceM / 1000).toFixed(2)),
+      gainM: track.gainM,
+      lossM: track.lossM,
+      eleMin: track.eleMin,
+      eleMax: track.eleMax,
+      sourceNote: routeSourceNote(parsed.kind, b.fileName ?? null),
+    };
+  })
+
   /** 上传 GPX 更新路线（赛事名/日期可同时改） */
   .post("/api/races/:id/route", async ({ params, body }) => {
     try {
       const b = (body ?? {}) as any;
       const row = updateRace(Number(params.id), {
+        routeText: b.routeText ?? null,
+        routeKind: b.routeKind ?? "auto",
+        routeFileName: b.routeFileName ?? null,
         gpx: b.gpx ?? null,
         routeKey: b.routeKey ?? null,
         clearRoute: b.clearRoute === true,
