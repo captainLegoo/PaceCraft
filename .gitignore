@@ -12,6 +12,8 @@ dist/
 .shots/*
 !.shots/shoot.ts
 
+docs/
+
 # macOS
 .DS_Store
 

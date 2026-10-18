@@ -414,7 +414,8 @@ export function parseLapData(raw: string): LapData | null {
       : null;
   const source = chosen ? chosen.laps : flat;
 
-  // 原始单位是厘米：/100000 才得到公里（已在多次活动上与 COROS 记录的总距离交叉验证一致）
+  // 原始单位是厘米：/100000 才得到公里。已在多次活动上与 COROS 记录的总距离交叉验证一致，
+  // 这里刻意不写某一次的具体数字 —— 那是作者自己数据集里的值，换个使用者就既不适用也不该留。
   return {
     labelId: String(payload.labelId ?? ""),
     sportType: Number(payload.sportType ?? -1),

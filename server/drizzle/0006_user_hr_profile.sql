@@ -7,8 +7,8 @@
 -- observedMaxHr（从历史分圈推算）和生理中位数 55。
 --
 -- 背景二：sync.ts 原来是 INSERT + ON CONFLICT(rowid) DO NOTHING，
--- rowid 对新插入的行不冲突，于是每次同步都新增一行档案（长期同步会
--- 攒出大量完全重复的记录）。读取端都取 all()[0] 所以没暴露为故障，
+-- rowid 对新插入的行不冲突，于是每次同步都新增一行档案（长期待下去会攒出大量完全重复的记录）。
+-- 读取端都取 all()[0] 所以没暴露为故障，
 -- 但属于数据污染。同步逻辑已改为 ON CONFLICT(nickname) DO UPDATE，
 -- 这里补上 nickname 唯一索引让该 upsert 生效，并清理已产生的重复行。
 ALTER TABLE `users` ADD `max_hr` integer;
