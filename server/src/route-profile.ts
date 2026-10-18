@@ -216,16 +216,25 @@ export type GpxProfile = {
  */
 export function buildGpxProfile(name: string, track: GpxTrack): GpxProfile {
   const km = track.distanceM / 1000;
-  const eles = track.points.map((p) => p.ele);
+  // 调用方（race-service）已用 usableForProfile 验过每个点都有有限高程，
+  // 这里仍取一次 min：库里存的是 JSON，可能来自旧版本解析器，
+  // 而 smooth/accumulate 一旦吃到 null 会静默产出 NaN 并一路带到配速建议上
+  const eles = track.points.map((p) => (p.ele as number) || 0);
   const gainPerKm = km > 0 ? track.gainM / km : 0;
 
-  // 剖面图：累计距离 + 海拔
+  // 剖面图：累计距离 + 海拔。
+  // 段间（trkseg 边界 = 自动暂停）不累加距离 —— 那一跳是记录仪切段造成的，
+  // 不是人跑出来的；算进去会让剖面横轴凭空多出几百米，赛段配速全部失真。
   const profile: GpxProfile["profile"] = [];
   let acc = 0;
-  profile.push({ distKm: 0, ele: track.points[0].ele });
+  profile.push({ distKm: 0, ele: eles[0] });
   for (let i = 1; i < track.points.length; i++) {
-    acc += haversine(track.points[i - 1].lat, track.points[i - 1].lon, track.points[i].lat, track.points[i].lon);
-    profile.push({ distKm: acc / 1000, ele: track.points[i].ele });
+    const prev = track.points[i - 1];
+    const cur = track.points[i];
+    if (cur.seg === prev.seg) {
+      acc += haversine(prev.lat, prev.lon, cur.lat, cur.lon);
+    }
+    profile.push({ distKm: acc / 1000, ele: (cur.ele as number) || 0 });
   }
 
   return {
