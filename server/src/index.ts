@@ -22,7 +22,7 @@ import {
   updateRace,
 } from "./race-service.ts";
 import { buildBriefing } from "./race-briefing.ts";
-import { downsample } from "./gpx.ts";
+import { COARSE_SPACING_M, pickForDisplay } from "./gpx.ts";
 import { parseRouteFile, routeSourceNote } from "./route-file.ts";
 import "./workflow/steps.ts";
 import {
@@ -298,15 +298,16 @@ const app = new Elysia()
         error: parsed.error ?? "轨迹文件解析失败",
       };
     }
-    // 抽稀后的点数才是入库后的规模，提前告诉用户
-    const thin = downsample(parsed.track);
     const track = parsed.track;
     return {
       ok: true,
       kind: parsed.kind,
       hasElevation: parsed.hasElevation,
       pointCount: track.points.length,
-      storedPointCount: thin.points.length,
+      /** 剖面图实际会画的点数 —— 展示层裁剪，与入库的完整点序列不是一回事 */
+      profilePointCount: pickForDisplay(track.points).length,
+      sampleSpacingM: track.sampleSpacingM,
+      coarseSpacing: track.sampleSpacingM > COARSE_SPACING_M,
       distanceKm: Number((track.distanceM / 1000).toFixed(2)),
       gainM: track.gainM,
       lossM: track.lossM,

@@ -17,7 +17,7 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { and, asc, desc, eq } from "drizzle-orm";
 import { db } from "./db/client.ts";
 import { races } from "./db/schema.ts";
-import { downsample, usableForProfile, type GpxTrack } from "./gpx.ts";
+import { usableForProfile, type GpxTrack } from "./gpx.ts";
 import { parseRouteFile, routeSourceNote, type RouteFileHint } from "./route-file.ts";
 import { buildGpxProfile, pacePlan, type GpxProfile } from "./route-profile.ts";
 import { fmtDuration } from "./format.ts";
@@ -54,8 +54,35 @@ export type RaceProfile = {
   };
 };
 
-export function listRaces(): RaceRow[] {
-  return db.select().from(races).orderBy(asc(races.date)).all();
+/**
+ * 列表用的列。**刻意不含 routeData / profileJson**。
+ *
+ * routeData 现在存的是完整分辨率轨迹（一条全马 10504 个点 ≈ 525KB 的 JSON），
+ * `db.select().from(races)` 会把它一并带出来，而这个列表是**一次性返回所有赛事**
+ * 的 —— 20 场就是 10MB 的响应，而前端只用得到日期、名称、距离那几个标量字段。
+ * （profileJson 目前没有任何代码读写，画像每次现算；一并排掉只是不想留隐患。）
+ *
+ * 单条详情走 getRace，那边确实需要 routeData。
+ */
+const RACE_LIST_COLUMNS = {
+  id: races.id,
+  date: races.date,
+  name: races.name,
+  city: races.city,
+  distanceKm: races.distanceKm,
+  goalSec: races.goalSec,
+  routeSource: races.routeSource,
+  sourceNote: races.sourceNote,
+  labelId: races.labelId,
+  notes: races.notes,
+  createdAt: races.createdAt,
+  updatedAt: races.updatedAt,
+};
+
+export type RaceListRow = { [K in keyof typeof RACE_LIST_COLUMNS]: RaceRow[K] };
+
+export function listRaces(): RaceListRow[] {
+  return db.select(RACE_LIST_COLUMNS).from(races).orderBy(asc(races.date)).all();
 }
 
 export function getRace(id: number): RaceRow | null {
@@ -129,7 +156,11 @@ function buildRouteFromFile(
     throw new Error(parsed.error ?? "轨迹文件解析失败");
   }
   return {
-    routeData: JSON.stringify(downsample(parsed.track)),
+    // 入库存**完整分辨率**，不做抽稀。
+    // 抽稀是有损的：爬升必须在最高保真的序列上算，抽稀后的那份只用来画剖面图，
+    // 由 buildGpxProfile 在渲染时按图表宽度裁。存稀的等于把数据一次性扔掉 ——
+    // 以后每改进一次算法都得让用户重新上传文件。
+    routeData: JSON.stringify(parsed.track),
     sourceNote: routeSourceNote(parsed.kind, safeName || null),
   };
 }

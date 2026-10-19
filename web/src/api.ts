@@ -201,9 +201,13 @@ export type RouteFilePreview = {
   kind: "gpx" | "kml" | "kmz" | "unknown";
   error?: string;
   hasElevation?: boolean;
+  /** 文件里的原始点数（入库就是这份，不抽稀） */
   pointCount?: number;
-  /** 存库后的点数（已抽稀） */
-  storedPointCount?: number;
+  /** 剖面图实际会画的点数 —— 展示层裁剪，与入库点数不是一回事 */
+  profilePointCount?: number;
+  /** 轨迹采样间隔（米）。> 20 说明文件本身偏稀，爬升可能偏低 */
+  sampleSpacingM?: number;
+  coarseSpacing?: boolean;
   distanceKm?: number;
   gainM?: number;
   lossM?: number;

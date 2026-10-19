@@ -696,11 +696,24 @@ export default function RaceSetup({
               <div className="banner info" style={{ marginTop: 8, lineHeight: 1.7 }}>
                 已解析：{preview.distanceKm} km ／ 累计爬升 {preview.gainM} m ／{" "}
                 {preview.pointCount} 个点
-                {preview.storedPointCount && preview.storedPointCount !== preview.pointCount
-                  ? `（存库时抽稀到 ${preview.storedPointCount}）`
+                {preview.profilePointCount && preview.profilePointCount !== preview.pointCount
+                  ? `（剖面图画 ${preview.profilePointCount} 个点）`
                   : ""}
                 <br />
                 海拔来源：{preview.kind === "kml" ? "KML 轨迹" : "GPX 实测"}（±5-10m）
+                {preview.coarseSpacing && preview.sampleSpacingM ? (
+                  <>
+                    <br />
+                    <strong style={{ color: "var(--warn, #d9a441)" }}>
+                      这份轨迹采样较稀（平均每点 {preview.sampleSpacingM} 米）
+                    </strong>
+                    <br />
+                    起伏落在采样点之间就丢了，上面的爬升很可能偏低。
+                    能导出更密的轨迹最好（手表调到 1 秒或实时模式）。
+                  </>
+                ) : (
+                  ""
+                )}
                 {dist && Number(dist) > 0 && preview.distanceKm != null &&
                   (() => {
                     const drift = Math.abs(preview.distanceKm - Number(dist)) / Number(dist);

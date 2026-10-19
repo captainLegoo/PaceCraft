@@ -188,7 +188,12 @@ export function paceAdvice(profile: RouteProfile, targetMarathonSec: number): {
 }
 // ---------------- GPX 路线的画像 ----------------
 
-import type { GpxTrack } from "./gpx.ts";
+import {
+  COARSE_SPACING_M,
+  ELEV_WINDOW_M,
+  pickForDisplay,
+  type GpxTrack,
+} from "./gpx.ts";
 
 export type GpxProfile = {
   source: "gpx";
@@ -203,9 +208,14 @@ export type GpxProfile = {
   netChange: number;
   /** 剖面图用的采样点：每点含累计距离与海拔 */
   profile: { distKm: number; ele: number }[];
+  /** 轨迹采样间隔（米）。用来判断这份文件本身够不够细 */
+  sampleSpacingM: number;
   verdict: string;
   caveat: string;
 };
+
+/** 剖面图送进前端的点数。720px 宽的 SVG × 约 1.25 倍过采样 */
+const PROFILE_MAX_POINTS = 900;
 
 /**
  * 从 GPX 直接生成画像。
@@ -213,29 +223,41 @@ export type GpxProfile = {
  * 与 waypoints 路径的关键区别：这里的每个数字都来自 GPS 实测，
  * 不是 DEM 推算，所以 caveat 是「仅受 GPS 海拔误差影响（±5-10m）」，
  * 而不是 waypoints 那种「DEM 分辨率不足，误差可达 ±50%」。
+ *
+ * 分层：统计量（gainM / distanceKm / …）直接取自 track 的完整分辨率，
+ * 只有 profile 数组走 pickForDisplay 裁出的展示序列。
+ * 展示序列**不得回流到任何计算** —— 抽稀是有损的，
+ * 在稀 12 倍的点上重算平滑会把真实坡度抹平（实测同一条赛道 181m → 91m）。
  */
 export function buildGpxProfile(name: string, track: GpxTrack): GpxProfile {
   const km = track.distanceM / 1000;
   // 调用方（race-service）已用 usableForProfile 验过每个点都有有限高程，
-  // 这里仍取一次 min：库里存的是 JSON，可能来自旧版本解析器，
+  // 这里仍兜一次底：库里存的是 JSON，可能来自旧版本解析器，
   // 而 smooth/accumulate 一旦吃到 null 会静默产出 NaN 并一路带到配速建议上
   const eles = track.points.map((p) => (p.ele as number) || 0);
   const gainPerKm = km > 0 ? track.gainM / km : 0;
 
-  // 剖面图：累计距离 + 海拔。
+  // 剖面图：累计距离 + 海拔。这是**唯一**允许用展示序列的地方。
   // 段间（trkseg 边界 = 自动暂停）不累加距离 —— 那一跳是记录仪切段造成的，
   // 不是人跑出来的；算进去会让剖面横轴凭空多出几百米，赛段配速全部失真。
-  const profile: GpxProfile["profile"] = [];
+  const draw = pickForDisplay(track.points, PROFILE_MAX_POINTS);
+  const profile: GpxProfile["profile"] = [{ distKm: 0, ele: (draw[0].ele as number) || 0 }];
   let acc = 0;
-  profile.push({ distKm: 0, ele: eles[0] });
-  for (let i = 1; i < track.points.length; i++) {
-    const prev = track.points[i - 1];
-    const cur = track.points[i];
+  for (let i = 1; i < draw.length; i++) {
+    const prev = draw[i - 1];
+    const cur = draw[i];
     if (cur.seg === prev.seg) {
       acc += haversine(prev.lat, prev.lon, cur.lat, cur.lon);
     }
     profile.push({ distKm: acc / 1000, ele: (cur.ele as number) || 0 });
   }
+
+  // 采样过稀的文件：爬升会系统性偏低，且没有任何算法能补回来。如实说。
+  const coarse =
+    track.sampleSpacingM > COARSE_SPACING_M
+      ? ` 但这份轨迹采样较稀（平均每点 ${track.sampleSpacingM}m），` +
+        `起伏在采样点之间已经丢了，爬升很可能偏低。`
+      : "";
 
   return {
     source: "gpx",
@@ -248,8 +270,11 @@ export function buildGpxProfile(name: string, track: GpxTrack): GpxProfile {
     eleMax: Math.round(track.eleMax),
     netChange: Math.round(eles[eles.length - 1] - eles[0]),
     profile,
+    sampleSpacingM: track.sampleSpacingM,
     verdict: verdictFor(gainPerKm),
-    caveat: "海拔来自 GPS/GPX 实测（已做 0.5m 阈值滤波与 7 点平滑），误差主要来自 GPS 本身的 ±5-10m。",
+    caveat:
+      `海拔来自 GPS/GPX 实测（${ELEV_WINDOW_M}m 滑动窗口平滑 + 0.5m 阈值滤波），` +
+      `误差主要来自 GPS 本身的 ±5-10m。${coarse}`,
   };
 }
 
