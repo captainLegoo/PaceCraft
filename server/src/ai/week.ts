@@ -20,6 +20,7 @@ import {
   users,
 } from "../db/schema.ts";
 import { classifySession, thresholdHrLine, QUALITY_MIN_SEC, type SessionFocus } from "../training-focus.ts";
+import type { Threshold } from "../prediction/engine.ts";
 import { buildReport } from "../prediction/pipeline.ts";
 import { classifyTerrain, climbRate, TERRAIN_LABEL } from "../terrain.ts";
 import {
@@ -267,6 +268,12 @@ function medianOf(xs: number[]): number {
   return s[Math.floor(s.length / 2)];
 }
 
+/** 历史某一周的主课表块（用于同类块跨周对比） */
+export type HistWeekBlock = { weekStart: string; block: WeekBlock };
+
+/** 历史某一周的整周心率区间占比（%），用于回答「本周强度结构相对前几周变了没有」 */
+export type HistWeekZones = { weekStart: string; z1: number | null; z2: number | null; z3plus: number | null };
+
 export type WeekCtx = {
   weekStart: string;
   weekEnd: string;
@@ -282,43 +289,35 @@ export type WeekCtx = {
   stressRows: any[];
   trendRows: any[];
   age: number | null;
+  /** 本周口径的阈值线，历史周也用它判定（见 buildWeekContext 里的说明） */
+  thresholdLine: number;
+  histMainBlocks: HistWeekBlock[];
+  histZones: HistWeekZones[];
 };
 
-export function buildWeekContext(weekStart: string): WeekCtx | null {
-  const weekEnd = weekEndOf(weekStart);
-  const sessions = buildSessions()
-    .filter((s) => s.date >= weekStart && s.date <= weekEnd)
-    .sort((a, b) => a.startTs - b.startTs);
-  if (sessions.length === 0) return null;
-
-  const labelIds = sessions.flatMap((s) => s.labelIds);
-  const weekLaps = sessionLaps(labelIds);
-  const lapsByLabel = new Map<string, any[]>();
-  for (const l of weekLaps) {
-    const arr = lapsByLabel.get(l.labelId) ?? [];
-    arr.push(l);
-    lapsByLabel.set(l.labelId, arr);
-  }
-
-  const report = buildReport();
-  const threshold = report.threshold;
-  const line = thresholdHrLine(threshold);
-
-  const userRow = db.select().from(users).all()[0] ?? null;
-  const age = ageFromBirthday(userRow?.birthday ?? null);
-
+/**
+ * 把一周的记录切成训练块并标注主/次课表。
+ *
+ * 抽成独立函数是为了让**历史周走同一套判定**：
+ * 跨周对比要求口径一致，若历史周用另一套规则挑"长距离"，
+ * 拿出来的对比就是假的（实测同一套规则下每周都能稳定挑出主课表）。
+ */
+function collectWeekBlocks(
+  sessions: Session[],
+  lapsByLabel: Map<string, any[]>,
+  threshold: Threshold,
+  line: number,
+): WeekBlock[] {
   const lsd = pickLsdSession(sessions);
   const blocks: WeekBlock[] = [];
 
   for (const s of sessions) {
     const isInterval = /间歇|组合|多次短距离/.test(s.classification);
     const isLsd = lsd != null && s.key === lsd.key;
-    const acts = s.labelIds.map((id) => ({
-      act: db.select().from(activities).where(eq(activities.labelId, id)).get(),
-      laps: lapsByLabel.get(id) ?? [],
-    }));
 
-    for (const { act, laps } of acts) {
+    for (const id of s.labelIds) {
+      const act = db.select().from(activities).where(eq(activities.labelId, id)).get();
+      const laps = lapsByLabel.get(id) ?? [];
       if (!act) continue;
       // 强度课判定只看时间 + 心率，与距离无关 —— 间歇课的分圈距离常记 0，
       // 按距离过滤会恰好把最该算的强度课滤掉（实测 4 场如此）。
@@ -364,9 +363,9 @@ export function buildWeekContext(weekStart: string): WeekCtx | null {
           : `${s.classification}，不属于间歇/组合训练，且非本周最长场次`;
       }
 
-      const detail = db.select().from(activityDetails).where(eq(activityDetails.labelId, act.labelId)).get() ?? null;
+      const detail = db.select().from(activityDetails).where(eq(activityDetails.labelId, id)).get() ?? null;
       blocks.push({
-        labelId: act.labelId,
+        labelId: id,
         sessionKey: s.key,
         date: s.date,
         role,
@@ -382,6 +381,39 @@ export function buildWeekContext(weekStart: string): WeekCtx | null {
       });
     }
   }
+  return blocks;
+}
+
+/** 按周起始日切出这一周的记录 */
+function sessionsInWeek(all: Session[], weekStart: string, weekEnd: string): Session[] {
+  return all.filter((s) => s.date >= weekStart && s.date <= weekEnd).sort((a, b) => a.startTs - b.startTs);
+}
+
+/** 某一周的分圈，按 labelId 归拢 */
+function lapsByLabelFor(sessions: Session[]): Map<string, any[]> {
+  const map = new Map<string, any[]>();
+  for (const l of sessionLaps(sessions.flatMap((s) => s.labelIds))) {
+    const arr = map.get(l.labelId) ?? [];
+    arr.push(l);
+    map.set(l.labelId, arr);
+  }
+  return map;
+}
+
+export function buildWeekContext(weekStart: string): WeekCtx | null {
+  const weekEnd = weekEndOf(weekStart);
+  const allSessions = buildSessions();
+  const sessions = sessionsInWeek(allSessions, weekStart, weekEnd);
+  if (sessions.length === 0) return null;
+
+  const report = buildReport();
+  const threshold = report.threshold;
+  const line = thresholdHrLine(threshold);
+
+  const userRow = db.select().from(users).all()[0] ?? null;
+  const age = ageFromBirthday(userRow?.birthday ?? null);
+
+  const blocks = collectWeekBlocks(sessions, lapsByLabelFor(sessions), threshold, line);
 
   const loadRows = db
     .select()
@@ -400,10 +432,50 @@ export function buildWeekContext(weekStart: string): WeekCtx | null {
   // 是模型自己发现这个数对不上才提出来的）。
   const trendRows = weeklyVolume(10).filter((w) => w.weekStart < weekStart).slice(-6);
 
+  // ---- 历史主课表 + 历史周心率分布：补上「同类块跨周对比」这个缺口 ----
+  //
+  // 之前只给周级均值，模型每次都只能写"缺前几周主课表明细，无法跨周对比"，
+  // 而实测每周都能用同一套规则稳定挑出主课表（长距离必出，间歇多半出），
+  // 数据一直都在库里，只是没送进去。
+  //
+  // 只送主课表，不送历史周的全部块：历史周一律最多 6 周 × 3-4 块，
+  // 铺开会顶掉本周的细节预算，而跨周对比真正需要的只有主课表。
+  //
+  // 阈值线用本周的 line 统一判定历史周，不回算历史阈值 ——
+  // 回算等于给模型两套口径，它会拿两个口径的数字直接相减。
+  // 这个口径必须写进 prompt 让模型知道。
+  const histWeeks = trendRows.map((w) => w.weekStart);
+  const histMainBlocks: HistWeekBlock[] = [];
+  const histZones: HistWeekZones[] = [];
+  for (const hw of histWeeks) {
+    const hs = sessionsInWeek(allSessions, hw, weekEndOf(hw));
+    if (hs.length === 0) continue;
+    const byLabel = lapsByLabelFor(hs);
+    for (const b of collectWeekBlocks(hs, byLabel, threshold, line)) {
+      if (!b.role.startsWith("主课表")) continue;
+      histMainBlocks.push({ weekStart: hw, block: b });
+    }
+    const weekLaps = sessionLaps(hs.flatMap((s) => s.labelIds));
+    const z = hrZonePrompt(weekLaps, age);
+    // 注意 hrZonePrompt().zones 是 hrZones() 的**整个返回对象**，区间数组在里面再一层 .zones
+    const zb = z?.zones?.zones;
+    if (zb) {
+      histZones.push({
+        weekStart: hw,
+        z1: zb[0]?.pct ?? null,
+        z2: zb[1]?.pct ?? null,
+        z3plus: zb.slice(2).reduce((s, x) => s + (x.pct ?? 0), 0),
+      });
+    }
+  }
+
   return {
-    weekStart, weekEnd, sessions, blocks, weekLaps,
+    weekStart, weekEnd, sessions, blocks,
+    weekLaps: sessionLaps(sessions.flatMap((s) => s.labelIds)),
     userRow, fitnessRow: fitnessAsOf(weekEnd), recoveryRow: recoveryAsOf(weekEnd),
     loadRows, healthRows, sleepRows, stressRows, trendRows, age,
+    thresholdLine: line,
+    histMainBlocks, histZones,
   };
 }
 
@@ -415,7 +487,16 @@ export const WEEK_SYSTEM_PROMPT = `你是一位资深跑步教练，专精马拉
 
 这次分析的对象是**一整周（周一至周日）的训练**，不是某一场。
 系统会给你：本周的训练块（已按主/次课表标注）、整周心率区间分布、
-前 6 周的趋势对比、以及本周的恢复与生活数据。
+**前 6 周的主课表明细**、各周整周强度结构、前 6 周的趋势对比、
+以及本周的恢复与生活数据。
+
+⚠ 日期与星期（先看这条，错一整份报告就废了）：
+文首有一张「本周日历」对照表，**星期已经在那里算好了**。
+每个日期后也都直接标了星期（如 \`10-17 周六\`）。
+**照抄，绝不自己按 MM-DD 心算** —— 实测模型会整体偏移一天，
+把周六的 33km 长距离写成"周日主课表"，还会在同一份报告里同时写出
+"周日负荷比 1.25"和"周六负荷比 0.94"，前后自相矛盾。
+报告里提到某一天时一律写成「周六(10-17)」这种带日期的形式，便于核对。
 
 ⚠ 主次课表怎么读（最重要，先读这三条，读错了整份报告就是错的）：
 
@@ -449,13 +530,20 @@ export const WEEK_SYSTEM_PROMPT = `你是一位资深跑步教练，专精马拉
    长距离和强度课挨得近不近（恢复窗口够不够）。
 5. 有对比才下判断：给了前 6 周数据就要用它；
    "强度够不够"这类问题必须落到"比前几周是多是少"，不要凭绝对印象。
-6. 心率区间用**五区间心率法（HRR 口径）**：Z1 59–74%｜Z2 74–84%｜Z3 85–88%（**仅 4% 宽**）｜
+   **每个主课表块都必须至少做一次同类块跨周对比**（长距离比长距离、间歇比间歇），
+   并引用「前 N 周主课表对照」里的具体行（日期 + 数字）。
+   不要拿周级均配速代替块级对比 —— 周均值是混合值；
+   不要凭"这周配速比上周快"就下结论，先比爬升率是否可比。
+   某一周缺某类型的主课表时如实说"那周没有可比块"，不要用别的类型顶替。
+6. 说某天"训练了/休息了"只能以「训练块明细」为准，不要凭印象：
+   表里没有的日期才算休息。写完分布描述后自查一遍有没有和明细表冲突。
+7. 心率区间用**五区间心率法（HRR 口径）**：Z1 59–74%｜Z2 74–84%｜Z3 85–88%（**仅 4% 宽**）｜
    Z4 89–95%｜Z5 >95%，低于 Z1 下界记为热身/恢复。
    **具体 bpm 边界以数据里给出的区间表为准**，不要用记忆里的数字。
    静息心率低的人 Z1 占多数是正常的，不要说成强度不足。
-7. 如果数据不足以支撑某个判断，直接说明缺什么，不要臆测。
+8. 如果数据不足以支撑某个判断，直接说明缺什么，不要臆测。
    区分"系统没给这项数据"和"你没看这张表"。
-8. 用 Markdown 组织，控制在 800 字以内。
+9. 用 Markdown 组织，控制在 900 字以内。
 
 地形判读（重要）：
 - 每个块都标了地形和爬升率。同一心率下爬升路段配速天然更慢，**不是退步**。
@@ -464,9 +552,32 @@ export const WEEK_SYSTEM_PROMPT = `你是一位资深跑步教练，专精马拉
   此时直接按平路场分析，不要因为"爬升 0"就打折扣或说地形数据不可信。
 - 若标注了**海拔**，按 2.5 s/km 每 1000m 做高原折算后再比较。`;
 
+const WEEKDAY_CN = ["周日", "周一", "周二", "周三", "周四", "周五", "周六"];
+
+/**
+ * prompt 里的日期一律走这里，必须带上星期。
+ *
+ * 只给 "10-17" 的话，星期得由模型自己推算 —— 它会推错，而且推错之后
+ * 报告里会出现自相矛盾的说法（实测把周六的 33km 长距离写成"周日主课表"，
+ * 另一处又写"周六（主课表日）负荷比跳升"，同一段里两个星期并存）。
+ * 星期是确定性事实，算出来喂进去，不要让模型算。
+ */
+function md(date: string): string {
+  const d = new Date(`${date}T00:00:00Z`);
+  if (Number.isNaN(d.getTime())) return date.slice(5);
+  return `${date.slice(5)} ${WEEKDAY_CN[d.getUTCDay()]}`;
+}
+
+/** 一个训练块里所有分圈的峰值心率 */
+function peakHrOf(b: WeekBlock): number | null {
+  const peak = b.laps.reduce((m, l) => Math.max(m, l.maxHr ?? 0), 0);
+  return peak || null;
+}
+
 export function buildWeekUserPrompt(ctx: WeekCtx): string {
   const { blocks, sessions, weekStart, weekEnd, weekLaps, userRow, fitnessRow, recoveryRow,
-    loadRows, healthRows, sleepRows, stressRows, trendRows, age } = ctx;
+    loadRows, healthRows, sleepRows, stressRows, trendRows, age,
+    thresholdLine, histMainBlocks, histZones } = ctx;
   const p: string[] = [];
 
   // ---- 档案 ----
@@ -479,6 +590,21 @@ export function buildWeekUserPrompt(ctx: WeekCtx): string {
     p.push("- （无档案数据）");
   }
 
+  // ---- 本周日历：星期是确定性事实，先给一张对照表，别让模型自己心算 ----
+  //
+  // 只在各表里附上星期是不够的：实测模型会整体偏移一天，把周六的 33km 长距离
+  // 写成"周日主课表"，而且同一份报告里"周日负荷比 1.25"和"周六负荷比 0.94"
+  // 互相打架 —— 说明它根本没在查表，是自己按 MM-DD 脑补的。
+  // 所以这里给出完整日期 + 星期 + 本周第几天的三列对照，写在所有数据之前。
+  p.push(`\n## 本周日历（星期已核算，直接照抄，不要自己按日期推算）`);
+  p.push("| 本周第几天 | 完整日期 | 星期 |");
+  p.push("|---|---|---|");
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(new Date(`${weekStart}T00:00:00Z`).getTime() + i * 86400_000)
+      .toISOString().slice(0, 10);
+    p.push(`| 第 ${i + 1} 天 | ${d} | ${WEEKDAY_CN[new Date(`${d}T00:00:00Z`).getUTCDay()]} |`);
+  }
+
   // ---- 本周合计 ----
   const totalKm = sessions.reduce((s, x) => s + x.totals.distanceKm, 0);
   const totalSec = sessions.reduce((s, x) => s + x.totals.durationSec, 0);
@@ -486,7 +612,7 @@ export function buildWeekUserPrompt(ctx: WeekCtx): string {
   const totalGain = sessions.reduce((s, x) => s + (x.totals.elevGain || 0), 0);
   const mainBlocks = blocks.filter((b) => b.role.startsWith("主课表"));
 
-  p.push(`\n## 本周合计（${weekStart} ~ ${weekEnd}）`);
+  p.push(`\n## 本周合计（${md(weekStart)} ~ ${md(weekEnd)}）`);
   p.push(`- 训练场次：${sessions.length} 场，共 ${blocks.length} 个训练块（其中主课表 ${mainBlocks.length} 个）`);
   p.push(`- 总跑量 ${totalKm.toFixed(1)} km ／ ${fmtDur(totalSec)} ／ 累计爬升 ${Math.round(totalGain)} m ／ 负荷合计 ${totalLoad}`);
   p.push(`- ⚠ **以上是混合值**：跑量时长是各块直接相加，但配速和心率不能作为强度判据，原因见文首规则 1。`);
@@ -498,28 +624,29 @@ export function buildWeekUserPrompt(ctx: WeekCtx): string {
 
   // ---- 训练块明细 ----
   p.push(`\n## 训练块明细（共 ${blocks.length} 个）`);
-  p.push("| # | 日期 | 角色 | 距离 | 用时 | 配速 | 均心 | 峰心 | 负荷 | 地形 |");
+  p.push("| # | 日期 | 角色 | 距离 | 用时 | 配速 | 均心 | 单圈峰值(参考) | 负荷 | 地形 |");
   p.push("|---|---|---|---|---|---|---|---|---|---|");
+  p.push("> ⚠ 「单圈峰值」是分圈里最高的**瞬时**心率，只作参考。");
+  p.push("> 判定有没有上阈值看的是「峰值**圈均**心率」，在下面主课表内部结构里给，两者不是一回事，别混用。");
   blocks.forEach((b, i) => {
     const a = b.activity;
     const d = b.detail;
     const rate = climbRate(d?.elevGain, a.distanceKm);
-    const peak = b.laps.reduce((m, l) => Math.max(m, l.maxHr ?? 0), 0);
     p.push(
-      `| ${i + 1} | ${b.date.slice(5)} | ${b.role} | ${(a.distanceKm ?? 0).toFixed(2)}km | ${fmtDur(a.durationSec)} | ${fmtPace(a.avgPaceSec)} | ${a.avgHr ?? "—"} | ${peak || "—"} | ${d?.trainingLoad ?? "—"} | ${TERRAIN_LABEL[classifyTerrain(rate)]} |`,
+      `| ${i + 1} | ${md(b.date)} | ${b.role} | ${(a.distanceKm ?? 0).toFixed(2)}km | ${fmtDur(a.durationSec)} | ${fmtPace(a.avgPaceSec)} | ${a.avgHr ?? "—"} | ${peakHrOf(b) ?? "—"} | ${d?.trainingLoad ?? "—"} | ${TERRAIN_LABEL[classifyTerrain(rate)]} |`,
     );
   });
 
   // ---- 角色判定依据：让模型知道主次不是随手贴的标签 ----
   p.push(`\n## 主次课表判定依据`);
   for (const b of blocks) {
-    p.push(`- ${b.date.slice(5)} ${b.activity.distanceKm ?? 0}km → **${b.role}**：${b.roleReason}`);
+    p.push(`- ${md(b.date)} ${b.activity.distanceKm ?? 0}km → **${b.role}**：${b.roleReason}`);
   }
 
   // ---- 只对主课表展开内部结构 ----
   p.push(`\n## 主课表内部结构（仅 ${mainBlocks.length} 个主课表块，次课表不展开）`);
   for (const [i, b] of mainBlocks.entries()) {
-    p.push(`\n### 主课表 ${i + 1}：${b.date} ${b.activity.distanceKm ?? 0}km（${b.role}）`);
+    p.push(`\n### 主课表 ${i + 1}：${md(b.date)} ${b.activity.distanceKm ?? 0}km（${b.role}）`);
 
     if (b.role === "主课表·强度" && b.sets) {
       const rest = b.setRestSec != null ? `，组间休息约 ${fmtDur(b.setRestSec)}` : "";
@@ -556,6 +683,48 @@ export function buildWeekUserPrompt(ctx: WeekCtx): string {
     }
   }
 
+  // ---- 历史主课表：让「同类块跨周对比」有数据可做 ----
+  if (histMainBlocks.length > 0) {
+    p.push(`\n## 前 ${trendRows.length} 周主课表对照（与本周同一套判定口径）`);
+    p.push(
+      `> 历史块**统一按本周的阈值线 ${Math.round(thresholdLine)} bpm 判定**，没有回算各周当时的阈值 —— 口径必须一致，` +
+      `否则你拿到的两组数字不可直接相减。注意阈值线本身会随体能漂移，跨周解读时留出余量。`,
+    );
+    p.push("| 周起始 | 日期 | 角色 | 距离 | 配速 | 均心 | 单圈峰值(参考) | 负荷 | 爬升 | 爬升率 |");
+    p.push("|---|---|---|---|---|---|---|---|---|---|");
+    for (const h of histMainBlocks) {
+      const b = h.block;
+      const a = b.activity;
+      const gain = b.detail?.elevGain ?? 0;
+      p.push(
+        `| ${md(h.weekStart)} | ${md(b.date)} | ${b.role} | ${(a.distanceKm ?? 0).toFixed(2)}km | ${fmtPace(a.avgPaceSec)} | ${a.avgHr ?? "—"} | ${peakHrOf(b)} | ${b.detail?.trainingLoad ?? "—"} | ${Math.round(gain)}m | ${climbRate(gain, a.distanceKm).toFixed(1)} |`,
+      );
+    }
+    p.push(
+      `> 这张表存在的意义就是回答"本周这块比上周同类块更快/更稳还是退步了"。` +
+      `比较配速前先比爬升率：起伏场和平路场不能直接比。` +
+      `某一周没有长距离块、或没有强度块，那一周在该类型上就是空缺，不要拿另一类型顶替。`,
+    );
+  }
+
+  // ---- 历史周强度结构：回答「本周强度占比相对前几周变了没有」 ----
+  if (histZones.length > 0) {
+    p.push(`\n## 各周整周心率区间占比（第一行为本周）`);
+    p.push("| 周起始 | Z1 | Z2 | Z3 及以上 |");
+    p.push("|---|---|---|---|");
+    const cur = z?.zones?.zones;
+    if (cur) {
+      p.push(
+        `| **${md(weekStart)}（本周）** | ${cur[0]?.pct ?? "—"}% | ${cur[1]?.pct ?? "—"}% | ${cur.slice(2).reduce((s, x) => s + (x.pct ?? 0), 0)}% |`,
+      );
+    }
+    for (const h of histZones) {
+      p.push(`| ${md(h.weekStart)} | ${h.z1 ?? "—"}% | ${h.z2 ?? "—"}% | ${h.z3plus ?? "—"}% |`);
+    }
+    p.push(`> 这是整周（含主次课表）的强度结构，用于回答"这周的强度刺激比前几周多是少"，不是用来评价单块强度。`);
+  }
+
+
   // ---- 次课表只给完成度 ----
   const sideBlocks = blocks.filter((b) => b.role === "次课表" || b.role === "热身");
   if (sideBlocks.length > 0) {
@@ -564,7 +733,7 @@ export function buildWeekUserPrompt(ctx: WeekCtx): string {
     for (const b of sideBlocks) {
       const a = b.activity;
       const w = b.mayMixWarmup ? " ⚠该记录内可能含热身，均值为混合值，勿作强度判据" : "";
-      p.push(`- ${b.date.slice(5)} ${b.role}：${(a.distanceKm ?? 0).toFixed(2)}km / ${fmtPace(a.avgPaceSec)} / ${a.avgHr ?? "—"} bpm${w}`);
+      p.push(`- ${md(b.date)} ${b.role}：${(a.distanceKm ?? 0).toFixed(2)}km / ${fmtPace(a.avgPaceSec)} / ${a.avgHr ?? "—"} bpm${w}`);
     }
   }
 
@@ -572,7 +741,7 @@ export function buildWeekUserPrompt(ctx: WeekCtx): string {
   if (loadRows.length > 0) {
     p.push(`\n## 本周每日训练负荷`);
     for (const l of loadRows) {
-      p.push(`- ${l.date.slice(5)}：短期 ${l.shortLoad ?? "—"}｜长期 ${l.longLoad ?? "—"}｜负荷比 ${l.ratio ?? "—"}｜${l.comment ?? ""}`);
+      p.push(`- ${md(l.date)}：短期 ${l.shortLoad ?? "—"}｜长期 ${l.longLoad ?? "—"}｜负荷比 ${l.ratio ?? "—"}｜${l.comment ?? ""}`);
     }
   }
 
@@ -589,7 +758,7 @@ export function buildWeekUserPrompt(ctx: WeekCtx): string {
     for (let i = 0; i < 7; i++) {
       const d = new Date(new Date(`${weekStart}T00:00:00Z`).getTime() + i * 86400_000).toISOString().slice(0, 10);
       const h = healthBy.get(d);
-      p.push(`| ${d.slice(5)} | ${sleepBy.get(d) ?? "—"} | ${h?.restingHr ?? "—"} | ${h?.hrvBaseline ?? "—"} | ${stressBy.get(d) ?? "—"} | ${h?.steps ?? "—"} |`);
+      p.push(`| ${md(d)} | ${sleepBy.get(d) ?? "—"} | ${h?.restingHr ?? "—"} | ${h?.hrvBaseline ?? "—"} | ${stressBy.get(d) ?? "—"} | ${h?.steps ?? "—"} |`);
     }
     if ([...sleepBy.values()].every((v) => v === "—")) {
       p.push(`> 本周没有可用的睡眠数据，不要据此推断睡眠质量。`);
@@ -602,7 +771,7 @@ export function buildWeekUserPrompt(ctx: WeekCtx): string {
     p.push(`| 周起始 | 跑量 | 记录数 | 最长单跑 | 均配速 | 均心率 |`);
     p.push(`|---|---|---|---|---|---|`);
     for (const w of trendRows) {
-      p.push(`| ${w.weekStart} | ${w.distanceKm}km | ${w.count} | ${w.longestRunKm}km | ${fmtPace(w.avgPaceSec)} | ${w.avgHr ?? "—"} |`);
+      p.push(`| ${md(w.weekStart)} | ${w.distanceKm}km | ${w.count} | ${w.longestRunKm}km | ${fmtPace(w.avgPaceSec)} | ${w.avgHr ?? "—"} |`);
     }
     const prev = trendRows[trendRows.length - 1];
     if (prev) {
