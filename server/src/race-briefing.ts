@@ -10,16 +10,18 @@ import { fmtDuration, fmtPace as fmtPaceSec } from "./format.ts";
  *
  * 关键设计：**用真实比赛当锚点，不用阈值配速回归。**
  *
- * 为什么不���阈值回归：
+ * 为什么不用阈值回归：
  *  回归依赖「配速-心率」线性关系，而心率在轻松配速上会压平，
  *  导致外推出的阈值配速明显偏快（全马能差十几分钟）。
  *  而只要有**真实比赛成绩**，那就是实测的全力输出，不需要任何推断。
  *
- * 异常值处理：有的比赛受药物干扰（例如感冒药会影响交感神经），
- *  典型特征是「配速持续下降 + 心率同步下降」（正常疲劳是配速掉、心率升）。
+ * 异常值处理：有的比赛成绩不代表真实能力上限 —— 典型特征是
+ *  「配速持续下降 + 心率同步下降」（正常疲劳是配速掉、心率升），
+ *  说明身体在主动降负荷而不是心肺跟不上。
  * 这类比赛不能当能力基准，必须显式排除，否则会把能力高估数分钟以上。
+ * 注意：这里只依据数据形态判断，**不推断原因** —— 原因只有本人才知道。
  */
-import { asc, desc, eq } from "drizzle-orm";
+import { asc, desc, eq, lte } from "drizzle-orm";
 import { db } from "./db/client.ts";
 import { activities, activityDetails, laps, trainingLoad, users } from "./db/schema.ts";
 import { round } from "./analytics.ts";
@@ -32,6 +34,8 @@ const EARTH_R = 6371000;
 // ---------------- 比赛锚点 ----------------
 
 export type RaceAnchor = {
+  /** 训练 id —— 人工排除/纳入时用来定位这一场 */
+  labelId: string;
   date: string;
   label: string;
   distanceKm: number;
@@ -45,9 +49,16 @@ export type RaceAnchor = {
   altitudeSource: "fit" | "city-table" | "unknown";
   /** 海平面等效成绩（秒）—— 这是唯一可跨比赛比较的指标 */
   seaLevelSec: number;
-  /** 是否因药物/伤病等异常被排除 */
+  /** 是否被排除出能力基准 */
   excluded?: boolean;
   excludeReason?: string;
+  /**
+   * 排除/纳入的决定来自哪里：
+   *   manual   = 用户手动指定
+   *   auto     = 自动判定（后程配速与心率同步下滑）
+   *   included = 自动判定为异常，但用户手动要求纳入
+   */
+  excludeSource?: "manual" | "auto" | "included";
   /** 前半 → 后半的配速变化（负数 = 后程加速） */
   fadePct: number | null;
 };
@@ -55,7 +66,7 @@ export type RaceAnchor = {
 /**
  * 已知城市的海拔（兜底用）。
  *
- * ⚠️ 这只是一张**兜底表**，不是权威数据源。查不到的���市一律按 `null` 处理，
+ * ⚠️ 这只是一张**兜底表**，不是权威数据源。查不到的城市一律按 `null` 处理，
  * 由上层标记为「海拔未知」并在预测里显式提示 —— 而不是静默当成 0 米。
  * 静默当 0 是最坏的结果：一座 1890m 的高原城市和一座 10m 的沿海城市
  * 会被算成同一个基准，成绩看起来正常，实际已经偏乐观好几分钟。
@@ -133,14 +144,21 @@ function currentHrMax(): number | null {
 const SEC_PER_KM_PER_1000M = 2.5;
 
 /**
- * 识别药物干扰的比赛。
+ * 识别**异常场次**（不作为能力基准）。
  *
- * 判据不是猜的：药物（尤其抗组胺类）会干扰交感神经对心脏的调节，
- * 让人心率反应迟钝、无法感知疲劳。表现是**配速和心率同步下降** ——
- * 因为身体在主动降负荷，而不是心肺跟不上。
- * 正常疲劳是配速掉但心率维持甚至上升（两者背离）。
+ * 判据只看客观数据：正常疲劳是「配速掉、心率维持甚至上升」；
+ * 而如果后程**配速和心率同步下降**，说明身体在主动降负荷而不是心肺跟不上 ——
+ * 这种情况下的成绩不代表真实能力上限，纳入基准会高估好几分钟。
+ *
+ * ⚠ 这里刻意**不推断原因**。
+ * 触发这个特征的可能是任何一件事：用药（抗组胺类等）、生病、伤病、
+ * 前一场没恢复、补给失败、甚至只是当天想保守跑完。
+ * 原因只有本人才知道，而心率/配速数据里没有这个信息。
+ * 所以本函数只陈述**观察到的现象**并把它排除出基准，
+ * 绝不替用户断言「这是药物干扰」—— 那只是某个人的个人情况，
+ * 写成通用规则会误导所有其他人。
  */
-function detectDrugAffect(
+function detectAbnormalRace(
   halves: { pace: number; hr: number }[],
 ): { affected: boolean; reason?: string } {
   if (halves.length !== 2) return { affected: false };
@@ -148,13 +166,14 @@ function detectDrugAffect(
   const paceDrop = (b.pace - f.pace) / f.pace; // 正数 = 后程变慢
   const hrDrop = (b.hr - f.hr) / f.hr; // 负数 = 心率下降
 
-  // 后程慢 8% 以上，同时心率掉 2% 以上 —— 同步下滑 = 药物/病征特征
+  // 后程慢 8% 以上，同时心率掉 2% 以上 —— 配速与心率同步下滑
   if (paceDrop > 0.08 && hrDrop < -0.02) {
     return {
       affected: true,
       reason:
         `后半程配速下降 ${(paceDrop * 100).toFixed(0)}% 而心率同步下降 ` +
-        `${Math.abs(hrDrop * 100).toFixed(0)}%，符合药物/疾病干扰特征（非正常疲劳）`,
+        `${Math.abs(hrDrop * 100).toFixed(0)}%（与正常疲劳「配速掉、心率升」相反），` +
+        `判为异常场次，不计入能力基准`,
     };
   }
   return { affected: false };
@@ -169,6 +188,8 @@ export function collectRaceAnchors(): RaceAnchor[] {
       durationSec: activities.durationSec,
       avgHr: activities.avgHr,
       location: activities.location,
+      raceExcluded: activities.raceExcluded,
+      raceExcludeReason: activities.raceExcludeReason,
     })
     .from(activities)
     .where(eq(activities.sportType, 100))
@@ -213,7 +234,27 @@ export function collectRaceAnchors(): RaceAnchor[] {
       halves = [mk(lapRows.slice(0, h)), mk(lapRows.slice(h))];
     }
     const fadePct = halves.length === 2 ? (halves[1].pace - halves[0].pace) / halves[0].pace : null;
-    const drug = detectDrugAffect(halves);
+    const abnormal = detectAbnormalRace(halves);
+
+    /*
+     * 人工覆盖优先于自动判定。
+     *
+     * 自动判定只看数据形态，**不推断原因**，而原因只有本人才知道；
+     * 规则也不一定适用于每一个人。所以：
+     *   race_excluded = 1  → 强制排除（原因用用户填的，或标成手动排除）
+     *   race_excluded = 0  → 强制纳入，覆盖自动判定
+     *   null               → 交给自动判定
+     */
+    const manual = r.raceExcluded;
+    const excluded = manual === 1 ? true : manual === 0 ? false : abnormal.affected;
+    const excludeSource: RaceAnchor["excludeSource"] =
+      manual === 1 ? "manual" : manual === 0 ? "included" : abnormal.affected ? "auto" : undefined;
+    const excludeReason =
+      manual === 1
+        ? r.raceExcludeReason?.trim() || "手动排除，不计入能力基准"
+        : manual === 0
+          ? undefined
+          : abnormal.reason;
 
     // 海平面等效：先扣地形，再扣海拔
     const terrainCost = climbPaceCost(climbRate);
@@ -221,6 +262,7 @@ export function collectRaceAnchors(): RaceAnchor[] {
     const seaLevelPace = rawPace - terrainCost - altCost;
 
     out.push({
+      labelId: lid,
       date: r.dateLabel!,
       label: r.location ?? "未标注地点",
       distanceKm: Number(km.toFixed(2)),
@@ -230,15 +272,125 @@ export function collectRaceAnchors(): RaceAnchor[] {
       altitude: alt,
       altitudeSource: altResolved.source,
       seaLevelSec: Math.round(seaLevelPace * km),
-      excluded: drug.affected || undefined,
-      excludeReason: drug.reason,
+      excluded: excluded || undefined,
+      excludeReason,
+      excludeSource,
       fadePct: fadePct == null ? null : round(fadePct * 100, 1),
     });
   }
   return out.sort((a, b) => a.date.localeCompare(b.date));
 }
 
+/**
+ * 人工指定某场比赛是否计入能力基准。
+ *
+ * `excluded` 三态：
+ *   true  → 强制排除
+ *   false → 强制纳入（覆盖自动判定）
+ *   null  → 撤销人工设定，交回自动判定
+ *
+ * 写在 activities 的额外两列上 —— 同步的 upsert 只写它显式列出的字段，
+ * 这两列不在其中，所以人工标注不会被 COROS 同步冲掉。
+ */
+export function setAnchorExclusion(
+  labelId: string,
+  excluded: boolean | null,
+  reason?: string | null,
+): void {
+  const row = db
+    .select({ id: activities.labelId, d: activities.distanceKm, t: activities.sportType })
+    .from(activities)
+    .where(eq(activities.labelId, labelId))
+    .get();
+  if (!row) throw new Error("找不到这次训练");
+  // 只有全马才可能成为能力锚点，避免把随手标错的普通训练写进去
+  if ((row.d ?? 0) < 42) throw new Error("只有 ≥42km 的比赛才计入能力基准");
+
+  db.update(activities)
+    .set({
+      raceExcluded: excluded == null ? null : excluded ? 1 : 0,
+      raceExcludeReason: excluded === true ? (reason?.trim() || null) : null,
+    })
+    .where(eq(activities.labelId, labelId))
+    .run();
+}
+
 // ---------------- 当前训练状态 ----------------
+
+/** 算「长距离」的门槛 */
+const LONG_RUN_MIN_KM = 25;
+/** 算「长距离准备充足」的门槛 */
+const LONG_RUN_READY_KM = 28;
+/** 长距离准备度的观察窗口（天） */
+const LONG_RUN_WINDOW_DAYS = 28;
+
+export type LongRunPrep = {
+  /** 窗口内 ≥28km 的长距离（取最近一次）—— 有它就不做保守调整 */
+  ready: { date: string; km: number } | null;
+  /** 窗口内 ≥25km 的最长一次 */
+  max: { date: string; km: number } | null;
+  /** 对成绩预测的调整（百分比，正数 = 更保守） */
+  adjustPct: number;
+  tone: "good" | "warn";
+  effect: string;
+};
+
+/**
+ * 长距离准备度。
+ *
+ * 判据是「**窗口内有没有 ≥28km 的长距离**」，不是「最近那一场是不是 ≥28km」。
+ *
+ * 后者有个隐蔽的错：只看最近一次，于是今天跑个 26km 就会把 3 天前那场 33km
+ * 盖掉，系统于是判定「长距离准备不足」→ 预测 +2%（约 3 分 40 秒）变保守。
+ * 可跑 26km 本来就是状态好的证据，方向反了。
+ *
+ * 另外用「窗口」而不是「有没有过」，是因为三个月前跑过 42km 也不该算数 ——
+ * 长距离准备得是**最近**的。
+ *
+ * 窗口用滚动的 28 天而不是「已结束的整周」：今天刚跑的长距离必须算数，
+ * 而按整周算的话今天这场会落进「未完成的那一周」被漏掉。
+ */
+export function evaluateLongRunPrep(
+  runs: { date: string; km: number }[],
+  cutoffLabel: string,
+): LongRunPrep {
+  // 阈值过滤放在函数内部，不依赖调用方先筛 —— 这样「窗口内连 25km 都没有」
+  // 才不会被误当成「有个 12km 的长距离」。
+  const inWindow = runs.filter((r) => r.date >= cutoffLabel && r.km >= LONG_RUN_MIN_KM);
+  const maxRun = inWindow.reduce(
+    (best, r) => (!best || r.km > best.km ? r : best),
+    null as { date: string; km: number } | null,
+  );
+  const readyRun = inWindow
+    .filter((r) => r.km >= LONG_RUN_READY_KM)
+    .sort((a, b) => b.date.localeCompare(a.date))[0];
+
+  if (readyRun) {
+    return {
+      ready: { date: readyRun.date, km: readyRun.km },
+      max: maxRun,
+      adjustPct: 0,
+      tone: "good",
+      effect: `近 4 周有 ${readyRun.km}km 长距离（${readyRun.date}）`,
+    };
+  }
+  if (maxRun) {
+    return {
+      ready: null,
+      max: maxRun,
+      adjustPct: 2,
+      tone: "warn",
+      effect: `近 4 周最长 ${maxRun.km}km（${maxRun.date}），不足 ${LONG_RUN_READY_KM}km`,
+    };
+  }
+  return {
+    ready: null,
+    max: null,
+    adjustPct: 3,
+    tone: "warn",
+    effect: `近 4 周没有 ≥${LONG_RUN_MIN_KM}km 的训练`,
+  };
+}
 
 export type TrainingState = {
   /** 近 4 周周均跑量 */
@@ -249,17 +401,42 @@ export type TrainingState = {
   trendPct: number | null;
   /** 负荷比（短期/长期），<1 表示负荷不足，>1.5 表示过载 */
   loadRatio: number | null;
-  /** 最近一次长距离 */
-  lastLong: { date: string; km: number; paceSec: number; avgHr: number } | null;
+  /** 负荷比取自哪一天（与窗口锚点对齐，不会比它更新） */
+  loadAsOf: string | null;
+  /** 长距离准备度（近 4 周窗口内评估） */
+  longRun: LongRunPrep;
   /** 最近 4 周有氧（Z1+Z2）时间占比 */
   easyPct: number | null;
+  /** 窗口锚点 = 最近一次训练的日期（窗口右端） */
+  asOf: string;
+  /** 距上次训练几天（0 = 今天跑过）。停跑久了提示数据可能过时 */
+  daysSinceAnchor: number;
 };
 
-function isoWeekStart(d: Date): string {
-  const x = new Date(d);
-  const dow = (x.getUTCDay() + 6) % 7;
-  x.setUTCDate(x.getUTCDate() - dow);
-  return x.toISOString().slice(0, 10);
+/**
+ * 今天的日历日期（运行机器的本地时区）。
+ *
+ * 与 `activities.dateLabel` 的约定对齐 —— 那是手表本地日期，
+ * 所以「今天」也必须按本地时区算，否则窗口边界会和数据错位。
+ */
+function todayLocal(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+/** 两个日历日期之间相差几天（b − a）。用本地零点算，夏令时切换日会自动取整。 */
+function daysBetween(a: string, b: string): number {
+  return Math.round(
+    (new Date(`${b}T00:00:00`).getTime() - new Date(`${a}T00:00:00`).getTime()) / 86400000,
+  );
+}
+
+/** 从一个日期标签往前推 n 天，返回日期标签（本地时区，不带时刻） */
+function dateLabelShift(dateLabel: string, n: number): string {
+  const [y, m, d] = dateLabel.split("-").map(Number);
+  const t = new Date(y, m - 1, d);
+  t.setDate(t.getDate() - n);
+  return `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, "0")}-${String(t.getDate()).padStart(2, "0")}`;
 }
 
 export function currentTrainingState(): TrainingState {
@@ -269,65 +446,88 @@ export function currentTrainingState(): TrainingState {
     .all()
     .filter((a) => (a.distanceKm ?? 0) > 0);
 
-  const now = new Date();
-  const weekBuckets = new Map<string, number>();
-  for (const a of acts) {
-    const d = new Date(`${a.dateLabel}T00:00:00Z`);
-    const weeksAgo = Math.floor((now.getTime() - d.getTime()) / (7 * 86400000));
-    if (weeksAgo >= 0 && weeksAgo < 8) {
-      const w = isoWeekStart(new Date(now.getTime() - weeksAgo * 7 * 86400000));
-      weekBuckets.set(w, (weekBuckets.get(w) ?? 0) + (a.distanceKm ?? 0));
-    }
-  }
-  const w4 = [...weekBuckets.entries()].filter(([w]) => {
-    const diff = (now.getTime() - new Date(`${w}T00:00:00Z`).getTime()) / (7 * 86400000);
-    return diff < 4;
-  });
-  const weeklyKm4 = w4.length ? w4.reduce((s, [, v]) => s + v, 0) / w4.length : 0;
+  const today = todayLocal();
 
-  const all8 = [...weekBuckets.values()];
-  const weeklyKm8 = all8.length ? all8.reduce((s, v) => s + v, 0) / all8.length : 0;
+  /*
+   * 训练状态的窗口 = **滚动天数**，右端锚定在「最近一次训练日期」，不是「今天」。
+   *
+   * 为什么要两个一起改：
+   *
+   * 1) 不用自然周：自然周里「当前这一周」是残缺的（周二才过了两天），
+   *    拿它跟 7 天完整的周平均，比的是「两天」和「七天」，没有可比性。
+   *
+   * 2) 不用自然周 + 滚动到今天：那样窗口每天自己往前滑一天，
+   *    **没有任何新数据，指标也会变** —— 实测 10 天里周均从 66.2 掉到 45.6、
+   *    趋势从 +21% 掉到 −47%，趋势一跨过 ±15%/−20% 阈值，预测值就凭空再动一次。
+   *    这跟之前那次「同一天早上晚上算出不同结果、预测慢 3 分 42 秒」是同一类毛病。
+   *
+   * 现在：窗口右端 = 最近一次训练的日期。于是
+   *   - 同步进新训练 → 锚点前进 → 所有指标立刻重算（要的手感）
+   *   - 没有新数据   → 锚点不动 → 指标纹丝不动（要的稳定）
+   *
+   * 滚动 28 天 = 恰好 4 周的数据量，任何时刻窗口长度都一样。
+   *
+   * （历史教训：最早这里写的是 `weeksAgo = (now - 活动日) ÷ 7 天取整`
+   *   再折回某个周一，`now` 带着时刻，于是同一份数据早上和晚上算出不同结果。
+   *   见 git 历史。）
+   */
+  const anchor = acts.reduce(
+    (max, a) => ((a.dateLabel ?? "") > max ? (a.dateLabel ?? max) : max),
+    "",
+  ) || today;
 
-  // 趋势：近 2 周 vs 前 2 周
-  const sorted = [...weekBuckets.entries()].sort((a, b) => a[0].localeCompare(b[0]));
-  let trendPct: number | null = null;
-  if (sorted.length >= 4) {
-    const recent = sorted.slice(-2).reduce((s, [, v]) => s + v, 0) / 2;
-    const prev = sorted.slice(-4, -2).reduce((s, [, v]) => s + v, 0) / 2;
-    if (prev > 0) trendPct = round(((recent - prev) / prev) * 100, 1);
-  }
+  /** 锚点往前 days 天的窗口内跑量：(anchor-days, anchor] */
+  const kmSince = (days: number) => {
+    const cut = dateLabelShift(anchor, days);
+    return acts
+      .filter((a) => a.dateLabel! > cut && a.dateLabel! <= anchor)
+      .reduce((s, a) => s + (a.distanceKm ?? 0), 0);
+  };
 
+  const km28 = kmSince(28);
+  const km56 = kmSince(56);
+  const km14 = kmSince(14);
+
+  /** 近 4 周周均 = 滚动 28 天跑量 ÷ 4 */
+  const weeklyKm4 = km28 / 4;
+  /** 近 8 周周均 = 滚动 56 天跑量 ÷ 8 */
+  const weeklyKm8 = km56 / 8;
+
+  // 趋势：近 14 天 vs 前 14 天（同样滚动）
+  const recent = km14 / 2;
+  const prev = (km28 - km14) / 2;
+  const trendPct = prev > 0 ? round(((recent - prev) / prev) * 100, 1) : null;
+
+  /*
+   * 负荷比取「锚点当天及之前」的最后一条。
+   *
+   * 不直接取最新一条：COROS 的每日负荷表可能比活动表新（当天还没跑，
+   * 但手表已经记了负荷），那样页面上会出现「截止 10-19 的跑量」配「10-20 的负荷比」
+   * —— 两个数字的截止日期对不上，看起来像数据串了。
+   * 统一到锚点，代价只是负荷比晚一两天，数值本身不受影响。
+   */
   const latestLoad = db
-    .select({ ratio: trainingLoad.ratio, shortLoad: trainingLoad.shortLoad, longLoad: trainingLoad.longLoad })
+    .select({ date: trainingLoad.date, ratio: trainingLoad.ratio })
     .from(trainingLoad)
+    .where(lte(trainingLoad.date, anchor))
     .orderBy(desc(trainingLoad.date))
     .limit(1)
     .get();
 
-  // 最近长距离
-  const longs = acts.filter((a) => (a.distanceKm ?? 0) >= 25).sort((a, b) => b.dateLabel!.localeCompare(a.dateLabel!));
-  const lastLong = longs[0]
-    ? {
-        date: longs[0].dateLabel!,
-        km: longs[0].distanceKm!,
-        paceSec: Math.round(longs[0].durationSec! / longs[0].distanceKm!),
-        avgHr: longs[0].avgHr ?? 0,
-      }
-    : null;
-
-  // 近 4 周 Z1+Z2 占比（<159bpm 算有氧）
-  const recent4 = new Set(
-    [...weekBuckets.keys()].filter((w) => {
-      const diff = (now.getTime() - new Date(`${w}T00:00:00Z`).getTime()) / (7 * 86400000);
-      return diff < 4;
-    }),
+  // 长距离准备度：同样的滚动 28 天窗口，右端同样锚定在最近一次训练
+  const longRun = evaluateLongRunPrep(
+    acts
+      .filter((a) => (a.distanceKm ?? 0) >= LONG_RUN_MIN_KM)
+      .map((a) => ({ date: a.dateLabel!, km: a.distanceKm! })),
+    dateLabelShift(anchor, LONG_RUN_WINDOW_DAYS),
   );
+
+  // 近 28 天 Z1+Z2 占比（<159bpm 算有氧）
+  const cut28 = dateLabelShift(anchor, 28);
   let easySec = 0;
   let totalSec = 0;
   for (const a of acts) {
-    const d = new Date(`${a.dateLabel}T00:00:00Z`);
-    const w = isoWeekStart(d);
-    if (!recent4.has(w)) continue;
+    if (a.dateLabel! <= cut28 || a.dateLabel! > anchor) continue;
     const lapRows = db.select({ avgHr: laps.avgHr, timeSec: laps.timeSec }).from(laps).where(eq(laps.labelId, a.labelId!)).all();
     for (const l of lapRows) {
       totalSec += l.timeSec ?? 0;
@@ -340,8 +540,11 @@ export function currentTrainingState(): TrainingState {
     weeklyKm8: round(weeklyKm8, 1),
     trendPct,
     loadRatio: latestLoad?.ratio ?? null,
-    lastLong,
+    loadAsOf: latestLoad?.date ?? null,
+    longRun,
     easyPct: totalSec > 0 ? round((easySec / totalSec) * 100, 1) : null,
+    asOf: anchor,
+    daysSinceAnchor: Math.max(0, daysBetween(anchor, today)),
   };
 }
 
@@ -396,10 +599,17 @@ export function predictMarathon(
     tone: "neutral",
   });
 
-  if (anchors.some((a) => a.excluded)) {
+  // 排除的场次要分清是自动判定还是手动指定 —— 两者的可信度来源不同
+  const excludedAnchors = anchors.filter((a) => a.excluded);
+  if (excludedAnchors.length > 0) {
+    const auto = excludedAnchors.filter((a) => a.excludeSource === "auto").map((a) => a.label);
+    const manual = excludedAnchors.filter((a) => a.excludeSource === "manual").map((a) => a.label);
+    const parts: string[] = [];
+    if (auto.length) parts.push(`${auto.join("、")}（检测到异常，不作为基准）`);
+    if (manual.length) parts.push(`${manual.join("、")}（手动排除，不作为基准）`);
     factors.push({
       label: "已排除异常场次",
-      effect: `${anchors.filter((a) => a.excluded).map((a) => a.label).join("、")}（药物干扰，不作为基准）`,
+      effect: parts.join("；"),
       tone: "warn",
     });
   }
@@ -474,26 +684,13 @@ export function predictMarathon(
     }
   }
 
-  // 长距离准备度
-  if (training.lastLong) {
-    if (training.lastLong.km < 28) {
-      adjustPct += 2;
-      factors.push({
-        label: "最近长距离",
-        effect: `${training.lastLong.km}km（${training.lastLong.date}）`,
-        tone: "warn",
-      });
-    } else {
-      factors.push({
-        label: "最近长距离",
-        effect: `${training.lastLong.km}km（${training.lastLong.date}）`,
-        tone: "good",
-      });
-    }
-  } else {
-    adjustPct += 3;
-    factors.push({ label: "缺长距离数据", effect: "近 4 周没有 ≥25km 的训练", tone: "warn" });
-  }
+  // 长距离准备度（判据见 evaluateLongRunPrep：看窗口内有没有 ≥28km 的长距离）
+  adjustPct += training.longRun.adjustPct;
+  factors.push({
+    label: "长距离准备",
+    effect: training.longRun.effect,
+    tone: training.longRun.tone,
+  });
 
   // 地形与海拔：把海平面等效折算回这场赛事的条件
   const terrainCost = climbPaceCost(routeClimbRate);
@@ -680,22 +877,6 @@ export function planPacing(opts: {
 
   const warnings: string[] = [];
 
-  // 基于历史表现的警告
-  const valid = anchors.filter((a) => !a.excluded);
-  const negativeSplits = valid.filter((a) => (a.fadePct ?? 0) < 0);
-  if (negativeSplits.length > 0) {
-    const best = negativeSplits.reduce((x, y) => ((x.fadePct ?? 0) < (y.fadePct ?? 0) ? x : y));
-    warnings.push(
-      `历史表现：${negativeSplits.length}/${valid.length} 场后半程加速（最好 ${best.label} 后程快 ${Math.abs(best.fadePct!).toFixed(1)}%）`,
-    );
-  }
-  const faded = valid.filter((a) => (a.fadePct ?? 0) > 0.1);
-  if (faded.length > 0) {
-    warnings.push(
-      `历史表现：${faded.map((a) => a.label).join("、")} 出现过后程掉速`,
-    );
-  }
-
   // 地形警告
   if (climbRate >= 8) {
     warnings.push(`本场爬升率 ${climbRate} m/km（属实质爬升段）`);
@@ -704,8 +885,14 @@ export function planPacing(opts: {
   }
 
   // 训练状态警告
-  if (training.lastLong && training.lastLong.km < 30 && distanceKm >= 42) {
-    warnings.push(`历史长距离：最近一次 ${training.lastLong.km}km（${training.lastLong.date}）`);
+  // 长距离：和预测用同一套判据（近 4 周有没有 ≥28km 的长距离），
+  // 免得配速策略和成绩预测对同一件事给出两套说法。
+  if (!training.longRun.ready && distanceKm >= 42) {
+    warnings.push(
+      training.longRun.max
+        ? `长距离：近 4 周最长 ${training.longRun.max.km}km（${training.longRun.max.date}），不足 28km`
+        : "长距离：近 4 周没有 ≥25km 的训练",
+    );
   }
   if (training.loadRatio != null && training.loadRatio > 1.4) {
     warnings.push(`当前负荷比 ${training.loadRatio}`);
@@ -738,8 +925,34 @@ export type RaceBriefing = {
   /** 距比赛还有几天 */
   daysToRace: number | null;
   /** 备赛进度建议 */
-  prepAdvice: { week: string; focus: string; volumeKm: number }[];
 };
+
+/**
+ * 从路线画像里取出预测所需的两个地形参数。
+ *
+ * 为什么抽出来：备赛简报（`buildBriefing`）和比赛日赛前方案（`prediction/race.ts`）
+ * 都要用同一份口径。两处各写一遍必然漂移 —— 页面上就会出现两个对不上的预测数字，
+ * 而用户无法分辨哪个是真的（真实事故：简报 3:02:26 vs 比赛日 3:07:23，差近 5 分钟）。
+ */
+export function routeAdjustParams(raceProfile: RaceProfile | null): {
+  climbRate: number;
+  altitude: number;
+} {
+  // gainPerKm 在嵌套的 profile 上；联合类型下用可选访问兜底
+  const climbRate = Number(raceProfile?.profile?.gainPerKm ?? 0);
+  // 目标赛事的海拔：路线画像里存了线路各点海拔（DEM/GPX 实测），
+  // 比城市中心点更准；没有画像时才退回城市表。
+  // 注意两种画像的高程字段名不同（GpxProfile 用 eleMin/eleMax，RouteProfile 用 altMin/altMax），
+  // 所以这里统一用可选访问把两者都取到。
+  const prof = raceProfile?.profile;
+  const eleMin = prof ? (prof as { altMin?: number; eleMin?: number }).altMin ?? (prof as { eleMin?: number }).eleMin : undefined;
+  const eleMax = prof ? (prof as { altMax?: number; eleMax?: number }).altMax ?? (prof as { eleMax?: number }).eleMax : undefined;
+  const altitude =
+    eleMin != null && eleMax != null
+      ? Math.round((eleMin + eleMax) / 2)
+      : resolveAltitude(raceProfile?.race.city ?? null, null).altitude;
+  return { climbRate, altitude };
+}
 
 export function buildBriefing(
   raceProfile: RaceProfile | null,
@@ -749,20 +962,7 @@ export function buildBriefing(
   const anchors = collectRaceAnchors();
   const training = currentTrainingState();
 
-  // gainPerKm 在嵌套的 profile 上；联合类型下用可选访问兜底
-  const routeClimb = Number(raceProfile?.profile?.gainPerKm ?? 0);
-  // 目标赛事的海拔：路线画像里存了线路各点海拔（DEM/GPX 实测），
-  // 比城市中心点更准；没有画像时才退回城市表。
-  // 注意两种画像的高程字段名不同（GpxProfile 用 eleMin/eleMax，RouteProfile 用 altMin/altMax），
-  // 所以这里统一用可选访问把两者都取到。
-  const prof = raceProfile?.profile;
-  const eleMin = prof ? (prof as { altMin?: number; eleMin?: number }).altMin ?? (prof as { eleMin?: number }).eleMin : undefined;
-  const eleMax = prof ? (prof as { altMax?: number; eleMax?: number }).altMax ?? (prof as { eleMax?: number }).eleMax : undefined;
-  const routeAltResolved =
-    eleMin != null && eleMax != null
-      ? { altitude: Math.round((eleMin + eleMax) / 2), source: "fit" as const }
-      : resolveAltitude(raceProfile?.race.city ?? null, null);
-  const routeAlt = routeAltResolved.altitude;
+  const { climbRate: routeClimb, altitude: routeAlt } = routeAdjustParams(raceProfile);
 
   const prediction = predictMarathon(anchors, training, routeClimb, routeAlt);
 
@@ -791,52 +991,7 @@ export function buildBriefing(
     prediction,
     pacing,
     daysToRace,
-    prepAdvice: buildPrepAdvice(daysToRace, raceProfile?.race.distanceKm ?? 42.195, training),
   };
-}
-
-/** 按剩余周数倒推备赛安排 */
-function buildPrepAdvice(
-  daysToRace: number | null,
-  distanceKm: number,
-  training: TrainingState,
-): { week: string; focus: string; volumeKm: number }[] {
-  if (daysToRace == null || daysToRace < 0) return [];
-  const weeks = Math.ceil(daysToRace / 7);
-  const base = Math.max(training.weeklyKm4, 40);
-  const out: { week: string; focus: string; volumeKm: number }[] = [];
-
-  for (let w = weeks; w >= 1; w--) {
-    // w = 距比赛还有 w 周。列表按周倒序输出，最远的在前。
-    let volume = base;
-    let focus = "";
-
-    /*
-     * ⚠ 这里刻意**不给训练建议**。
-     * 使用者有专职教练出训练计划，本项目的定位是「数据」不是「处方」。
-     * 所以这一段只做两件事：
-     *   1) 把「距比赛还有几周」这个客观事实排出来
-     *   2) 附上他自己的历史跑量作参照
-     * 任何"该跑什么、跑多少、怎么减量"的文字都不该出现在这里。
-     */
-    const hist = `近 4 周周均 ${training.weeklyKm4}km`;
-
-    if (w === weeks) {
-      focus = `当前所处阶段。${hist}，近 8 周 ${training.weeklyKm8}km`;
-      volume = Math.round(base);
-    } else if (w === 4 && distanceKm >= 42) {
-      focus = `距比赛 4 周。${hist}。历史上你的最长单次为 ${training.lastLong?.km ?? "—"}km（${training.lastLong?.date ?? "无记录"}）`;
-      volume = Math.round(base);
-    } else if (w <= 1) {
-      focus = `比赛周。${hist}`;
-      volume = Math.round(training.lastLong?.km ?? base);
-    } else {
-      focus = `距比赛 ${w} 周。${hist}`;
-      volume = Math.round(base);
-    }
-    out.push({ week: `T-${w}`, focus, volumeKm: volume });
-  }
-  return out;
 }
 
 // ---------------- 格式化 ----------------

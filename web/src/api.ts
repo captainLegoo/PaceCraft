@@ -219,7 +219,15 @@ export type RouteFilePreview = {
 export const api = {
   races: () => req<Race[]>("/api/races"),
   race: (id: number) => req<RaceDetail>(`/api/races/${id}`),
-  raceByDate: (date: string) => req<RaceDetail | null>(`/api/races/date/${date}`),
+  /**
+   * 人工指定某场是否计入能力基准。
+   *   excluded=true  → 强制排除；false → 强制纳入；null → 撤销设定、交回自动判定
+   */
+  setAnchorExclusion: (labelId: string, excluded: boolean | null, reason?: string) =>
+    req<{ ok: boolean }>(`/api/races/anchors/${encodeURIComponent(labelId)}/exclude`, {
+      method: "POST",
+      body: JSON.stringify({ excluded, reason }),
+    }),
   createRace: (body: Record<string, unknown>) =>
     req<RaceDetail>("/api/races", { method: "POST", body: JSON.stringify(body) }),
   /** 只解析不入库，用来在填表阶段就核对文件对不对 */

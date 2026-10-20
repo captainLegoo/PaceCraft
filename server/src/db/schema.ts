@@ -22,6 +22,16 @@ export const activities = sqliteTable(
     calories: integer("calories"),
     raw: text("raw"),
     syncedAt: integer("synced_at").notNull().default(sql`(unixepoch())`),
+    /**
+     * 比赛锚点的人工覆盖标记（见 drizzle/0010_race_anchor_exclude.sql）。
+     *   1  = 强制排除出能力基准
+     *   0  = 强制纳入（覆盖自动判定）
+     *   null = 交给自动判定
+     *
+     * 同步的 upsert 不写这两列，所以人工标注不会被 COROS 同步冲掉。
+     */
+    raceExcluded: integer("race_excluded"),
+    raceExcludeReason: text("race_exclude_reason"),
   },
   (t) => [index("idx_activities_date").on(t.date), index("idx_activities_sport").on(t.sportType)],
 );

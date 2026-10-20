@@ -1,6 +1,9 @@
-import type { RaceDetail } from "../api";
+import { useState } from "react";
+import { api, type RaceDetail } from "../api";
 
 export type RaceAnchor = {
+  /** 训练 id —— 人工排除/纳入时用它定位这一场 */
+  labelId: string;
   date: string;
   label: string;
   distanceKm: number;
@@ -12,6 +15,13 @@ export type RaceAnchor = {
   seaLevelSec: number;
   excluded?: boolean;
   excludeReason?: string;
+  /**
+   * 排除/纳入的决定来自哪里：
+   *   manual   = 用户手动指定
+   *   auto     = 自动判定（后程配速与心率同步下滑）
+   *   included = 自动判定为异常，但用户手动要求纳入
+   */
+  excludeSource?: "manual" | "auto" | "included";
   fadePct: number | null;
 };
 
@@ -22,8 +32,22 @@ export type Briefing = {
     weeklyKm8: number;
     trendPct: number | null;
     loadRatio: number | null;
-    lastLong: { date: string; km: number; paceSec: number; avgHr: number } | null;
+    /** 负荷比取自哪一天（与窗口锚点对齐） */
+    loadAsOf: string | null;
+    longRun: {
+      /** 近 4 周窗口内 ≥28km 的长距离（取最近一次） */
+      ready: { date: string; km: number } | null;
+      /** 近 4 周窗口内 ≥25km 的最长一次 */
+      max: { date: string; km: number } | null;
+      adjustPct: number;
+      tone: "good" | "warn";
+      effect: string;
+    };
     easyPct: number | null;
+    /** 统计窗口的右端 = 最近一次训练的日期 */
+    asOf: string;
+    /** 距上次训练几天（0 = 今天跑过） */
+    daysSinceAnchor: number;
   };
   prediction: {
     bestSec: number;
@@ -51,7 +75,6 @@ export type Briefing = {
     strategySummary: string;
   } | null;
   daysToRace: number | null;
-  prepAdvice: { week: string; focus: string; volumeKm: number }[];
 };
 
 export type RaceBriefing = RaceDetail & { briefing: Briefing };
@@ -191,7 +214,7 @@ function PacingCard({ b }: { b: Briefing }) {
               <td className="num" style={{ color: s.targetHr ? "var(--hr)" : "var(--text-faint)" }}>
                 {s.targetHr ? `≤ ${s.targetHr}` : "不限"}
               </td>
-              <td style={{ textAlign: "left", fontSize: 11.5, color: "var(--text-dim)", whiteSpace: "normal" }}>
+              <td className="cell-text" style={{ textAlign: "left", fontSize: 11.5, color: "var(--text-dim)" }}>
                 {s.intent}
               </td>
             </tr>
@@ -213,43 +236,134 @@ function PacingCard({ b }: { b: Briefing }) {
   );
 }
 
-function AnchorTable({ anchors }: { anchors: RaceAnchor[] }) {
+/**
+ * 比赛锚点表。
+ *
+ * 「是否计入基准」是**可纠正的**：自动判定只看数据形态，不推断原因，
+ * 而原因只有本人知道；规则也不一定适用于每个人。所以每一行都给一个开关：
+ *   排除 → 手动移出基准（可写原因）
+ *   纳入 → 强制纳入，覆盖自动判定
+ *   撤销 → 交回自动判定
+ */
+function AnchorTable({ anchors, onChanged }: { anchors: RaceAnchor[]; onChanged?: () => void }) {
+  const [editing, setEditing] = useState<string | null>(null);
+  const [draft, setDraft] = useState("");
+  const [busy, setBusy] = useState<string | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+
+  const run = async (labelId: string, excluded: boolean | null, reason?: string) => {
+    setBusy(labelId);
+    setErr(null);
+    try {
+      await api.setAnchorExclusion(labelId, excluded, reason);
+      setEditing(null);
+      onChanged?.();
+    } catch (e) {
+      setErr((e as Error).message);
+    } finally {
+      setBusy(null);
+    }
+  };
+
   if (anchors.length === 0) return null;
   return (
-    <table>
-      <thead>
-        <tr><th>日期</th><th>赛事</th><th>实测</th><th>海平面等效</th><th>爬升</th><th>海拔</th><th>前后半</th><th>状态</th></tr>
-      </thead>
-      <tbody>
-        {anchors.map((a, i) => (
-          <tr key={i} style={{ opacity: a.excluded ? 0.55 : 1 }}>
-            <td>{a.date}</td>
-            <td style={{ textAlign: "left" }}>{a.label}</td>
-            <td className="num">{fDur(a.seconds)}</td>
-            <td className="num" style={{ color: "var(--accent)", fontWeight: 600 }}>{fDur(a.seaLevelSec)}</td>
-            <td className="num">{a.climbRate} m/km</td>
-            <td className="num" style={{ color: a.altitudeSource === "unknown" ? "var(--warn)" : undefined }}
-                title={a.altitudeSource === "fit"
-                  ? "来自手环气压计实测（最准）"
-                  : a.altitudeSource === "city-table"
-                    ? "来自城市海拔兜底表（按城市中心点）"
-                    : "未知：这场没折算海拔，跨比赛比较可能偏差"}>
-              {a.altitude >= 1000
-                ? `${Math.round(a.altitude)} m ⚠`
-                : a.altitudeSource === "unknown" ? "未知" : `${Math.round(a.altitude)} m`}
-            </td>
-            <td className="num" style={{ color: (a.fadePct ?? 0) < 0 ? "var(--good)" : "var(--warn)" }}>
-              {a.fadePct != null ? `${a.fadePct > 0 ? "+" : ""}${a.fadePct}%` : "—"}
-            </td>
-            <td>
-              {a.excluded
-                ? <span className="pill warn" style={{ fontSize: 10.5 }} title={a.excludeReason}>已排除</span>
-                : <span className="pill good" style={{ fontSize: 10.5 }}>有效</span>}
-            </td>
-          </tr>
-        ))}
-      </tbody>
-    </table>
+    <>
+      {err && <div className="banner error" style={{ marginBottom: 6, fontSize: 12 }}>{err}</div>}
+      <table>
+        <thead>
+          <tr><th>日期</th><th>赛事</th><th>实测</th><th>海平面等效</th><th>爬升</th><th>海拔</th><th>前后半</th><th>状态</th></tr>
+        </thead>
+        <tbody>
+          {anchors.map((a, i) => (
+            <tr key={a.labelId || i} style={{ opacity: a.excluded ? 0.55 : 1 }}>
+              <td>{a.date}</td>
+              <td style={{ textAlign: "left" }}>{a.label}</td>
+              <td className="num">{fDur(a.seconds)}</td>
+              <td className="num" style={{ color: "var(--accent)", fontWeight: 600 }}>{fDur(a.seaLevelSec)}</td>
+              <td className="num">{a.climbRate} m/km</td>
+              <td className="num" style={{ color: a.altitudeSource === "unknown" ? "var(--warn)" : undefined }}
+                  title={a.altitudeSource === "fit"
+                    ? "来自手环气压计实测（最准）"
+                    : a.altitudeSource === "city-table"
+                      ? "来自城市海拔兜底表（按城市中心点）"
+                      : "未知：这场没折算海拔，跨比赛比较可能偏差"}>
+                {a.altitude >= 1000
+                  ? `${Math.round(a.altitude)} m ⚠`
+                  : a.altitudeSource === "unknown" ? "未知" : `${Math.round(a.altitude)} m`}
+              </td>
+              <td className="num" style={{ color: (a.fadePct ?? 0) < 0 ? "var(--good)" : "var(--warn)" }}>
+                {a.fadePct != null ? `${a.fadePct > 0 ? "+" : ""}${a.fadePct}%` : "—"}
+              </td>
+              <td>
+                <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                  {a.excluded ? (
+                    <span className="pill warn" style={{ fontSize: 10.5 }} title={a.excludeReason}>
+                      {a.excludeSource === "manual" ? "已排除·手动" : "已排除·自动"}
+                    </span>
+                  ) : a.excludeSource === "included" ? (
+                    <span className="pill good" style={{ fontSize: 10.5 }} title="自动判定为异常，但你要求纳入基准">
+                      有效·手动纳入
+                    </span>
+                  ) : (
+                    <span className="pill good" style={{ fontSize: 10.5 }}>有效</span>
+                  )}
+                  {editing === a.labelId ? (
+                    <span style={{ display: "inline-flex", gap: 4, alignItems: "center" }}>
+                      <input
+                        value={draft}
+                        onChange={(e) => setDraft(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") run(a.labelId, true, draft);
+                          if (e.key === "Escape") setEditing(null);
+                        }}
+                        placeholder="排除原因（只有你知道）"
+                        style={{ width: 180, fontSize: 11.5, padding: "2px 6px" }}
+                        autoFocus
+                      />
+                      <button className="btn" style={{ fontSize: 11, padding: "2px 8px" }}
+                        disabled={busy === a.labelId}
+                        onClick={() => run(a.labelId, true, draft)}>确定</button>
+                      <button className="btn" style={{ fontSize: 11, padding: "2px 8px" }}
+                        onClick={() => setEditing(null)}>取消</button>
+                    </span>
+                  ) : (
+                    <span style={{ display: "inline-flex", gap: 4 }}>
+                      {a.excluded ? (
+                        <>
+                          <button className="btn" style={{ fontSize: 11, padding: "2px 8px" }}
+                            disabled={busy === a.labelId}
+                            title="强制纳入基准，覆盖自动判定"
+                            onClick={() => run(a.labelId, false)}>纳入</button>
+                          {a.excludeSource === "manual" && (
+                            <button className="btn" style={{ fontSize: 11, padding: "2px 8px" }}
+                              disabled={busy === a.labelId}
+                              title="撤销人工设定，交回自动判定"
+                              onClick={() => run(a.labelId, null)}>撤销</button>
+                          )}
+                        </>
+                      ) : (
+                        <>
+                          <button className="btn" style={{ fontSize: 11, padding: "2px 8px" }}
+                            disabled={busy === a.labelId}
+                            title="移出能力基准"
+                            onClick={() => { setDraft(""); setEditing(a.labelId); }}>排除</button>
+                          {a.excludeSource === "included" && (
+                            <button className="btn" style={{ fontSize: 11, padding: "2px 8px" }}
+                              disabled={busy === a.labelId}
+                              title="撤销人工纳入，交回自动判定"
+                              onClick={() => run(a.labelId, null)}>撤销</button>
+                          )}
+                        </>
+                      )}
+                    </span>
+                  )}
+                </div>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </>
   );
 }
 
@@ -260,7 +374,7 @@ function AnchorTable({ anchors }: { anchors: RaceAnchor[] }) {
  *   RouteProfileCard  = 赛道长什么样（静态，缓存）
  *   本组件            = 你现在能不能跑到（动态，每次同步重算）
  */
-export default function RaceBriefingCard({ d }: { d: RaceBriefing }) {
+export default function RaceBriefingCard({ d, onChanged }: { d: RaceBriefing; onChanged?: () => void }) {
   const b = d.briefing;
   return (
     <div style={{ marginTop: 18, paddingTop: 16, borderTop: "1px solid var(--border)" }}>
@@ -292,6 +406,15 @@ export default function RaceBriefingCard({ d }: { d: RaceBriefing }) {
                   ? `趋势 ${b.training.trendPct > 0 ? "+" : ""}${b.training.trendPct}%`
                   : `8周均 ${b.training.weeklyKm8}km`}
               </span>
+              <span className="hint">
+                截至 {b.training.asOf} 的 28 天 · 同步新训练即更新
+              </span>
+              {b.training.daysSinceAnchor > 0 && (
+                <span className="hint" style={b.training.daysSinceAnchor >= 3 ? { color: "var(--warn)" } : undefined}>
+                  距上次训练 {b.training.daysSinceAnchor} 天
+                  {b.training.daysSinceAnchor >= 3 ? "（数据可能已过时）" : ""}
+                </span>
+              )}
             </div>
             <div className="stat">
               <span className="label">负荷比</span>
@@ -301,6 +424,9 @@ export default function RaceBriefingCard({ d }: { d: RaceBriefing }) {
               <span className="hint">
                 {(b.training.loadRatio ?? 1) > 1.4 ? "偏高，有累积疲劳" : (b.training.loadRatio ?? 1) < 0.75 ? "偏低，刺激不足" : "处于合理区间"}
               </span>
+              {b.training.loadAsOf && (
+                <span className="hint">截至 {b.training.loadAsOf}</span>
+              )}
             </div>
             <div className="stat">
               <span className="label">有氧占比</span>
@@ -310,43 +436,28 @@ export default function RaceBriefingCard({ d }: { d: RaceBriefing }) {
               <span className="hint">目标 75–80%</span>
             </div>
             <div className="stat">
-              <span className="label">最近长距离</span>
-              <span className="value num" style={{ fontSize: 20 }}>
-                {b.training.lastLong?.km ?? "—"}<span className="unit">km</span>
+              <span className="label">长距离准备</span>
+              <span className="value num" style={{ fontSize: 20, color: b.training.longRun.ready ? "var(--good)" : "var(--warn)" }}>
+                {(b.training.longRun.ready?.km ?? b.training.longRun.max?.km) ?? "—"}<span className="unit">km</span>
               </span>
-              <span className="hint">{b.training.lastLong?.date ?? "近 4 周无"}</span>
+              <span className="hint">
+                {b.training.longRun.ready
+                  ? `近 4 周有 ${b.training.longRun.ready.km}km（${b.training.longRun.ready.date}）`
+                  : b.training.longRun.max
+                    ? `近 4 周最长 ${b.training.longRun.max.km}km`
+                    : "近 4 周无 ≥25km 训练"}
+              </span>
             </div>
           </div>
 
           <h4 style={{ margin: "0 0 8px", fontSize: 13, color: "var(--text-dim)" }}>比赛锚点</h4>
-          <AnchorTable anchors={b.anchors} />
+          <AnchorTable anchors={b.anchors} onChanged={onChanged} />
           <div className="hint" style={{ marginTop: 6 }}>
             「海平面等效」= 扣掉爬升代价与高原惩罚后的成绩，是唯一能跨比赛比较的指标。
-            被排除的场次通常是药物或伤病干扰，纳入会把能力高估好几分钟。
+            自动判定会挑出<strong>异常场次</strong>（后程配速下降的同时心率反而下降，与正常疲劳相反）并移出基准 ——
+            但这只看数据形态，不推断原因，也未必适用于每个人。
+            每行都能<strong>手动排除 / 纳入 / 撤销</strong>，原因只有你清楚。
           </div>
-
-          {b.prepAdvice.length > 0 && (
-            <>
-              <h4 style={{ margin: "20px 0 4px", fontSize: 13, color: "var(--text-dim)" }}>备赛时间轴</h4>
-              <table>
-                <thead><tr><th>周次</th><th>跑量</th><th>重点</th></tr></thead>
-                <tbody>
-                  {b.prepAdvice.map((w, i) => (
-                    <tr key={i}>
-                      <td className="num" style={{ fontWeight: 600 }}>{w.week}</td>
-                      <td className="num">{w.volumeKm}km</td>
-                      <td style={{ textAlign: "left", fontSize: 11.5, color: "var(--text-dim)", whiteSpace: "normal" }}>
-                        {w.focus}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-              <div className="hint" style={{ marginTop: 6 }}>
-                仅按周次列出你的历史跑量作参照，<strong>不含训练建议</strong> —— 训练计划由教练出。
-              </div>
-            </>
-          )}
         </div>
       </div>
     </div>

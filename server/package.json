@@ -7,7 +7,8 @@
     "start": "bun run src/index.ts",
     "auth": "bun run src/cli/auth.ts",
     "sync": "bun run src/cli/sync.ts",
-    "probe": "bun run src/cli/probe.ts"
+    "probe": "bun run src/cli/probe.ts",
+    "test:week": "bun run src/cli/test-week-stability.ts"
   },
   "dependencies": {
     "drizzle-orm": "^0.44.2",

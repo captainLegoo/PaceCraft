@@ -16,12 +16,11 @@ import {
   buildRaceProfile,
   createRace,
   deleteRace,
-  findRaceByDate,
   getRace,
   listRaces,
   updateRace,
 } from "./race-service.ts";
-import { buildBriefing } from "./race-briefing.ts";
+import { buildBriefing, setAnchorExclusion } from "./race-briefing.ts";
 import { COARSE_SPACING_M, pickForDisplay } from "./gpx.ts";
 import { parseRouteFile, routeSourceNote } from "./route-file.ts";
 import "./workflow/steps.ts";
@@ -38,8 +37,6 @@ import { analyzeActivity, analyzeSession, getAiConfig, saveAiConfig } from "./ai
 import { analyzeWeek, normalizeWeekStart } from "./ai/week.ts";
 import { buildReport } from "./prediction/pipeline.ts";
 import { analyzeRacePrep, marathonPrep } from "./prediction/prep.ts";
-import { analyzeRace } from "./prediction/race.ts";
-import { analyzeRaceDay, askFollowUp, clearRaceThread, raceThread } from "./prediction/race-ai.ts";
 
 const one = <T>(rows: T[]) => rows[0] ?? null;
 
@@ -362,14 +359,33 @@ const app = new Elysia()
     return { ...profile, briefing: buildBriefing(profile, row.goalSec, row.date) };
   })
 
-  /** 按日期取画像 —— RaceDay 页面用 */
-  .get("/api/races/date/:date", async ({ params }) => {
-    const row = findRaceByDate(params.date);
-    if (!row) return null;
-    return await buildRaceProfile(row);
-  })
-
   .delete("/api/races/:id", ({ params }) => ({ ok: deleteRace(Number(params.id)) }))
+
+  /**
+   * 人工指定某场比赛是否计入能力基准。
+   *
+   * 自动判定只看数据形态（后程配速与心率同步下滑），不推断原因，
+   * 而原因只有本人才知道；规则也不一定适用于每个人。所以这里给一个覆盖入口：
+   *   excluded=true  → 强制排除（可带原因）
+   *   excluded=false → 强制纳入，覆盖自动判定
+   *   excluded=null  → 撤销人工设定，交回自动判定
+   *
+   * 写在 activities 的额外两列上，而同步的 upsert 不写它们，所以不会被同步冲掉。
+   */
+  .post("/api/races/anchors/:labelId/exclude", async ({ params, body }) => {
+    const b = (body ?? {}) as any;
+    const labelId = decodeURIComponent(params.labelId);
+    if (typeof b.excluded !== "boolean" && b.excluded !== null) {
+      return new Response(JSON.stringify({ error: "excluded 必须是 true / false / null" }), { status: 400 });
+    }
+    const reason = typeof b.reason === "string" ? b.reason.trim().slice(0, 200) : null;
+    try {
+      setAnchorExclusion(labelId, b.excluded, reason);
+      return { ok: true, labelId, excluded: b.excluded, reason };
+    } catch (e) {
+      return new Response(JSON.stringify({ error: e instanceof Error ? e.message : String(e) }), { status: 400 });
+    }
+  })
 
   // ---------- 活动 ----------
   .get("/api/activities", ({ query }) => {
@@ -630,43 +646,6 @@ const app = new Elysia()
       .from(aiWeekReports)
       .all();
     return rows.reduce((m: Record<string, number>, r) => { m[r.weekStart] = (m[r.weekStart] ?? 0) + 1; return m; }, {});
-  })
-
-  // ---------- 比赛日分析（赛前方案 / 赛后复盘）----------
-  .get("/api/race", ({ query }) => {
-    const q = query as Record<string, string>;
-    if (!q.date) return new Response(JSON.stringify({ error: "缺少 date" }), { status: 400 });
-    return analyzeRace({ date: q.date, goal: q.goal ?? null });
-  })
-
-  .get("/api/race/thread", ({ query }) => {
-    const q = query as Record<string, string>;
-    return q.date ? raceThread(q.date) : [];
-  })
-
-  .delete("/api/race/thread", ({ query }) => {
-    const q = query as Record<string, string>;
-    if (q.date) clearRaceThread(q.date);
-    return { ok: true };
-  })
-
-  .post("/api/ai/race", async ({ body }) => {
-    try {
-      const b = (body ?? {}) as any;
-      if (!b.date) return new Response(JSON.stringify({ error: "缺少 date" }), { status: 400 });
-      return await analyzeRaceDay({ date: b.date, goal: b.goal ?? null, focus: b.focus ?? null });
-    } catch (e) {
-      return new Response(JSON.stringify({ error: e instanceof Error ? e.message : String(e) }), { status: 400 });
-    }
-  })
-
-  .post("/api/ai/race/ask", async ({ body }) => {
-    try {
-      const b = (body ?? {}) as any;
-      return await askFollowUp({ date: b.date, goal: b.goal ?? null, question: b.question ?? "" });
-    } catch (e) {
-      return new Response(JSON.stringify({ error: e instanceof Error ? e.message : String(e) }), { status: 400 });
-    }
   })
 
   // ---------- 马拉松备赛 ----------

@@ -515,7 +515,7 @@ export default function RaceSetup({
       <RouteProfileCard d={detail} />
 
       {briefing ? (
-        <RaceBriefingCard d={briefing} />
+        <RaceBriefingCard d={briefing} onChanged={() => loadBriefing(briefing.race.id)} />
       ) : (
         <div className="spin" style={{ display: "block", margin: "18px 0" }} />
       )}
@@ -791,7 +791,8 @@ export default function RaceSetup({
           「主观体感备注」已从这一页移除。
           这一页是赛前设定，而体感备注（累不累、抽筋、掉速）是**跑完之后**才写得出来的；
           赛前摆一个填不了的框，只会让人以为有什么该填但填不了。
-          字段本身保留在库里，服务端预测仍会读它（见 prediction/race.ts）。
+          字段本身保留在库里（races.notes，可经 PUT /api/races/:id/notes 写入），
+          但现在**没有任何预测会读它** —— 比赛日 AI 分析整块已删除。
           注意：本表单现在**不下发 notes**（undefined = 服务端保留原值），
           别再加回去，否则又会变成"每次保存都清空备注"。
         */}

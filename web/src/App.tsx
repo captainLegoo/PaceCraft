@@ -4,7 +4,6 @@ import type { FollowState } from "./api";
 import { ThemeToggle, useTheme } from "./theme";
 import { useTableScroll } from "./table-scroll";
 import { IconChat, IconDatabase, IconFlag, IconMenu, IconPulse, IconShoe, IconSync, IconTrend, IconTrophy } from "./icons";
-import RaceDay from "./pages/RaceDay";
 import RacePrep from "./pages/RacePrep";
 import Training from "./pages/Training";
 import ActivityDetailView from "./pages/ActivityDetail";
@@ -22,7 +21,7 @@ type Route = { page: "training" | "health" | "fitness" | "settings" | "activity"
 const NAV: { key: Route["page"]; label: string; sub: string; icon: any }[] = [
   { key: "training", label: "训练", sub: "跑量 · 负荷", icon: IconShoe },
   { key: "prediction", label: "自建预测", sub: "我的模型", icon: IconTrend },
-  { key: "race", label: "赛事路线", sub: "赛道 · 配速", icon: IconFlag },
+  { key: "race", label: "赛事路线", sub: "赛道 · 备赛", icon: IconFlag },
   { key: "prep", label: "备赛体检", sub: "能不能达标", icon: IconTrend },
   { key: "fitness", label: "体能", sub: "配速 · 区间", icon: IconTrophy },
   { key: "health", label: "恢复", sub: "睡眠 · 压力", icon: IconPulse },
@@ -333,11 +332,10 @@ export default function App() {
             <div className="page-head">
               <div>
                 <h2>赛事路线与备赛</h2>
-                <div className="sub">设置目标赛事，自动分析赛道爬升；下方为比赛日复盘与赛前方案</div>
+                <div className="sub">设置目标赛事，自动分析赛道爬升，并给出成绩预测与配速策略</div>
               </div>
             </div>
             <RaceSetup key={`race-setup-${dataVersion}`} onChanged={refresh} />
-            <RaceDay aiConfigured={!!status?.aiConfigured} dataVersion={dataVersion} />
           </>
         )}
 
