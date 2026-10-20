@@ -155,15 +155,15 @@ export default function WorkflowPanel({ aiConfigured }: { aiConfigured: boolean 
 
   return (
     <div className="card" style={{ marginBottom: 14 }}>
-      <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 12 }}>
-        <div>
+      <div className="wf-head">
+        <div className="wf-head-main">
           <h3 className="card-title" style={{ marginBottom: 2 }}>自动化工作流</h3>
           <p className="card-sub" style={{ margin: 0 }}>
             同步完成后自动运行以下步骤，每步可单独开关
             {last && <span style={{ color: "var(--text-faint)" }}> · 上次 {last.summary}（{last.durationMs}ms）</span>}
           </p>
         </div>
-        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+        <div className="wf-actions">
           <button className="sync-btn" style={{ maxWidth: 130, marginBottom: 0 }} onClick={() => void runNow()} disabled={running}>
             {running ? "运行中…" : "立即运行"}
           </button>
@@ -189,8 +189,8 @@ export default function WorkflowPanel({ aiConfigured }: { aiConfigured: boolean 
                   <span style={{ color: "var(--text-faint)", marginRight: 6 }}>{s.order}</span>
                   {s.label}
                 </td>
-                <td style={{ textAlign: "left", fontSize: 11.5, color: "var(--text-dim)" }}>{s.description}</td>
-                <td style={{ textAlign: "left", fontSize: 11.5 }}>
+                <td className="cell-text" style={{ textAlign: "left", fontSize: 11.5, color: "var(--text-dim)" }}>{s.description}</td>
+                <td className="cell-text" style={{ textAlign: "left", fontSize: 11.5 }}>
                   {r ? (
                     <span style={{ color: r.status === "failed" ? "var(--warn)" : "var(--text-dim)" }}>
                       <span style={{ color: STATUS_COLOR[r.status], marginRight: 5 }}>{STATUS_ICON[r.status]}</span>

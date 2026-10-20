@@ -268,6 +268,15 @@ export function IconChat({ size = 18, className }: P) {
   );
 }
 
+/** 汉堡菜单 —— 窄屏下顶栏的抽屉开关 */
+export function IconMenu({ size = 18, className }: P) {
+  return (
+    <svg {...base(size)} className={className} aria-hidden>
+      <path d="M4 7h16M4 12h16M4 17h16" />
+    </svg>
+  );
+}
+
 /** 靶心 */
 export function IconTarget({ size = 18, className }: P) {
   return (

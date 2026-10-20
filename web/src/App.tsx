@@ -1,8 +1,9 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "./api";
 import type { FollowState } from "./api";
 import { ThemeToggle, useTheme } from "./theme";
-import { IconChat, IconDatabase, IconFlag, IconPulse, IconShoe, IconSync, IconTrend, IconTrophy } from "./icons";
+import { useTableScroll } from "./table-scroll";
+import { IconChat, IconDatabase, IconFlag, IconMenu, IconPulse, IconShoe, IconSync, IconTrend, IconTrophy } from "./icons";
 import RaceDay from "./pages/RaceDay";
 import RacePrep from "./pages/RacePrep";
 import Training from "./pages/Training";
@@ -32,6 +33,31 @@ export default function App() {
   const [route, setRoute] = useState<Route>({ page: "training" });
   const [status, setStatus] = useState<any>(null);
   const { theme, toggle } = useTheme();
+
+  /** 窄屏下侧边栏变成抽屉，默认收起 */
+  const [navOpen, setNavOpen] = useState(false);
+  useTableScroll();
+
+  // 抽屉开着时锁住背景滚动：否则手指在遮罩上滑一下，
+  // 背后的长页面会跟着滚，抽屉看起来像没打开。
+  useEffect(() => {
+    if (!navOpen) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setNavOpen(false); };
+    window.addEventListener("keydown", onKey);
+    return () => {
+      document.body.style.overflow = prev;
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [navOpen]);
+
+  // 抽屉里点任意导航项就顺手收起。两个 setState 会被 React 18 自动批成一次渲染，
+  // 所以不会出现「页面已经切了、抽屉还开着」的那种中间态。
+  const go = useCallback((page: Route["page"]) => {
+    setRoute({ page });
+    setNavOpen(false);
+  }, []);
 
   /** 数据版本号：同步成功后 +1，所有页面据此重新拉数据 */
   const [dataVersion, setDataVersion] = useState(0);
@@ -118,9 +144,17 @@ export default function App() {
   // 周跑量柱状图点进来的是「这一周」，不是某一条记录
   const openWeek = (weekStart: string) => weekStart && setRoute({ page: "week", weekStart });
 
+  // 顶栏标题：详情页（某次活动/某次训练）在 NAV 里没有条目，用副标题兜底
+  const currentLabel = NAV.find((n) => n.key === route.page)?.label
+    ?? ({ activity: "活动详情", session: "训练详情", week: "本周" } as Record<string, string>)[route.page]
+    ?? "看板";
+
   return (
     <div className="app">
-      <aside className="sidebar">
+      {/* 遮罩只承担「点外面关抽屉」，点它等于收起 */}
+      {navOpen && <div className="nav-scrim" onClick={() => setNavOpen(false)} />}
+
+      <aside className={`sidebar ${navOpen ? "open" : ""}`}>
         <div className="brand">
           <div className="brand-mark" aria-hidden>
             <svg viewBox="0 0 40 40" fill="none">
@@ -146,7 +180,7 @@ export default function App() {
             <button
               key={n.key}
               className={`nav-item ${route.page === n.key ? "active" : ""}`}
-              onClick={() => setRoute({ page: n.key })}
+              onClick={() => go(n.key)}
             >
               <span className="nav-icon"><Icon size={17} /></span>
               <span className="nav-text">
@@ -205,7 +239,31 @@ export default function App() {
       </aside>
 
       <main className="main">
-        <WorkflowPanel aiConfigured={!!status?.aiConfigured} />
+        {/* 顶栏只在窄屏出现（样式里 display:none 兜底），宽屏保持桌面原样 */}
+        <div className="mobile-bar">
+          <button
+            className="menu-btn"
+            onClick={() => setNavOpen((v) => !v)}
+            aria-label={navOpen ? "关闭菜单" : "打开菜单"}
+            aria-expanded={navOpen}
+          >
+            <IconMenu size={20} />
+          </button>
+          <span className="mobile-bar-title">{currentLabel}</span>
+          {/* 同步按钮同时常驻这里：桌面版它在侧边栏底部，手机上侧边栏是收起的 */}
+          <button className="mobile-sync" onClick={doSync} disabled={syncing} title="立即从 COROS 拉取最近 3 天的训练数据">
+            <IconSync size={15} />
+            <span>{syncing ? "同步中" : "同步"}</span>
+          </button>
+        </div>
+
+        {/* 同步结果提示。桌面版它在侧边栏底部，窄屏侧边栏收着看不见，
+            所以在正文里再挂一份 —— 宽屏 display:none，不会重复显示。 */}
+        {syncMsg && <div className={`sync-msg mobile-sync-msg ${syncMsg.kind}`}>{syncMsg.text}</div>}
+
+        {/* 自动化工作流面板暂时下线（每次进站都要轮询 /api/workflow/last，
+            手机上尤其没必要占掉首屏）。组件本身保留，恢复时删掉这层注释即可。 */}
+        {/* <WorkflowPanel aiConfigured={!!status?.aiConfigured} /> */}
 
         {route.page === "training" && (
           <>

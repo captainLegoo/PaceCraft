@@ -63,9 +63,42 @@ export function useChartTooltip() {
     setTip({ x: e.clientX, y: e.clientY, node });
   const hide = () => setTip(null);
   const el = tip ? (
-    <div className="tooltip" style={{ left: tip.x + 12, top: tip.y + 12 }}>{tip.node}</div>
+    <TooltipBox tip={tip} onClose={hide} />
   ) : null;
   return { show, hide, el };
+}
+
+/**
+ * tooltip 跟着指针走，但它自己是 fixed 定位 —— 宽屏上放在指针右下角很自然，
+ * 窄屏上「刚好点在图表右上角」就会有一半跑到屏幕外，看起来像没弹出来。
+ * 这里按可视区把位置夹回来，并且点一下就关掉：手指没有「离开」这个动作，
+ * 不主动收的话 tooltip 会一直挂在屏幕上。
+ */
+function TooltipBox({ tip, onClose }: { tip: NonNullable<TipState>; onClose: () => void }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [pos, setPos] = useState<{ left: number; top: number } | null>(null);
+
+  // 首次渲染拿不到自己的尺寸（还没量出来），先不定位，量完再摆，
+  // 否则第一帧会用估算值闪一下位置
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const r = el.getBoundingClientRect();
+    const M = 10, GAP = 12;
+    let left = tip.x + GAP;
+    let top = tip.y + GAP;
+    if (left + r.width > innerWidth - M) left = tip.x - GAP - r.width; // 右边放不下就翻到左侧
+    if (left < M) left = M;
+    if (top + r.height > innerHeight - M) top = tip.y - GAP - r.height; // 下方放不下就翻到上方
+    if (top < M) top = M;
+    setPos({ left, top });
+  }, [tip.x, tip.y, tip.node]);
+
+  return (
+    <div ref={ref} className="tooltip" style={pos ? { left: pos.left, top: pos.top } : { left: -9999, top: 0 }}>
+      <div onPointerDown={(e) => { e.stopPropagation(); onClose(); }}>{tip.node}</div>
+    </div>
+  );
 }
 
 const TipRows = ({ title, rows }: { title: string; rows: [string, string][] }) => (
@@ -203,8 +236,8 @@ export function BarChart({
                 fill={color}
                 opacity={selectedIndex == null || selectedIndex === i ? 1 : 0.3}
                 style={{ cursor: onSelect ? "pointer" : "default" }}
-                onMouseMove={(e) => tip.show(e, <TipRows title={d.label} rows={[[valueFmt(d.value), d.tip?.[0]?.[1] ?? ""], ...(d.tip?.slice(1) ?? [])].filter((r) => r[1] !== "") as [string, string][]} />)}
-                onMouseLeave={tip.hide}
+                onPointerMove={(e) => tip.show(e, <TipRows title={d.label} rows={[[valueFmt(d.value), d.tip?.[0]?.[1] ?? ""], ...(d.tip?.slice(1) ?? [])].filter((r) => r[1] !== "") as [string, string][]} />)}
+                onPointerLeave={tip.hide}
                 onClick={() => onSelect?.(i)}
               />
               {bw > 26 && (
@@ -389,14 +422,14 @@ export function LineChart({
         {labels.map((l, i) => (
           <rect
             key={i} x={padL + (i / n) * iw - iw / n / 2} y={padT} width={iw / n} height={ih} fill="transparent"
-            onMouseMove={(e) => tip.show(e, (
+            onPointerMove={(e) => tip.show(e, (
               <TipRows title={l} rows={series.map((s) => [s.label, s.values[i] == null ? "—" : (s.axis === "right" ? yFmtRight ?? yFmt : yFmt)(s.values[i] as number)] as [string, string])} />
             ))}
-            onMouseLeave={tip.hide}
+            onPointerLeave={tip.hide}
           />
         ))}
 
-        {tickIndexes(n).map((i) => (
+        {tickIndexes(n, iw).map((i) => (
           <text
             key={i}
             className="axis-label"
@@ -421,10 +454,19 @@ export function LineChart({
   );
 }
 
-/** 默认每 ~80px 放一个横轴刻度，避免标签重叠 */
-function tickIndexes(n: number): number[] {
+/**
+ * 横轴刻度下标。
+ *
+ * 刻度密度必须跟着「可用像素宽」走，不能只看数据点数：
+ * 90 个点画在 1600px 和 350px（手机）上，标签要留的物理间距是同一个 50px，
+ * 但每点分到多少像素差了 4 倍多。只按点数定档时，手机上会出现
+ * 「10-10」和「10-19」两个标签叠在一起糊成一团。
+ */
+function tickIndexes(n: number, innerW: number): number[] {
   if (n <= 1) return [0];
-  const count = Math.min(8, Math.max(2, Math.round(n / 6)));
+  // 标签形如 "09-14"，10px 字号下约 32px 宽，留 50px 间距才不会挤
+  const maxByWidth = Math.max(2, Math.floor(innerW / 50) + 1);
+  const count = Math.min(8, maxByWidth, Math.max(2, Math.round(n / 6)));
   const step = Math.max(1, Math.floor((n - 1) / (count - 1)));
   const out: number[] = [];
   for (let i = 0; i < n; i += step) out.push(i);
@@ -484,8 +526,8 @@ export function ScatterPlot({
             <circle
               key={i} cx={x(p.x)} cy={y(p.y)} r={5} fill={c} opacity={0.85}
               stroke="var(--bg)" strokeWidth={1.5}
-              onMouseMove={(e) => tip.show(e, <TipRows title={p.label} rows={p.tip} />)}
-              onMouseLeave={tip.hide}
+              onPointerMove={(e) => tip.show(e, <TipRows title={p.label} rows={p.tip} />)}
+              onPointerLeave={tip.hide}
             />
           );
         })}
@@ -558,8 +600,8 @@ export function paceHrResidual(rows: ResidualRow[], height = 240) {
               <rect
                 x={cx - barW / 2} y={top} width={barW} height={h} rx={2.5}
                 fill={fill} opacity={1}
-                onMouseMove={(e) => tip.show(e, <TipRows title={r.label} rows={r.tip} />)}
-                onMouseLeave={tip.hide}
+                onPointerMove={(e) => tip.show(e, <TipRows title={r.label} rows={r.tip} />)}
+                onPointerLeave={tip.hide}
               />
               {/* 条数不多时直接把数值标出来，不用 hover 也能读 */}
               {n <= 14 && (

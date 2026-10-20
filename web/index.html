@@ -2,7 +2,11 @@
 <html lang="zh-CN">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- viewport-fit=cover：让页面铺到刘海/home 指示条区域，配合 CSS 里的
+         env(safe-area-inset-*) 做真正的安全区避让。不加的话 iPhone 上
+         顶部条会被刘海压住、底部按钮会被 home 条盖住半个。
+         不锁 maximum-scale —— 允许用户双指放大是无障碍底线。 -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="theme-color" content="#1a1d23" />
     <title>COROS 训练看板</title>
     <script>

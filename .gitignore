@@ -11,11 +11,18 @@ dist/
 # 我做视觉验收时的临时截图。截图里是本人真实训练数据，只放行工具脚本本身。
 .shots/*
 !.shots/shoot.ts
+!.shots/mobile-check.ts
 
 docs/
 
 # macOS
+.D_Store
 .DS_Store
+# AppleDouble：macOS 往非 HFS 文件系统（U 盘、网络盘、Linux 共享目录）写文件时
+# 会生成的伴生文件，存的是 Finder 标签等元数据，内容对程序毫无意义。
+# 混进包里会在 Linux 上变成 ._<原文件名>，且 client.ts 按 .sql 过滤时
+# 会把它们当成迁移文件读进去，直接把后端启动搞崩。
+._*
 
 # 凭证与本地数据 —— 双重保险。
 # 正常情况下这些文件在 ~/.coros-dashboard/，根本不在项目目录里。
