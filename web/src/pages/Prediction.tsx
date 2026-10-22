@@ -357,7 +357,11 @@ export default function Prediction() {
               const isOpen = openModels === String(p.distanceKm);
               return (
                 <Fragment key={p.distanceKm}>
-                  <tr className="clickable" onClick={() => setOpenModels(isOpen ? null : String(p.distanceKm))}>
+                  <tr
+                    className={`clickable ${isOpen ? "open" : ""}`}
+                    onClick={() => setOpenModels(isOpen ? null : String(p.distanceKm))}
+                    title={isOpen ? "点击收起模型明细" : "点击展开模型明细"}
+                  >
                     <td>{p.name}</td>
                     <td className="num" style={{ color: "var(--accent)", fontWeight: 600 }}>{fmtT(p.seconds)}</td>
                     <td className="num">{fmtP(p.paceSec)}</td>
@@ -380,15 +384,12 @@ export default function Prediction() {
                     </td>
                   </tr>
                   {isOpen && (
-                    <tr>
-                      <td colSpan={8} style={{ padding: "4px 0 16px" }}>
-                        <div style={{ borderTop: "1px solid var(--border)", paddingTop: 12 }}>
+                    <tr className="expanded-detail-row">
+                      <td colSpan={8}>
+                        <div className="prediction-detail-box">
                           <div className="hint" style={{ marginBottom: 10 }}>{p.confidenceNote}</div>
                           {p.groundTruth && (
-                            <div style={{
-                              background: "var(--bg-2)", border: "1px solid var(--border)",
-                              borderRadius: 6, padding: "8px 10px", marginBottom: 10, fontSize: 12,
-                            }}>
+                            <div className="ground-truth-box">
                               <strong>实测交叉校验</strong>：
                               你在 {p.groundTruth.date} 跑过 {p.groundTruth.actualKm.toFixed(2)}km，
                               用时 {fmtT(p.groundTruth.actualSec)}（{fmtP(p.groundTruth.actualSec / p.groundTruth.actualKm)}/km）。
@@ -402,15 +403,15 @@ export default function Prediction() {
                               </span>。
                             </div>
                           )}
-                          <table style={{ marginBottom: 8 }}>
+                          <table className="detail-table">
                             <thead>
                               <tr><th>锚点层级</th><th>模型</th><th>预测</th><th>权重</th><th>依据</th></tr>
                             </thead>
                             <tbody>
                               {p.models.map((m) => (
                                 <tr key={m.model}>
-                                  <td style={{ color: TIER_DESC[m.tier].color }}>{TIER_DESC[m.tier].label}</td>
-                                  <td style={{ textAlign: "left" }}>{m.label}</td>
+                                  <td style={{ color: TIER_DESC[m.tier].color, whiteSpace: "nowrap" }}>{TIER_DESC[m.tier].label}</td>
+                                  <td style={{ textAlign: "left", whiteSpace: "nowrap" }}>{m.label}</td>
                                   <td className="num">{fmtT(m.seconds)}</td>
                                   <td className="num">{m.weight.toFixed(2)}</td>
                                   <td style={{ textAlign: "left", color: "var(--text-faint)", fontSize: 11.5, whiteSpace: "normal" }}>

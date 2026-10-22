@@ -132,13 +132,11 @@ export const DEFAULT_CONFIG: WorkflowConfig = {
   steps: {
     "fetch-altitude": { enabled: true, params: { maxCount: 5 } },
     "compute-prediction": { enabled: true },
+    "check-acwr-risk": { enabled: true },
     "compute-race-briefing": { enabled: true },
-    "ai-analyze": { enabled: true },
+    "compute-aerobic-decoupling": { enabled: true },
   },
-  options: {
-    /** 工作流跑完后是否允许触发 AI（AI 自己还会再看配置） */
-    allowAi: true,
-  },
+  options: {},
 };
 
 // ---------------- 配置存储 ----------------

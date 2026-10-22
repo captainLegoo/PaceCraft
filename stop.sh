@@ -154,18 +154,30 @@ stop_one api || FAILED=1
 for port in 43125 43124; do
   if lsof -tiTCP:"$port" -sTCP:LISTEN >/dev/null 2>&1; then
     pids="$(lsof -tiTCP:"$port" -sTCP:LISTEN | tr '\n' ' ')"
-    warn "端口 ${port} 仍被占用（PID ${pids}），检查是否有残留进程"
+    warn "端口 ${port} 仍被占用（PID ${pids}），清理残留进程"
     for p in $pids; do
       cmd="$(ps -o command= -p "$p" 2>/dev/null || true)"
-      if [[ "$cmd" == *coros-dashboard* || "$cmd" == *"src/index.ts"* || "$cmd" == *vite* ]]; then
+      if [[ "$FORCE" == "1" || "$cmd" == *coros-dashboard* || "$cmd" == *"src/index.ts"* || "$cmd" == *vite* || "$cmd" == *bun* || "$cmd" == *node* ]]; then
         info "清理残留进程 ${p}"
-        kill -9 "$p" 2>/dev/null || true
+        kill_tree "$p" 9
       else
         warn "端口 ${port} 被非本项目进程占用（${p}），未处理"
       fi
     done
   fi
 done
+
+# 再次确认端口完全释放（等待系统回收 socket，避免立即启动时偶发端口冲突）
+for port in 43125 43124; do
+  for ((w = 0; w < 20; w++)); do
+    lsof -tiTCP:"$port" -sTCP:LISTEN >/dev/null 2>&1 || break
+    sleep 0.1
+  done
+done
+
+if [[ "$FORCE" == "1" ]]; then
+  rm -f "$LOG_DIR"/api.pid "$LOG_DIR"/web.pid
+fi
 
 if [[ "$CLEAN" == "1" ]]; then
   info "清空日志…"

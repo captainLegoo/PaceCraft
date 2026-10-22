@@ -420,7 +420,7 @@ export function parseLapData(raw: string): LapData | null {
     labelId: String(payload.labelId ?? ""),
     sportType: Number(payload.sportType ?? -1),
     columns: Array.isArray(payload.columns) ? payload.columns : [],
-    lapDistanceM: chosen ? (Number(chosen.lapDistance ?? 0) || null) / 100 : null,
+    lapDistanceM: chosen && Number(chosen.lapDistance) ? Number(chosen.lapDistance) / 100 : null,
     lapGroupType: chosen ? Number(chosen.type) : null,
     laps: source.map((l: any) => ({
       lapIndex: Number(l.lapIndex ?? 0),

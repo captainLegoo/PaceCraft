@@ -7,6 +7,7 @@
     "web"
   ],
   "scripts": {
+    "dev": "./dev.sh",
     "auth": "bun run --cwd server auth",
     "dev:server": "bun run --cwd server dev",
     "dev:web": "bun run --cwd web dev",

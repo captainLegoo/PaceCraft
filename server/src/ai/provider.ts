@@ -290,12 +290,12 @@ export const SYSTEM_PROMPT = `你是一位资深跑步教练，专精马拉松�
 
 心率判读（重要）：
 - 用**五区间心率法**，按 HRR（储备心率）占比判定，不是 %HRmax，也不是均匀分段：
+  - Z0 积极恢复 < 59%（热身/散步/极轻微活动，用于观察热身与恢复充分度）
   - Z1 有氧耐力 59–74%
   - Z2 有氧动力 74–84%
   - Z3 乳酸阈 85–88%（**只有 4% 宽**）
   - Z4 速度耐力 89–95%
   - Z5 无氧动力 >95%
-  - 低于 Z1 下界记为「热身/恢复」，不算入任何区间。
 - **具体 bpm 边界以数据里给出的区间表为准**，不要用记忆里的数字 ——
   边界由使用者自己的 HRmax 和静息心率算出，每个人都不一样。
 - 注意 Z3 乳酸阈很窄，判定时不要把 80–88% 整段都算成阈值。
@@ -579,14 +579,15 @@ export function hrZonePrompt(lapRows: { avgHr: number | null; maxHr: number | nu
     const z = hrZones(lapRows, hrZoneOptions(age));
     if (!z || z.zones.length === 0) return null;
     const lines = z.zones.map(
-      (b) => `- ${b.zone} ${b.label} ${b.hrLo}–${b.hrHi} bpm（HRR ${b.pctLabel}）：${b.seconds}s（${b.pct}%）`,
+      (b) => `- ${b.zone} ${b.label} ${b.hrHi && b.hrHi < 900 ? `${b.hrLo}–${b.hrHi}` : `>${b.hrLo}`} bpm（${b.pctLabel === "自定义" ? "自定义" : `HRR ${b.pctLabel}`}）：${b.seconds}s（${b.pct}%）`,
     );
     if (z.belowZone1Pct > 0) {
-      lines.push(`- 热身/恢复（< ${z.zones[0]?.hrLo ?? 136} bpm）：${z.belowZone1Seconds}s（${z.belowZone1Pct}%）`);
+      const z1Lo = z.zones[0]?.hrLo;
+      lines.unshift(`- Z0 积极恢复（${z1Lo != null ? `< ${z1Lo}` : "低于 Z1"} bpm）：${z.belowZone1Seconds}s（${z.belowZone1Pct}%）`);
     }
     return {
       text:
-        `## 心率区间分布（五区间心率法）\n` +
+        `## 心率区间分布（${z.method}）\n` +
         `- 最大心率 ${z.maxHr} bpm｜静息 ${z.restingHr} bpm｜储备 ${z.reserve} bpm\n` +
         lines.join("\n"),
       zones: z,

@@ -1,16 +1,18 @@
 import { useEffect, useState } from "react";
 import { api, type ActivityDetail } from "../api";
-import { LineChart, Markdown, ZoneBar, couplingVerdict, fmtDur, fmtPace, hrResiduals, paceColor, paceHrCoupling, paceHrResidual } from "../charts";
+import { AerobicDecouplingCard, LineChart, ZoneBar, couplingVerdict, fmtDur, fmtPace, hrResiduals, paceColor, paceHrCoupling, paceHrResidual } from "../charts";
 import { IconBack, IconGauge, IconHeart, IconLoad, IconMountain, IconPulse, IconRoute, IconSteps, IconStopwatch } from "../icons";
 
 export default function ActivityDetailView({
-  labelId, onBack, aiConfigured,
-}: { labelId: string; onBack: () => void; aiConfigured: boolean }) {
+  labelId, onBack, onOpenSession,
+}: {
+  labelId: string;
+  onBack: () => void;
+  onOpenSession?: (sessionKey: string) => void;
+  aiConfigured?: boolean;
+}) {
   const [data, setData] = useState<ActivityDetail | null>(null);
   const [err, setErr] = useState<string | null>(null);
-  const [focus, setFocus] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [aiErr, setAiErr] = useState<string | null>(null);
 
   const load = () => api.activity(labelId).then(setData).catch((e) => setErr(e.message));
   useEffect(() => { setData(null); setErr(null); load(); }, [labelId]);
@@ -18,7 +20,7 @@ export default function ActivityDetailView({
   if (err) return <div className="banner error">{err}</div>;
   if (!data) return <div><div className="skeleton skeleton-hero" /><div className="skeleton skeleton-row" /><div className="skeleton skeleton-row" /><div className="skeleton skeleton-row" /></div>;
 
-  const { activity: a, detail: d, laps, scatter, zones, reports, lapSummary } = data;
+  const { activity: a, detail: d, laps, scatter, zones, lapSummary } = data;
   const fullLaps = laps.length > 1 ? laps.slice(0, -1) : laps;
   const fastest = lapSummary.fastestLapSec ?? 0;
   const slowest = lapSummary.slowestLapSec ?? fastest;
@@ -29,11 +31,12 @@ export default function ActivityDetailView({
   const residualRows = coupling
     ? hrResiduals(fullLaps.map((l) => ({ paceSec: l.avgPaceSec, hr: l.avgHr })), coupling).map((residual, i) => {
         const l = fullLaps[i];
+        const statusText = residual > 3 ? "偏高 · 吃力硬撑" : residual < -3 ? "偏低 · 充沛轻松" : "正常基准";
         return {
           label: `第 ${l.lapIndex} 段`,
           residual,
           tip: [
-            [`${residual > 0 ? "+" : ""}${residual.toFixed(1)} bpm`, "与该配速应有心率之差"],
+            [`${residual > 0 ? "+" : ""}${residual.toFixed(1)} bpm（${statusText}）`, "相对基准心率偏差"],
             [fmtPace(l.avgPaceSec) + " /km", "配速"],
             [`${l.avgHr} bpm`, "实际平均心率"],
             [`${l.maxHr} bpm`, "最大心率"],
@@ -43,18 +46,6 @@ export default function ActivityDetailView({
         };
       })
     : [];
-
-  const runAnalyze = async () => {
-    setBusy(true); setAiErr(null);
-    try {
-      await api.analyze(labelId, focus.trim() || null);
-      await load();
-    } catch (e) {
-      setAiErr((e as Error).message);
-    } finally {
-      setBusy(false);
-    }
-  };
 
   return (
     <>
@@ -67,7 +58,12 @@ export default function ActivityDetailView({
             {d?.performance ? ` ｜ 表现：${d.performance}` : ""}
           </div>
         </div>
-        <button className="btn" onClick={onBack}><IconBack size={15} />返回</button>
+        <div style={{ display: "flex", gap: 8 }}>
+          {data.sessionKey && onOpenSession && (
+            <button className="btn" onClick={() => onOpenSession(data.sessionKey!)}>所属训练场次</button>
+          )}
+          <button className="btn" onClick={onBack}><IconBack size={15} />返回</button>
+        </div>
       </div>
 
       {lapSummary.count > 0 && lapSummary.distanceMatches === false && (
@@ -108,18 +104,26 @@ export default function ActivityDetailView({
             />
           </div>
 
+          <AerobicDecouplingCard
+            laps={fullLaps}
+            options={{
+              distanceKm: a.distanceKm,
+              durationSec: a.durationSec,
+            }}
+          />
+
           <div className="grid g2" style={{ marginBottom: 14 }}>
             <div className="card">
-              <h3 className="card-title">每段心率的「欠账」</h3>
+              <h3 className="card-title">各段心率表现（轻松 vs 吃力）</h3>
               <p className="card-sub">
-                按这次全程的配速-心率关系，先算出每段「本该是多少心率」，再看实际差多少。
-                零线以上是心率被顶得比该配速应有的更高，零线以下是同样的速度心率反而更低、说明身体有余量。
-                纵轴单位 bpm，横轴是段序。
+                以全场配速与心率的整体基线为参照：柱子向上代表心率偏高（跑得吃力/出现心率漂移），柱子向下代表心率比平时更低（体能充沛/跑得轻松有余量）。
               </p>
               {coupling && verdict && (
                 <div className={`banner ${verdict.level === "none" ? "warn" : "info"}`} style={{ marginTop: 12 }}>
-                  相关度 r = {coupling.r.toFixed(2)}（-1 到 1，越接近 -1 表示跑得慢心率降得越明显）：{verdict.text}。
-                  {verdict.level === "none" && "下面的条形图只能说明各段心率的起伏，不宜当作能力差解读。"}
+                  <strong>{verdict.title}</strong>：{verdict.text}
+                  <span style={{ opacity: 0.65, fontSize: 12, marginLeft: 8 }}>
+                    （相关系数 r = {coupling.r.toFixed(2)}）
+                  </span>
                 </div>
               )}
               <div style={{ marginTop: 12 }}>
@@ -144,81 +148,56 @@ export default function ActivityDetailView({
           <div className="card" style={{ marginBottom: 14 }}>
             <h3 className="card-title">逐段明细</h3>
             <p className="card-sub">最后一段通常不足整段距离</p>
-            <div style={{ maxHeight: 420, overflowY: "auto" }}>
-              <table>
-                <thead>
-                  <tr>
-                    <th>段</th><th>距离</th><th>用时</th><th>配速</th>
-                    <th>心率</th><th>最大</th><th>步频</th><th>步幅</th><th>爬升</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {laps.map((l) => {
-                    const isPartial = l.distanceM < (lapSummary.granularityM ?? 1000) * 0.9;
-                    return (
-                      <tr key={l.lapIndex} style={{ opacity: isPartial ? 0.6 : 1 }}>
-                        <td>{l.lapIndex}{isPartial ? " *" : ""}</td>
-                        <td className="num">{(l.distanceM / 1000).toFixed(2)}</td>
-                        <td className="num">{fmtDur(l.timeSec)}</td>
-                        <td className="num" style={{ color: paceColor(l.avgPaceSec, fastest, slowest) }}>
-                          {fmtPace(l.avgPaceSec)}
-                        </td>
-                        <td className="num">{l.avgHr || "—"}</td>
-                        <td className="num" style={{ color: "var(--text-faint)" }}>{l.maxHr || "—"}</td>
-                        <td className="num">{l.avgCadence || "—"}</td>
-                        <td className="num">{l.avgStrideM ? l.avgStrideM.toFixed(2) : "—"}</td>
-                        <td className="num" style={{ color: "var(--text-faint)" }}>{Math.round(l.elevGain)}</td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+            <div className="table-scroll-wrap">
+              <div className="table-scroll" style={{ maxHeight: 420, overflow: "auto" }}>
+                <table>
+                  <thead>
+                    <tr>
+                      <th>段</th><th>距离</th><th>用时</th><th>配速</th>
+                      <th>心率</th><th>最大</th><th>步频</th><th>步幅</th><th>爬升</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {laps.map((l) => {
+                      const isPartial = l.distanceM < (lapSummary.granularityM ?? 1000) * 0.9;
+                      return (
+                        <tr key={l.lapIndex} style={{ opacity: isPartial ? 0.6 : 1 }}>
+                          <td>{l.lapIndex}{isPartial ? " *" : ""}</td>
+                          <td className="num">{(l.distanceM / 1000).toFixed(2)}</td>
+                          <td className="num">{fmtDur(l.timeSec)}</td>
+                          <td className="num" style={{ color: paceColor(l.avgPaceSec, fastest, slowest) }}>
+                            {fmtPace(l.avgPaceSec)}
+                          </td>
+                          <td className="num">{l.avgHr || "—"}</td>
+                          <td className="num" style={{ color: "var(--text-faint)" }}>{l.maxHr || "—"}</td>
+                          <td className="num">{l.avgCadence || "—"}</td>
+                          <td className="num">{l.avgStrideM ? l.avgStrideM.toFixed(2) : "—"}</td>
+                          <td className="num" style={{ color: "var(--text-faint)" }}>{Math.round(l.elevGain)}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
             </div>
           </div>
         </>
       )}
 
-      {/* ---- AI 分析 ---- */}
-      <div className="card">
-        <h3 className="card-title">AI 训练分析</h3>
-        <p className="card-sub">
-          只分析你指定的这一次训练，不做全量分析。可填写关注点，留空则做通用分析。
-        </p>
-
-        {!aiConfigured && (
-          <div className="banner info">
-            还没有配置 AI 模型，请到「设置」页填写你的模型地址、API Key 和模型名。
+      {/* ---- 所属场次与整场 AI 分析引导 ---- */}
+      {data.sessionKey && onOpenSession && (
+        <div className="card" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 14, flexWrap: "wrap" }}>
+          <div>
+            <h3 className="card-title" style={{ marginBottom: 4 }}>AI 训练复盘已收敛至「训练场次」</h3>
+            <p className="card-sub" style={{ marginBottom: 0 }}>
+              AI 教练复盘在场次页统一进行（包含多段间歇、组结构、组间休息与整场配速心率综合解读）。
+            </p>
           </div>
-        )}
-        {aiErr && <div className="banner error">{aiErr}</div>}
-
-        <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
-          <input
-            placeholder="关注点（可选），例如：后程掉速明显，是不是强度太高了？"
-            value={focus}
-            onChange={(e) => setFocus(e.target.value)}
-            onKeyDown={(e) => { if (e.key === "Enter" && aiConfigured && !busy) runAnalyze(); }}
-          />
-          <button className="btn primary" disabled={!aiConfigured || busy} onClick={runAnalyze}>
-            {busy ? <><span className="spin" /> 分析中…</> : reports.length > 0 ? "重新分析" : "开始分析"}
+          <button className="btn primary" onClick={() => onOpenSession(data.sessionKey!)}>
+            前往该场次 AI 分析
           </button>
         </div>
-
-        {reports.length === 0 ? (
-          <div className="empty">还没有分析记录</div>
-        ) : (
-          reports.map((r) => (
-            <div key={r.id} style={{ borderTop: "1px solid var(--border)", paddingTop: 14, marginTop: 14 }}>
-              <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 10 }}>
-                <span className="pill accent">{r.model}</span>
-                <span className="hint">{new Date(r.createdAt * 1000).toLocaleString("zh-CN")}</span>
-                {r.focus && <span className="pill">关注：{r.focus}</span>}
-              </div>
-              <Markdown text={r.report} />
-            </div>
-          ))
-        )}
-      </div>
+      )}
     </>
   );
 }

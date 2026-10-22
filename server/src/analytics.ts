@@ -130,6 +130,22 @@ export type HrBasis = {
  */
 const DEFAULT_RESTING_HR = 55;
 
+export type CustomHrZone = {
+  zone: string;
+  label: string;
+  hrLo: number;
+  hrHi?: number | null;
+  pctLabel?: string;
+};
+
+export const DEFAULT_ZONE_DEFS = [
+  { zone: "Z1", label: "有氧耐力", loPct: 0.59, hiPct: 0.74, pctLabel: "59–74%" },
+  { zone: "Z2", label: "有氧动力", loPct: 0.74, hiPct: 0.845, pctLabel: "74–84%" },
+  { zone: "Z3", label: "乳酸阈", loPct: 0.845, hiPct: 0.885, pctLabel: "85–88%" },
+  { zone: "Z4", label: "速度耐力", loPct: 0.885, hiPct: 0.96, pctLabel: "89–95%" },
+  { zone: "Z5", label: "无氧动力", loPct: 0.96, hiPct: 1.01, pctLabel: ">95%" },
+] as const;
+
 export function hrZones(
   lapRows: { avgHr: number | null; maxHr: number | null; timeSec: number }[],
   opts: {
@@ -139,8 +155,80 @@ export function hrZones(
     predictedMaxHr?: number | null;
     /** 实测静息心率 */
     restingHr?: number | null;
+    /** 计算模式 */
+    hrCalcMode?: "auto" | "custom" | string | null;
+    /** 自定义区间 */
+    customZones?: CustomHrZone[] | null;
   },
 ) {
+  // 1. 如果用户启用了自定义五区间模式且配置完整
+  if (opts.hrCalcMode === "custom" && opts.customZones && opts.customZones.length >= 5) {
+    const total = lapRows.reduce((s, l) => s + (l.timeSec ?? 0), 0);
+    const cz = opts.customZones;
+    const bounds = cz.map((z, idx) => {
+      let lo = Math.round(z.hrLo);
+      // 若上一区间上限与本区间下限相同（如 Z4 180~190 与 Z5 >190），自动顺延 1 bpm 避免交界点判定冲突
+      if (idx > 0 && cz[idx - 1].hrHi != null && lo === Math.round(cz[idx - 1].hrHi!)) {
+        lo = lo + 1;
+      }
+      const isLast = idx === cz.length - 1;
+      const hi = isLast
+        ? (z.hrHi && z.hrHi > lo ? Math.round(z.hrHi + 1) : 999)
+        : (z.hrHi != null && z.hrHi >= lo ? Math.round(z.hrHi + 1) : (cz[idx + 1] ? Math.round(cz[idx + 1].hrLo) : 999));
+      return {
+        zone: z.zone,
+        label: z.label,
+        pctLabel: "自定义",
+        loBpm: lo,
+        hiBpm: hi,
+        displayHiBpm: z.hrHi != null && z.hrHi < 900 ? Math.round(z.hrHi) : null,
+      };
+    });
+
+    const z1Lo = bounds[0].loBpm;
+    const BELOW_Z1_SEC = lapRows
+      .filter((l) => (l.avgHr ?? 0) > 0 && (l.avgHr ?? 0) < z1Lo)
+      .reduce((s, l) => s + (l.timeSec ?? 0), 0);
+
+    const lastZ = cz[cz.length - 1];
+    const maxHr = lastZ.hrHi != null && lastZ.hrHi < 900
+      ? Math.round(lastZ.hrHi)
+      : (opts.measuredMaxHr ?? bounds[bounds.length - 1].loBpm + 10);
+    const restingHr = opts.restingHr && opts.restingHr > 30 ? Math.round(opts.restingHr) : Math.max(30, z1Lo - 1);
+    const reserve = Math.max(0, maxHr - restingHr);
+
+    return {
+      basis: maxHr,
+      maxHr,
+      restingHr,
+      reserve,
+      source: "custom",
+      usedFallback: false,
+      usedPercentMax: false,
+      method: "自定义五区间心率法",
+      belowZone1Seconds: Math.round(BELOW_Z1_SEC),
+      belowZone1Pct: total > 0 ? round((BELOW_Z1_SEC / total) * 100, 1) : 0,
+      zones: bounds.map((b, idx) => {
+        const secs = lapRows
+          .filter((l) => {
+            const hr = l.avgHr ?? 0;
+            return hr >= b.loBpm && hr < b.hiBpm;
+          })
+          .reduce((s, l) => s + (l.timeSec ?? 0), 0);
+        const isLast = idx === bounds.length - 1;
+        return {
+          zone: b.zone,
+          label: b.label,
+          pctLabel: "自定义",
+          hrLo: b.loBpm,
+          hrHi: isLast ? (b.displayHiBpm ?? null) : (b.displayHiBpm ?? (b.hiBpm > 900 ? null : b.hiBpm - 1)),
+          seconds: Math.round(secs),
+          pct: total > 0 ? round((secs / total) * 100, 1) : 0,
+        };
+      }),
+    };
+  }
+
   const activityPeak = Math.max(...lapRows.map((l) => l.maxHr || l.avgHr || 0), 0);
 
   const measured = opts.measuredMaxHr && opts.measuredMaxHr > 100 ? opts.measuredMaxHr : null;
@@ -173,19 +261,13 @@ export function hrZones(
   //
   // 注意 Z3 乳酸阈只有 4% 宽：HRR=148 时约 6 bpm。取整漂移 1–2 bpm
   // 就足以让一整段被错分到相邻区间，所以边界由 HRR 线性算出后**不再二次取整**。
-  const ZONE_PCT = [
-    { zone: "Z1", label: "有氧耐力", loPct: 0.59, hiPct: 0.74, pctLabel: "59–74%" },
-    { zone: "Z2", label: "有氧动力", loPct: 0.74, hiPct: 0.845, pctLabel: "74–84%" },
-    { zone: "Z3", label: "乳酸阈", loPct: 0.845, hiPct: 0.885, pctLabel: "85–88%" },
-    { zone: "Z4", label: "速度耐力", loPct: 0.885, hiPct: 0.96, pctLabel: "89–95%" },
-    { zone: "Z5", label: "无氧动力", loPct: 0.96, hiPct: 1.01, pctLabel: ">95%" },
-  ] as const;
+  const ZONE_PCT = DEFAULT_ZONE_DEFS;
 
   const hrToBpm = (pct: number) => restingHr + reserve * pct;
-  const bounds = ZONE_PCT.map((z) => ({
+  const bounds = ZONE_PCT.map((z, idx) => ({
     ...z,
     loBpm: Math.round(hrToBpm(z.loPct)),
-    hiBpm: Math.round(hrToBpm(z.hiPct)),
+    hiBpm: idx === ZONE_PCT.length - 1 ? 999 : Math.round(hrToBpm(z.hiPct)),
   }));
 
   /** Z1 下界以下的心率是热身、走路、恢复活动，单独归一桶（不能算进 Z1 让有氧耐力虚高） */
@@ -207,19 +289,20 @@ export function hrZones(
     /** 低于 Z1 下界的时间，独立成桶，避免被算进 Z1 让有氧耐力虚高 */
     belowZone1Seconds: Math.round(BELOW_Z1_SEC),
     belowZone1Pct: total > 0 ? round((BELOW_Z1_SEC / total) * 100, 1) : 0,
-    zones: bounds.map((b) => {
+    zones: bounds.map((b, idx) => {
       const secs = lapRows
         .filter((l) => {
           const hr = l.avgHr ?? 0;
           return hr >= b.loBpm && hr < b.hiBpm;
         })
         .reduce((s, l) => s + (l.timeSec ?? 0), 0);
+      const isLast = idx === bounds.length - 1;
       return {
         zone: b.zone,
         label: b.label,
         pctLabel: b.pctLabel,
         hrLo: b.loBpm,
-        hrHi: b.hiBpm > 900 ? Math.round(basis.maxHr) : b.hiBpm - 1,
+        hrHi: isLast ? null : b.hiBpm - 1,
         seconds: Math.round(secs),
         pct: total > 0 ? round((secs / total) * 100, 1) : 0,
       };
@@ -265,10 +348,33 @@ export function hrZoneOptions(age: number | null) {
   const manualMax = profile?.maxHr ?? HR_PROFILE.maxHr;
   const manualRest = profile?.restingHr ?? HR_PROFILE.restingHr;
 
+  let customZones: CustomHrZone[] | null = null;
+  if (profile?.customHrZones) {
+    try {
+      const parsed = JSON.parse(profile.customHrZones);
+      if (Array.isArray(parsed) && parsed.length >= 5) {
+        customZones = parsed.map((item: any, i: number) => ({
+          zone: item.zone || DEFAULT_ZONE_DEFS[i]?.zone || `Z${i + 1}`,
+          label: item.label || DEFAULT_ZONE_DEFS[i]?.label || `区间${i + 1}`,
+          hrLo: Math.round(Number(item.hrLo)),
+          hrHi: item.hrHi !== null && item.hrHi !== undefined && item.hrHi !== "" ? Math.round(Number(item.hrHi)) : null,
+        }));
+      }
+    } catch {
+      // 容错：解析失败回退
+    }
+  }
+
+  const hrCalcMode = (profile?.hrCalcMode === "custom" && customZones && customZones.length >= 5)
+    ? "custom"
+    : "auto";
+
   return {
     measuredMaxHr: manualMax ?? observed,
     predictedMaxHr: predictedMaxHr(age),
     restingHr: manualRest,
+    hrCalcMode,
+    customZones,
   };
 }
 

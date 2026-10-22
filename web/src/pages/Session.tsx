@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { api, type Session, type SessionDetail } from "../api";
-import { LineChart, Markdown, ZoneBar, fmtDur, fmtPace, paceColor } from "../charts";
+import { AerobicDecouplingCard, LineChart, Markdown, ZoneBar, fmtDur, fmtPace, paceColor } from "../charts";
 import { IconBack, IconHeart, IconLoad, IconRoute, IconStopwatch as IconStopwatch2 } from "../icons";
 
 export default function SessionView({
@@ -9,7 +9,7 @@ export default function SessionView({
   sessionKey: string;
   onBack: () => void;
   aiConfigured: boolean;
-  onOpenActivity?: (labelId: string) => void;
+  onOpenActivity?: (labelId: string, sessionKey?: string) => void;
 }) {
   const [d, setD] = useState<SessionDetail | null>(null);
   const [err, setErr] = useState<string | null>(null);
@@ -60,16 +60,16 @@ export default function SessionView({
   return (
     <>
       <div className="page-head">
-        <div>
+        <div style={{ minWidth: 0, flex: 1 }}>
           <h2>{s.date} 训练场次</h2>
-          <div className="sub">
+          <div className="sub" style={{ wordBreak: "break-word" }}>
             <span className={`pill ${s.kind === "multi" ? "accent" : ""}`}>
               {s.kind === "multi" ? `${s.activityCount} 条记录合并` : "单次记录"}
             </span>
             {"  "}判定为 <strong style={{ color: "var(--accent)" }}>{s.classification}</strong> · {s.classificationReason}
           </div>
         </div>
-        <button className="btn" onClick={onBack}><IconBack size={15} />返回</button>
+        <button className="btn" style={{ flexShrink: 0 }} onClick={onBack}><IconBack size={15} />返回</button>
       </div>
 
       {multi && (
@@ -121,29 +121,33 @@ export default function SessionView({
             从 {s.activityCount} 条记录中按距离与配速的一致性自动识别出 {s.sets.length} 组重复（共 {setCount} 组次）。
             这只是基于数据模式的推断，最终以你的实际安排为准。
           </p>
-          <table>
-            <thead>
-              <tr>
-                <th>组</th><th>单组距离</th><th>组数</th><th>平均单组用时</th>
-                <th>平均配速</th><th>平均心率</th><th>组间休息</th>
-              </tr>
-            </thead>
-            <tbody>
-              {s.sets.map((set, i) => (
-                <tr key={i}>
-                  <td>第 {i + 1} 组</td>
-                  <td className="num" style={{ textAlign: "left", color: "var(--accent)" }}>{set.distanceLabel}</td>
-                  <td className="num">× {set.reps}</td>
-                  <td className="num">{fmtDur(set.avgDurationSec)}</td>
-                  <td className="num">{fmtPace(set.avgPaceSec)}</td>
-                  <td className="num">{set.avgHr ?? "—"}</td>
-                  <td className="num" style={{ color: "var(--text-faint)" }}>
-                    {set.restSec != null ? fmtDur(set.restSec) : "—"}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <div className="table-scroll-wrap">
+            <div className="table-scroll">
+              <table>
+                <thead>
+                  <tr>
+                    <th>组</th><th>单组距离</th><th>组数</th><th>平均单组用时</th>
+                    <th>平均配速</th><th>平均心率</th><th>组间休息</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {s.sets.map((set, i) => (
+                    <tr key={i}>
+                      <td>第 {i + 1} 组</td>
+                      <td className="num" style={{ textAlign: "left", color: "var(--accent)" }}>{set.distanceLabel}</td>
+                      <td className="num">× {set.reps}</td>
+                      <td className="num">{fmtDur(set.avgDurationSec)}</td>
+                      <td className="num">{fmtPace(set.avgPaceSec)}</td>
+                      <td className="num">{set.avgHr ?? "—"}</td>
+                      <td className="num" style={{ color: "var(--text-faint)" }}>
+                        {set.restSec != null ? fmtDur(set.restSec) : "—"}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
         </div>
       )}
 
@@ -173,6 +177,15 @@ export default function SessionView({
             />
           </div>
 
+          <AerobicDecouplingCard
+            laps={laps}
+            options={{
+              distanceKm: s.totals.distanceKm,
+              durationSec: s.totals.durationSec,
+              isInterval: s.classification === "间歇训练" || s.sets.length > 0,
+            }}
+          />
+
           <div className="grid g2" style={{ marginBottom: 14 }}>
             <div className="card">
               <h3 className="card-title">心率区间分布</h3>
@@ -188,25 +201,27 @@ export default function SessionView({
             <div className="card">
               <h3 className="card-title">逐条记录</h3>
               <p className="card-sub">点单条可进入该条独立的分圈明细</p>
-              <div style={{ maxHeight: 320, overflowY: "auto" }}>
-                <table>
-                  <thead>
-                    <tr><th>开始</th><th>距离</th><th>用时</th><th>配速</th><th>心率</th><th>步频</th><th>负荷</th></tr>
-                  </thead>
-                  <tbody>
-                    {activities.map((a) => (
-                      <tr key={a.labelId} className="clickable" onClick={() => onOpenActivity?.(a.labelId)}>
-                        <td>{a.startTs ? new Date(a.startTs * 1000).toTimeString().slice(0, 5) : "—"}</td>
-                        <td className="num">{a.distanceKm}</td>
-                        <td className="num">{fmtDur(a.durationSec)}</td>
-                        <td className="num">{fmtPace(a.avgPaceSec)}</td>
-                        <td className="num">{a.avgHr ?? "—"}</td>
-                        <td className="num">{a.detail?.avgCadence ?? "—"}</td>
-                        <td className="num">{a.detail?.trainingLoad ?? "—"}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+              <div className="table-scroll-wrap">
+                <div className="table-scroll" style={{ maxHeight: 320, overflow: "auto" }}>
+                  <table>
+                    <thead>
+                      <tr><th>开始</th><th>距离</th><th>用时</th><th>配速</th><th>心率</th><th>步频</th><th>负荷</th></tr>
+                    </thead>
+                    <tbody>
+                      {activities.map((a) => (
+                        <tr key={a.labelId} className="clickable" onClick={() => onOpenActivity?.(a.labelId, sessionKey)}>
+                          <td>{a.startTs ? new Date(a.startTs * 1000).toTimeString().slice(0, 5) : "—"}</td>
+                          <td className="num">{a.distanceKm}</td>
+                          <td className="num">{fmtDur(a.durationSec)}</td>
+                          <td className="num">{fmtPace(a.avgPaceSec)}</td>
+                          <td className="num">{a.avgHr ?? "—"}</td>
+                          <td className="num">{a.detail?.avgCadence ?? "—"}</td>
+                          <td className="num">{a.detail?.trainingLoad ?? "—"}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               </div>
             </div>
           </div>
@@ -217,31 +232,33 @@ export default function SessionView({
         <div className="card" style={{ marginBottom: 14 }}>
           <h3 className="card-title">全场分段明细</h3>
           <p className="card-sub">按累计时间排序，休息段不会出现数据点</p>
-          <div style={{ maxHeight: 380, overflowY: "auto" }}>
-            <table>
-              <thead>
-                <tr>
-                  <th>累计时间</th><th>段</th><th>距离</th><th>配速</th>
-                  <th>心率</th><th>最大</th><th>步频</th><th>步幅</th>
-                  <th>爬升</th>
-                </tr>
-              </thead>
-              <tbody>
-                {laps.map((l) => (
-                  <tr key={`${l.labelId}-${l.lapIndex}`}>
-                    <td className="num" style={{ color: "var(--text-faint)" }}>{fmtDur(l.elapsedSec)}</td>
-                    <td>{l.lapIndex}</td>
-                    <td className="num">{(l.distanceM / 1000).toFixed(2)}</td>
-                    <td className="num" style={{ color: paceColor(l.avgPaceSec, 270, 330) }}>{fmtPace(l.avgPaceSec)}</td>
-                    <td className="num">{l.avgHr || "—"}</td>
-                    <td className="num" style={{ color: "var(--text-faint)" }}>{l.maxHr || "—"}</td>
-                    <td className="num">{l.avgCadence || "—"}</td>
-                    <td className="num">{l.avgStrideM ? l.avgStrideM.toFixed(2) : "—"}</td>
-                    <td className="num">{l.elevGain != null ? Math.round(l.elevGain) : "—"}</td>
+          <div className="table-scroll-wrap">
+            <div className="table-scroll" style={{ maxHeight: 380, overflow: "auto" }}>
+              <table>
+                <thead>
+                  <tr>
+                    <th>累计时间</th><th>段</th><th>距离</th><th>配速</th>
+                    <th>心率</th><th>最大</th><th>步频</th><th>步幅</th>
+                    <th>爬升</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {laps.map((l) => (
+                    <tr key={`${l.labelId}-${l.lapIndex}`}>
+                      <td className="num" style={{ color: "var(--text-faint)" }}>{fmtDur(l.elapsedSec)}</td>
+                      <td>{l.lapIndex}</td>
+                      <td className="num">{(l.distanceM / 1000).toFixed(2)}</td>
+                      <td className="num" style={{ color: paceColor(l.avgPaceSec, 270, 330) }}>{fmtPace(l.avgPaceSec)}</td>
+                      <td className="num">{l.avgHr || "—"}</td>
+                      <td className="num" style={{ color: "var(--text-faint)" }}>{l.maxHr || "—"}</td>
+                      <td className="num">{l.avgCadence || "—"}</td>
+                      <td className="num">{l.avgStrideM ? l.avgStrideM.toFixed(2) : "—"}</td>
+                      <td className="num">{l.elevGain != null ? Math.round(l.elevGain) : "—"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
       )}
@@ -258,14 +275,15 @@ export default function SessionView({
         )}
         {aiErr && <div className="banner error">{aiErr}</div>}
 
-        <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
+        <div style={{ display: "flex", gap: 8, marginBottom: 14, minWidth: 0, width: "100%" }}>
           <input
+            style={{ flex: 1, minWidth: 0 }}
             placeholder={multi ? "关注点（可选），例如：400m 组掉速，是不是组间休息不够？" : "关注点（可选），例如：这次长距离后程掉速，是不是强度太高了？"}
             value={focus}
             onChange={(e) => setFocus(e.target.value)}
             onKeyDown={(e) => { if (e.key === "Enter" && aiConfigured && !busy) runAnalyze(); }}
           />
-          <button className="btn primary" disabled={!aiConfigured || busy} onClick={runAnalyze}>
+          <button className="btn primary" style={{ flexShrink: 0, whiteSpace: "nowrap" }} disabled={!aiConfigured || busy} onClick={runAnalyze}>
             {busy ? <><span className="spin" /> 分析中…</> : reports.length > 0 ? "重新分析" : "开始分析"}
           </button>
         </div>

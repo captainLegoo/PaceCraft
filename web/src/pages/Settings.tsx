@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { api, type SyncSportsPayload } from "../api";
 import { IconDatabase, IconGear, IconHeart, IconSync } from "../icons";
+import WorkflowPanel from "./WorkflowPanel";
 
 const PRESETS = [
   { name: "OpenAI 兼容", provider: "openai", baseUrl: "https://api.openai.com/v1", model: "gpt-4o-mini" },
@@ -17,7 +18,9 @@ export default function Settings({ onStatus }: { onStatus: () => void }) {
   });
   const [status, setStatus] = useState<any>(null);
   const [msg, setMsg] = useState<{ kind: "ok" | "error"; text: string } | null>(null);
+  const [aiMsg, setAiMsg] = useState<{ kind: "ok" | "error"; text: string } | null>(null);
   const [saving, setSaving] = useState(false);
+  const [testing, setTesting] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [syncDays, setSyncDays] = useState(120);
 
@@ -27,38 +30,130 @@ export default function Settings({ onStatus }: { onStatus: () => void }) {
   const [sportsMsg, setSportsMsg] = useState<{ kind: "ok" | "error"; text: string } | null>(null);
   const [sportsSaving, setSportsSaving] = useState(false);
 
-  // 心率档案：maxHr / restingHr 可空（空 = 交回自动推算）
+  type ZoneRow = { zone: string; label: string; hrLo: number | ""; hrHi: number | "" };
+
+  // 心率档案：支持自动推算（HRR）与自定义五区间
   const [hr, setHr] = useState<{
+    calcMode: "auto" | "custom";
     maxHr: number | null; restingHr: number | null;
     observedMaxHr?: number;
-    zones: { zone: string; label: string; hrLo: number; hrHi: number; pctLabel: string }[];
+    effectiveZones: { zone: string; label: string; hrLo: number; hrHi: number | null; pctLabel?: string }[];
+    customZones: ZoneRow[];
+    method?: string;
     saving?: boolean; msg?: { kind: "ok" | "error"; text: string } | null;
-  }>({ maxHr: null, restingHr: null, zones: [] });
+  }>({
+    calcMode: "auto",
+    maxHr: null,
+    restingHr: null,
+    effectiveZones: [],
+    customZones: [
+      { zone: "Z1", label: "有氧耐力", hrLo: "", hrHi: "" },
+      { zone: "Z2", label: "有氧动力", hrLo: "", hrHi: "" },
+      { zone: "Z3", label: "乳酸阈", hrLo: "", hrHi: "" },
+      { zone: "Z4", label: "速度耐力", hrLo: "", hrHi: "" },
+      { zone: "Z5", label: "无氧动力", hrLo: "", hrHi: "" },
+    ],
+  });
 
   /** 读档案 + 从当前数据推算的 HRmax + 生效中的区间边界 */
   const loadHr = async () => {
     try {
       const p = await api.profile();
-      setHr((h) => ({ ...h, maxHr: p?.maxHr ?? null, restingHr: p?.restingHr ?? null }));
-      // 用任意一次有分段的训练取回当前区间，让用户看到自己填的值产生了什么结果
-      const acts = await api.activities({ limit: "1" });
-      if (acts.length > 0) {
-        const detail = await api.activity(acts[0].labelId);
-        setHr((h) => ({
-          ...h,
-          zones: detail.zones?.zones ?? [],
-          observedMaxHr: detail.zones?.maxHr,
+      let customZones: ZoneRow[] = [
+        { zone: "Z1", label: "有氧耐力", hrLo: "", hrHi: "" },
+        { zone: "Z2", label: "有氧动力", hrLo: "", hrHi: "" },
+        { zone: "Z3", label: "乳酸阈", hrLo: "", hrHi: "" },
+        { zone: "Z4", label: "速度耐力", hrLo: "", hrHi: "" },
+        { zone: "Z5", label: "无氧动力", hrLo: "", hrHi: "" },
+      ];
+      if (p?.customHrZones) {
+        try {
+          const parsed = JSON.parse(p.customHrZones);
+          if (Array.isArray(parsed) && parsed.length >= 5) {
+            customZones = parsed.map((item: any, i: number) => ({
+              zone: item.zone || customZones[i].zone,
+              label: item.label || customZones[i].label,
+              hrLo: item.hrLo ?? "",
+              hrHi: item.hrHi != null && item.hrHi !== "" && Number(item.hrHi) < 900 ? Number(item.hrHi) : "",
+            }));
+          }
+        } catch {}
+      }
+
+      const effective = p?.effectiveZones ?? [];
+      // 如果自定义列表里全为空，且有当前推算区间，可把当前推算区间作为自定义的默认预填草稿
+      if (customZones.every((z) => z.hrLo === "" && z.hrHi === "") && effective.length >= 5) {
+        customZones = effective.map((z: any, idx: number) => ({
+          zone: z.zone,
+          label: z.label,
+          hrLo: z.hrLo ?? "",
+          hrHi: idx === 4 && (!z.hrHi || z.hrHi >= 900) ? "" : (z.hrHi ?? ""),
         }));
       }
+
+      setHr((h) => ({
+        ...h,
+        calcMode: p?.hrCalcMode === "custom" ? "custom" : "auto",
+        maxHr: p?.maxHr ?? null,
+        restingHr: p?.restingHr ?? null,
+        observedMaxHr: p?.observedMaxHr,
+        effectiveZones: effective,
+        customZones,
+        method: p?.hrMethod,
+      }));
     } catch { /* 还没同步过数据时忽略 */ }
+  };
+
+  const copyEffectiveToCustom = () => {
+    if (hr.effectiveZones.length >= 5) {
+      const copied: ZoneRow[] = hr.effectiveZones.map((z, idx) => ({
+        zone: z.zone,
+        label: z.label,
+        hrLo: z.hrLo,
+        hrHi: idx === 4 && (!z.hrHi || z.hrHi >= 900) ? "" : ((z.hrHi as number | null) ?? ""),
+      }));
+      setHr((h) => ({ ...h, calcMode: "custom", customZones: copied, msg: null }));
+    } else {
+      setHr((h) => ({ ...h, calcMode: "custom" }));
+    }
   };
 
   const saveHr = async () => {
     setHr((h) => ({ ...h, saving: true, msg: null }));
     try {
-      await api.saveHrProfile({ maxHr: hr.maxHr, restingHr: hr.restingHr });
+      let customPayload: { zone: string; label: string; hrLo: number; hrHi?: number | null }[] | null = null;
+      if (hr.calcMode === "custom") {
+        for (let i = 0; i < hr.customZones.length; i++) {
+          const z = hr.customZones[i];
+          if (z.hrLo === "" || (i < 4 && z.hrHi === "")) {
+            throw new Error(`请完整填写 ${z.zone}（${z.label}）的心率上下限`);
+          }
+        }
+        customPayload = hr.customZones.map((z, idx) => ({
+          zone: z.zone,
+          label: z.label,
+          hrLo: Number(z.hrLo),
+          hrHi: idx === 4 && z.hrHi === "" ? null : Number(z.hrHi),
+        }));
+      } else {
+        if (hr.customZones.some((z) => z.hrLo !== "")) {
+          customPayload = hr.customZones.map((z, idx) => ({
+            zone: z.zone,
+            label: z.label,
+            hrLo: Number(z.hrLo) || 0,
+            hrHi: idx === 4 && z.hrHi === "" ? null : (Number(z.hrHi) || 0),
+          }));
+        }
+      }
+
+      await api.saveHrProfile({
+        maxHr: hr.maxHr,
+        restingHr: hr.restingHr,
+        hrCalcMode: hr.calcMode,
+        customHrZones: customPayload,
+      });
       await loadHr();
-      setHr((h) => ({ ...h, msg: { kind: "ok", text: "已保存。所有心率区间会按新值重算。" } }));
+      setHr((h) => ({ ...h, msg: { kind: "ok", text: "已保存。所有心率区间会按新配置立即重算生效。" } }));
       onStatus();
     } catch (e) {
       setHr((h) => ({ ...h, msg: { kind: "error", text: (e as Error).message } }));
@@ -110,14 +205,25 @@ export default function Settings({ onStatus }: { onStatus: () => void }) {
   };
 
   const save = async () => {
-    setSaving(true); setMsg(null);
+    setSaving(true); setAiMsg(null);
     try {
       await api.saveAiSettings(cfg);
-      setMsg({ kind: "ok", text: "已保存。之后在任意一次训练的详情页点「开始分析」即可。" });
+      setAiMsg({ kind: "ok", text: "已保存配置。之后在训练详情页、训练周报与备赛页均可使用 AI 分析。" });
       onStatus();
+      api.status().then(setStatus).catch(() => {});
     } catch (e) {
-      setMsg({ kind: "error", text: (e as Error).message });
+      setAiMsg({ kind: "error", text: (e as Error).message });
     } finally { setSaving(false); }
+  };
+
+  const testAi = async () => {
+    setTesting(true); setAiMsg(null);
+    try {
+      const r = await api.testAiSettings(cfg);
+      setAiMsg({ kind: "ok", text: `连接成功（耗时 ${r.latencyMs} ms）！模型回复：「${r.reply || "正常"}」` });
+    } catch (e) {
+      setAiMsg({ kind: "error", text: (e as Error).message });
+    } finally { setTesting(false); }
   };
 
   const doSync = async () => {
@@ -142,111 +248,293 @@ export default function Settings({ onStatus }: { onStatus: () => void }) {
 
   return (
     <>
-      <div className="grid g2" style={{ marginBottom: 14 }}>
-        <div className="card">
-          <h3 className="card-title"><IconGear size={14} />AI 模型</h3>
-          <p className="card-sub">
-            任意 OpenAI 兼容接口或 Anthropic 均可。配置只保存在本机 SQLite，不会外传。
-          </p>
+      <div className="grid g2" style={{ alignItems: "start", marginBottom: 14 }}>
+        {/* 左列：AI 模型配置 + 心率档案 */}
+        <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+          <div className="card">
+            <h3 className="card-title"><IconGear size={14} />AI 模型</h3>
+            <p className="card-sub">
+              任意 OpenAI 兼容接口或 Anthropic 均可。配置只保存在本机 SQLite，不会外传。
+            </p>
 
-          <div className="hint" style={{ marginBottom: 12 }}>快速填入</div>
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 16 }}>
-            {PRESETS.map((p) => (
-              <button key={p.name} className="btn sm" onClick={() => applyPreset(p)}>{p.name}</button>
-            ))}
-          </div>
-
-          <label className="field">
-            <span>接口协议</span>
-            <select value={cfg.provider} onChange={(e) => setCfg({ ...cfg, provider: e.target.value })}>
-              <option value="openai">OpenAI 兼容（/chat/completions）</option>
-              <option value="anthropic">Anthropic（/v1/messages）</option>
-            </select>
-          </label>
-
-          <label className="field">
-            <span>Base URL</span>
-            <input value={cfg.baseUrl} onChange={(e) => setCfg({ ...cfg, baseUrl: e.target.value })} placeholder="https://api.openai.com/v1" />
-            <div className="hint">
-              {cfg.provider === "openai"
-                ? "需包含到 /v1 这一层，程序会自动拼 /chat/completions"
-                : "填到域名即可，程序会自动拼 /v1/messages"}
+            <div className="hint" style={{ marginBottom: 12 }}>快速填入</div>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 16 }}>
+              {PRESETS.map((p) => (
+                <button key={p.name} className="btn sm" onClick={() => applyPreset(p)}>{p.name}</button>
+              ))}
             </div>
-          </label>
 
-          <label className="field">
-            <span>API Key</span>
-            <input
-              type="password" value={cfg.apiKey} autoComplete="off"
-              onChange={(e) => setCfg({ ...cfg, apiKey: e.target.value })}
-              placeholder={status?.aiConfigured ? "已保存（留空则不修改）" : "sk-..."}
-            />
-          </label>
-
-          <label className="field">
-            <span>模型名</span>
-            <input value={cfg.model} onChange={(e) => setCfg({ ...cfg, model: e.target.value })} placeholder="gpt-4o-mini" />
-          </label>
-
-          <div className="grid g2">
             <label className="field">
-              <span>温度</span>
-              <input type="number" step="0.1" value={cfg.temperature} onChange={(e) => setCfg({ ...cfg, temperature: Number(e.target.value) })} />
+              <span>接口协议</span>
+              <select value={cfg.provider} onChange={(e) => setCfg({ ...cfg, provider: e.target.value })}>
+                <option value="openai">OpenAI 兼容（/chat/completions）</option>
+                <option value="anthropic">Anthropic（/v1/messages）</option>
+              </select>
             </label>
+
             <label className="field">
-              <span>最大输出 token</span>
-              <input type="number" step="500" value={cfg.maxTokens} onChange={(e) => setCfg({ ...cfg, maxTokens: Number(e.target.value) })} />
+              <span>Base URL</span>
+              <input value={cfg.baseUrl} onChange={(e) => setCfg({ ...cfg, baseUrl: e.target.value })} placeholder="https://api.openai.com/v1" />
               <div className="hint">
-                用推理模型（如 agnes / o-series / 带 thinking 的模型）时至少给 8000：
-                它们的「思考」和「正文」共用这一个预算，思考烧光了正文就是空的。
+                {cfg.provider === "openai"
+                  ? "需包含到 /v1 这一层，程序会自动拼 /chat/completions"
+                  : "填到域名即可，程序会自动拼 /v1/messages"}
               </div>
             </label>
-          </div>
 
-          <button className="btn primary" onClick={save} disabled={saving || !cfg.apiKey || !cfg.baseUrl || !cfg.model}>
-            {saving ? "保存中…" : "保存配置"}
-          </button>
-        </div>
+            <label className="field">
+              <span>API Key</span>
+              <input
+                type="password" value={cfg.apiKey} autoComplete="off"
+                onChange={(e) => setCfg({ ...cfg, apiKey: e.target.value })}
+                placeholder={status?.aiConfigured ? "已保存（留空则不修改）" : "sk-..."}
+              />
+            </label>
 
-        <div>
-          {/* 心率档案：分区边界的唯一来源，必须让用户自己填 */}
-          <div className="card" style={{ marginBottom: 14 }}>
-            <h3 className="card-title"><IconHeart size={14} />心率档案</h3>
-            <p className="card-sub">
-              心率区间的边界由这两个值算出来（按储备心率 HRR 百分比）。
-              同样 140 bpm，对静息 49 的人是有氧中段，对静息 75 的人已经是高强度 ——
-              所以这里必须是你自己的数值，而不是某个通用常数。
-            </p>
+            <label className="field">
+              <span>模型名</span>
+              <input value={cfg.model} onChange={(e) => setCfg({ ...cfg, model: e.target.value })} placeholder="gpt-4o-mini" />
+            </label>
+
             <div className="grid g2">
               <label className="field">
-                <span>实测最大心率</span>
-                <input
-                  type="number" value={hr.maxHr ?? ""} placeholder="留空 = 自动推算"
-                  onChange={(e) => setHr({ ...hr, maxHr: e.target.value === "" ? null : Number(e.target.value) })}
-                />
-                <div className="hint">
-                  留空则从你的历史分圈推算（只取高强度且持续够久的分圈），再兜底到 Tanaka 公式
-                  {hr.observedMaxHr ? <>。当前数据推算值约 <strong>{hr.observedMaxHr}</strong></> : null}
-                </div>
+                <span>温度</span>
+                <input type="number" step="0.1" value={cfg.temperature} onChange={(e) => setCfg({ ...cfg, temperature: Number(e.target.value) })} />
               </label>
               <label className="field">
-                <span>实测静息心率</span>
-                <input
-                  type="number" value={hr.restingHr ?? ""} placeholder="留空 = 用 55"
-                  onChange={(e) => setHr({ ...hr, restingHr: e.target.value === "" ? null : Number(e.target.value) })}
-                />
+                <span>最大输出 token</span>
+                <input type="number" step="500" value={cfg.maxTokens} onChange={(e) => setCfg({ ...cfg, maxTokens: Number(e.target.value) })} />
                 <div className="hint">
-                  早晨未起床时测量的那种。这个值是 HRR 的分母，<strong>对分区结果影响最大</strong>。
-                  留空则用生理中位数 55。
+                  用推理模型（如 deepseek-r1 / o-series / 带 thinking 的模型）时建议给 8000+：
+                  它们的「思考」和「正文」共用这一个预算，思考烧光了正文就是空的。
                 </div>
               </label>
             </div>
-            <div className="hint" style={{ marginBottom: 10 }}>
-              当前生效区间：
-              {hr.zones.length > 0 ? (
-                <> {hr.zones.map((z) => `${z.zone} ${z.hrLo}–${z.hrHi}`).join("　")}</>
-              ) : "（保存后显示）"}
+
+            <div style={{ display: "flex", gap: 10, marginTop: 4, alignItems: "center" }}>
+              <button
+                className="btn primary"
+                onClick={save}
+                disabled={saving || testing || (!cfg.apiKey && !status?.aiConfigured) || !cfg.baseUrl || !cfg.model}
+              >
+                {saving ? "保存中…" : "保存配置"}
+              </button>
+              <button
+                className="btn"
+                onClick={testAi}
+                disabled={saving || testing || (!cfg.apiKey && !status?.aiConfigured) || !cfg.baseUrl || !cfg.model}
+              >
+                {testing ? <><span className="spin" /> 测试连接中…</> : "测试连接"}
+              </button>
             </div>
+
+            {aiMsg && (
+              <div className={`banner ${aiMsg.kind === "ok" ? "info" : "error"}`} style={{ marginTop: 12, marginBottom: 0 }}>
+                {aiMsg.text}
+              </div>
+            )}
+
+            <div style={{ marginTop: 16, paddingTop: 14, borderTop: "1px solid var(--border)", fontSize: 12, color: "var(--text-dim)", lineHeight: 1.6 }}>
+              <div style={{ fontWeight: 600, color: "var(--text)", marginBottom: 6, display: "flex", alignItems: "center", gap: 6 }}>
+                <span>💡 AI 赋能场景</span>
+                {status?.aiConfigured ? (
+                  <span className="pill good" style={{ fontSize: 11, fontWeight: 500 }}>已就绪</span>
+                ) : (
+                  <span className="pill" style={{ fontSize: 11, fontWeight: 500 }}>未配置</span>
+                )}
+              </div>
+              <ul style={{ margin: 0, paddingLeft: 18, display: "flex", flexDirection: "column", gap: 4 }}>
+                <li><strong>单次训练深度复盘</strong>：训练详情页分析心率漂移、配速与体能消耗</li>
+                <li><strong>周期训练周报解读</strong>：结合负荷比（ACWR）评估疲劳积累与超量恢复</li>
+                <li><strong>赛事备战策略推演</strong>：基于历史锚点预测完赛用时与分段配速</li>
+              </ul>
+            </div>
+          </div>
+
+          {/* 心率档案：支持自动推算与直接自定义五区间 */}
+          <div className="card">
+            <h3 className="card-title"><IconHeart size={14} />心率档案</h3>
+            <p className="card-sub">
+              心率区间决定了训练场次和周报里的 Z1–Z5 统计。
+              支持自动推算（按 HRR 储备百分比），也可以直接自定义绝对心率（可直接照抄 COROS 或手表 App 设置）。
+            </p>
+
+            <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
+              <button
+                type="button"
+                className={`pill ${hr.calcMode === "auto" ? "active" : ""}`}
+                style={{ cursor: "pointer", fontWeight: hr.calcMode === "auto" ? 600 : 400 }}
+                onClick={() => setHr((h) => ({ ...h, calcMode: "auto" }))}
+              >
+                自动推算（HRR 储备心率）
+              </button>
+              <button
+                type="button"
+                className={`pill ${hr.calcMode === "custom" ? "active" : ""}`}
+                style={{ cursor: "pointer", fontWeight: hr.calcMode === "custom" ? 600 : 400 }}
+                onClick={() => setHr((h) => ({ ...h, calcMode: "custom" }))}
+              >
+                自定义五区间（可照抄手表设置）
+              </button>
+            </div>
+
+            {hr.calcMode === "auto" ? (
+              <>
+                <div className="grid g2" style={{ marginBottom: 10 }}>
+                  <label className="field">
+                    <span>实测最大心率</span>
+                    <input
+                      type="number" value={hr.maxHr ?? ""} placeholder="留空 = 自动推算"
+                      onChange={(e) => setHr({ ...hr, maxHr: e.target.value === "" ? null : Number(e.target.value) })}
+                    />
+                    <div className="hint">
+                      留空则从你的历史分圈推算（取高强度分圈峰值中位数），再兜底到 Tanaka 公式
+                      {hr.observedMaxHr ? <>。当前数据推算值约 <strong>{hr.observedMaxHr}</strong></> : null}
+                    </div>
+                  </label>
+                  <label className="field">
+                    <span>实测静息心率</span>
+                    <input
+                      type="number" value={hr.restingHr ?? ""} placeholder="留空 = 用 55"
+                      onChange={(e) => setHr({ ...hr, restingHr: e.target.value === "" ? null : Number(e.target.value) })}
+                    />
+                    <div className="hint">
+                      早晨清醒未起床时的心率。留空则使用生理中位数 55。
+                    </div>
+                  </label>
+                </div>
+                <div style={{ marginBottom: 12 }}>
+                  <button
+                    type="button"
+                    className="pill"
+                    style={{ fontSize: 12, cursor: "pointer" }}
+                    onClick={copyEffectiveToCustom}
+                  >
+                    📋 将当前推算值复制到自定义区间微调
+                  </button>
+                </div>
+              </>
+            ) : (
+              <div style={{ marginBottom: 14 }}>
+                <div className="hint" style={{ marginBottom: 8, lineHeight: 1.5 }}>
+                  填写各个区间的起止心率（bpm），低于 Z1 下限将自动归为「Z0 积极恢复」，Z5 无氧动力默认无上限（直接照抄手表留空即可）：
+                </div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                  {/* Z0 积极恢复：与手表 6 行列表 1:1 对齐，自动跟随 Z1 下限 */}
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 10,
+                      background: "var(--surface-2)",
+                      padding: "8px 12px",
+                      borderRadius: 6,
+                      border: "1px dashed var(--border)",
+                      opacity: 0.85,
+                    }}
+                  >
+                    <span style={{ width: 120, fontSize: 13, fontWeight: 500, color: "var(--text-dim)" }}>
+                      <span className="pill" style={{ marginRight: 6, fontSize: 11, background: "var(--surface-3)", color: "var(--text-dim)" }}>Z0</span>
+                      积极恢复
+                    </span>
+                    <span style={{ width: 85, textAlign: "center", fontSize: 13, color: "var(--text-faint)", fontWeight: 500 }}>
+                      &lt; {hr.customZones[0]?.hrLo || "—"}
+                    </span>
+                    <span style={{ color: "var(--text-faint)" }}>~</span>
+                    <span style={{ fontSize: 12, color: "var(--text-faint)" }}>
+                      bpm（自动跟随 Z1 下限，无需单独填写）
+                    </span>
+                  </div>
+
+                  {hr.customZones.map((z, idx) => {
+                    const isLast = idx === hr.customZones.length - 1;
+                    return (
+                      <div
+                        key={z.zone}
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 10,
+                          background: "var(--surface-2)",
+                          padding: "8px 12px",
+                          borderRadius: 6,
+                          border: "1px solid var(--border)",
+                        }}
+                      >
+                        <span style={{ width: 120, fontSize: 13, fontWeight: 500 }}>
+                          <span className="pill" style={{ marginRight: 6, fontSize: 11 }}>{z.zone}</span>
+                          {z.label}
+                        </span>
+                        <input
+                          type="number"
+                          style={{ width: 85, textAlign: "center" }}
+                          placeholder="下限"
+                          value={z.hrLo}
+                          onChange={(e) => {
+                            const val = e.target.value === "" ? "" : Number(e.target.value);
+                            const next = [...hr.customZones];
+                            next[idx] = { ...next[idx], hrLo: val };
+                            setHr({ ...hr, customZones: next });
+                          }}
+                        />
+                        <span style={{ color: "var(--text-faint)" }}>~</span>
+                        {isLast ? (
+                          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                            <input
+                              type="number"
+                              style={{ width: 95, textAlign: "center" }}
+                              placeholder="无上限"
+                              value={z.hrHi}
+                              onChange={(e) => {
+                                const val = e.target.value === "" ? "" : Number(e.target.value);
+                                const next = [...hr.customZones];
+                                next[idx] = { ...next[idx], hrHi: val };
+                                setHr({ ...hr, customZones: next });
+                              }}
+                            />
+                            <span style={{ fontSize: 12, color: "var(--text-faint)" }}>
+                              bpm（手表「&gt; {z.hrLo || 190}」无上限，留空即可）
+                            </span>
+                          </div>
+                        ) : (
+                          <>
+                            <input
+                              type="number"
+                              style={{ width: 85, textAlign: "center" }}
+                              placeholder="上限"
+                              value={z.hrHi}
+                              onChange={(e) => {
+                                const val = e.target.value === "" ? "" : Number(e.target.value);
+                                const next = [...hr.customZones];
+                                next[idx] = { ...next[idx], hrHi: val };
+                                if (val !== "" && idx < next.length - 1 && next[idx + 1].hrLo === "") {
+                                  next[idx + 1] = { ...next[idx + 1], hrLo: Number(val) + 1 };
+                                }
+                                setHr({ ...hr, customZones: next });
+                              }}
+                            />
+                            <span style={{ fontSize: 12, color: "var(--text-faint)" }}>bpm</span>
+                          </>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            <div className="hint" style={{ marginBottom: 10 }}>
+              当前生效模式：<strong>{hr.method ?? (hr.calcMode === "custom" ? "自定义五区间心率法" : "五区间心率法（HRR）")}</strong>
+              {hr.effectiveZones.length > 0 && (
+                <div style={{ marginTop: 4 }}>
+                  <span style={{ color: "var(--text-faint)", marginRight: 8 }}>
+                    Z0 &lt;{hr.effectiveZones[0]?.hrLo}
+                  </span>
+                  {hr.effectiveZones.map((z) => `${z.zone} ${z.hrHi && z.hrHi < 900 ? `${z.hrLo}–${z.hrHi}` : `>${z.hrLo}`}`).join("　")}
+                </div>
+              )}
+            </div>
+
             <button className="btn primary" onClick={saveHr} disabled={hr.saving}>
               {hr.saving ? "保存中…" : "保存心率档案"}
             </button>
@@ -256,8 +544,11 @@ export default function Settings({ onStatus }: { onStatus: () => void }) {
               </div>
             )}
           </div>
+        </div>
 
-          <div className="card" style={{ marginBottom: 14 }}>
+        {/* 右列：COROS 数据同步 + 当前数据状态 */}
+        <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+          <div className="card">
             <h3 className="card-title"><IconSync size={14} />数据同步</h3>
             <p className="card-sub">
               COROS 没有提供推送通知，只能主动拉取。建议每天或每次训练后手动同步一次。
@@ -367,6 +658,8 @@ export default function Settings({ onStatus }: { onStatus: () => void }) {
           </div>
         </div>
       </div>
+
+      <WorkflowPanel />
 
       <div className="card">
         <h3 className="card-title">关于数据来源</h3>

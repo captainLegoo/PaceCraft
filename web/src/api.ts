@@ -27,10 +27,11 @@ export type AiReport = {
 export type ActivityDetail = {
   activity: Activity & { raw?: string };
   detail: Record<string, any> | null;
+  sessionKey?: string | null;
   laps: Lap[];
   scatter: { lapIndex: number; distanceKm: number; paceSec: number; hr: number; maxHr: number; cadence: number; strideM: number }[];
   reports: AiReport[];
-  zones: { basis: number; maxHr: number; restingHr: number; reserve: number; source: string; method: string; usedFallback: boolean; belowZone1Seconds: number; belowZone1Pct: number; zones: { zone: string; label: string; pctLabel: string; seconds: number; pct: number; hrLo: number; hrHi: number }[] };
+  zones: { basis: number; maxHr: number; restingHr: number; reserve: number; source: string; method: string; usedFallback: boolean; belowZone1Seconds: number; belowZone1Pct: number; zones: { zone: string; label: string; pctLabel: string; seconds: number; pct: number; hrLo: number; hrHi: number | null }[] };
   age: number | null;
   lapSummary: {
     count: number; totalDistanceM: number; granularityM: number | null;
@@ -74,7 +75,7 @@ export type SessionDetail = {
   session: Session;
   activities: (Activity & { detail: any })[];
   laps: SessionLap[];
-  zones: { basis: number; maxHr: number; restingHr: number; reserve: number; source: string; method: string; usedFallback: boolean; belowZone1Seconds: number; belowZone1Pct: number; zones: { zone: string; label: string; pctLabel: string; seconds: number; pct: number; hrLo: number; hrHi: number }[] };
+  zones: { basis: number; maxHr: number; restingHr: number; reserve: number; source: string; method: string; usedFallback: boolean; belowZone1Seconds: number; belowZone1Pct: number; zones: { zone: string; label: string; pctLabel: string; seconds: number; pct: number; hrLo: number; hrHi: number | null }[] };
   reports: SessionReport[];
   age: number | null;
 };
@@ -243,9 +244,13 @@ export const api = {
   saveRaceNotes: (id: number, body: { notes?: string | null; labelId?: string | null }) =>
     req<Race>(`/api/races/${id}/notes`, { method: "PUT", body: JSON.stringify(body) }),
 
-  /** 保存心率档案（maxHr / restingHr）。留 null 表示交回自动推算 */
-  saveHrProfile: (body: { maxHr: number | null; restingHr: number | null }) =>
-    req<any>("/api/profile/hr", { method: "PUT", body: JSON.stringify(body) }),
+  /** 保存心率档案。支持自动推算（maxHr/restingHr）或自定义各区间（customHrZones） */
+  saveHrProfile: (body: {
+    maxHr?: number | null;
+    restingHr?: number | null;
+    hrCalcMode?: "auto" | "custom";
+    customHrZones?: { zone: string; label: string; hrLo: number; hrHi?: number | null }[] | null;
+  }) => req<any>("/api/profile/hr", { method: "PUT", body: JSON.stringify(body) }),
 
   status: () => req<any>("/api/status"),
   sync: (days = 120) => req<any>("/api/sync?days=" + days, { method: "POST" }),
@@ -300,6 +305,8 @@ export const api = {
 
   aiSettings: () => req<any>("/api/ai/settings"),
   saveAiSettings: (cfg: any) => req<any>("/api/ai/settings", { method: "PUT", body: JSON.stringify(cfg) }),
+  testAiSettings: (cfg: any) =>
+    req<{ ok: boolean; reply: string; latencyMs: number }>("/api/ai/test", { method: "POST", body: JSON.stringify(cfg) }),
   analyze: (labelId: string, focus: string | null) =>
     req<{ report: string; provider: string; model: string }>(
       `/api/ai/analyze/${labelId}`, { method: "POST", body: JSON.stringify({ focus }) }),

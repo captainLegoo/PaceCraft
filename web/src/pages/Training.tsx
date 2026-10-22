@@ -45,6 +45,7 @@ export default function Training({ onOpen, onOpenSession, onOpenWeek }: { onOpen
   const rangeKm = sessionsInRange.reduce((n, s) => n + s.totals.distanceKm, 0);
   const multiInRange = sessionsInRange.filter((s) => s.activityCount > 1);
   const latestLoad = load[load.length - 1];
+  const loadStatus = ratioStatus(latestLoad?.ratio);
 
   return (
     <>
@@ -52,9 +53,19 @@ export default function Training({ onOpen, onOpenSession, onOpenWeek }: { onOpen
         <div className="card stat-card">
           <div className="stat">
             <span className="label"><IconRoute size={15} />本周跑量</span>
-            <span className="value num">{last.distanceKm}<span className="unit">km</span></span>
+            <span className="value num">
+              {last.distanceKm}<span className="unit">km</span>
+              {deltaKm != null && (
+                <span
+                  className={`pill ${deltaKm >= 0 ? "good" : ""}`}
+                  style={{ fontSize: 11, marginLeft: 8, verticalAlign: "middle", fontWeight: 500 }}
+                >
+                  {deltaKm >= 0 ? `+${deltaKm.toFixed(1)} km` : `${deltaKm.toFixed(1)} km`}
+                </span>
+              )}
+            </span>
             <span className="hint">
-              {deltaKm == null ? "仅一周数据" : deltaKm >= 0 ? `较上周 +${deltaKm.toFixed(1)} km` : `较上周 ${deltaKm.toFixed(1)} km`}
+              {deltaKm == null ? "仅一周数据" : deltaKm >= 0 ? "较上周持续累积" : "较上周主动减量"}
             </span>
           </div>
         </div>
@@ -74,10 +85,54 @@ export default function Training({ onOpen, onOpenSession, onOpenWeek }: { onOpen
         </div>
         <div className="card stat-card">
           <div className="stat">
-            <span className="label"><IconLoad size={15} />当前负荷比</span>
-            <span className="value num" style={{ color: ratioColor(latestLoad?.ratio) }}>
-              {latestLoad?.ratio ?? "—"}
-            </span>
+            <span className="label"><IconLoad size={15} />当前负荷比 (ACWR)</span>
+            <div style={{ display: "flex", alignItems: "baseline", gap: 8, flexWrap: "wrap" }}>
+              <span className="value num" style={{ color: ratioColor(latestLoad?.ratio) }}>
+                {latestLoad?.ratio != null ? latestLoad.ratio.toFixed(2) : "—"}
+              </span>
+              {loadStatus && (
+                <span
+                  className="pill"
+                  style={{
+                    fontSize: 11,
+                    verticalAlign: "middle",
+                    color: loadStatus.color,
+                    background: loadStatus.bg,
+                    borderColor: loadStatus.border,
+                    fontWeight: 600,
+                  }}
+                >
+                  {loadStatus.label}
+                </span>
+              )}
+            </div>
+
+            {/* Gabbett ACWR 区间色带标尺 */}
+            {latestLoad?.ratio != null && (
+              <div style={{ marginTop: 8, marginBottom: 4 }}>
+                <div style={{ position: "relative", height: 6, borderRadius: 3, background: "var(--surface-3)", display: "flex", overflow: "hidden" }}>
+                  <div title="减量区 (<0.8)" style={{ width: "30%", background: "var(--info)", opacity: 0.85 }} />
+                  <div title="安全甜点区 (0.8–1.3)" style={{ width: "35%", background: "var(--good)" }} />
+                  <div title="警示区 (1.3–1.5)" style={{ width: "15%", background: "var(--warn)" }} />
+                  <div title="高危区 (>1.5)" style={{ width: "20%", background: "var(--bad)" }} />
+                </div>
+                <div style={{ position: "relative", width: "100%", height: 7, marginTop: 2 }}>
+                  <div
+                    style={{
+                      position: "absolute",
+                      left: `${Math.min(Math.max(((latestLoad.ratio - 0.4) / (1.8 - 0.4)) * 100, 2), 98)}%`,
+                      transform: "translateX(-50%)",
+                      width: 0,
+                      height: 0,
+                      borderLeft: "4px solid transparent",
+                      borderRight: "4px solid transparent",
+                      borderBottom: `6px solid ${ratioColor(latestLoad.ratio)}`,
+                    }}
+                  />
+                </div>
+              </div>
+            )}
+
             <span className="hint">
               {latestLoad?.comment ?? "—"}｜短期 {latestLoad?.shortLoad ?? "—"} / 长期 {latestLoad?.longLoad ?? "—"}
             </span>
@@ -123,25 +178,77 @@ export default function Training({ onOpen, onOpenSession, onOpenWeek }: { onOpen
             series={[
               { key: "short", label: "短期负荷", color: "var(--chart-accent)", values: recentLoad.map((p) => p.shortLoad) },
               { key: "long", label: "长期负荷", color: "var(--chart-muted)", values: recentLoad.map((p) => p.longLoad) },
+              { key: "ratio", label: "负荷比 (ACWR)", color: "var(--chart-warn)", values: recentLoad.map((p) => p.ratio), axis: "right" },
             ]}
             height={230}
             yFmt={(n) => String(Math.round(n))}
+            yFmtRight={(n) => n.toFixed(2)}
           />
         </div>
       </div>
 
       <div className="card" style={{ marginBottom: 14 }}>
-        <h3 className="card-title">负荷比趋势</h3>
-        <p className="card-sub">负荷比 = 短期负荷 / 长期负荷。连续高于 1.3 有累积疲劳风险，长期低于 0.8 刺激不足</p>
-        <LineChart
-          labels={recentLoad.map((p) => p.date)}
-          series={[{ key: "ratio", label: "负荷比（7日均）", color: "var(--chart-warn)", values: recentLoad.map((p) => p.ratioAvg7 ?? p.ratio) }]}
-          bands={[{ from: 0.8, to: 1.3, color: "var(--chart-good)" }]}
-          height={150}
-          yMin={0.4}
-          yMax={1.6}
-          yFmt={(n) => n.toFixed(1)}
-        />
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", flexWrap: "wrap", gap: 8 }}>
+          <div>
+            <h3 className="card-title">急慢性负荷比趋势（ACWR · 伤病风险监控）</h3>
+            <p className="card-sub" style={{ margin: 0 }}>
+              基于 Tim Gabbett (BJSM 2016) 理论：负荷比（ACWR）= 7天急性负荷 / 28天慢性负荷。0.80–1.30 为伤病风险极低的最佳甜点区。
+            </p>
+          </div>
+          {loadStatus && (
+            <span
+              className="pill"
+              style={{
+                fontSize: 12,
+                fontWeight: 600,
+                color: loadStatus.color,
+                background: loadStatus.bg,
+                borderColor: loadStatus.border,
+              }}
+            >
+              当前：{loadStatus.title}
+            </span>
+          )}
+        </div>
+
+        <div style={{ marginTop: 12 }}>
+          <LineChart
+            labels={recentLoad.map((p) => p.date)}
+            series={[{ key: "ratio", label: "负荷比（7日均）", color: "var(--chart-warn)", values: recentLoad.map((p) => p.ratioAvg7 ?? p.ratio) }]}
+            bands={[{ from: 0.8, to: 1.3, color: "var(--chart-good)" }]}
+            height={160}
+            yMin={0.4}
+            yMax={1.8}
+            yFmt={(n) => n.toFixed(2)}
+          />
+        </div>
+
+        {/* Gabbett ACWR 科学诊断栏 */}
+        <div style={{ marginTop: 12, padding: "10px 14px", background: "var(--surface-2)", borderRadius: 8, fontSize: 12.5, lineHeight: 1.6 }}>
+          <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 6, fontWeight: 500, fontSize: 12 }}>
+            <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+              <span style={{ width: 8, height: 8, borderRadius: 2, background: "var(--good)" }} />
+              0.80–1.30 最佳甜点区（伤病率最低 &lt;5%）
+            </span>
+            <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+              <span style={{ width: 8, height: 8, borderRadius: 2, background: "var(--warn)" }} />
+              1.30–1.50 负荷警示区（疲劳较快蓄积）
+            </span>
+            <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+              <span style={{ width: 8, height: 8, borderRadius: 2, background: "var(--bad)" }} />
+              &gt;1.50 危险区（伤病风险翻倍）
+            </span>
+            <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+              <span style={{ width: 8, height: 8, borderRadius: 2, background: "var(--info)" }} />
+              &lt;0.80 减量恢复区
+            </span>
+          </div>
+          {loadStatus && (
+            <div style={{ color: "var(--text)" }}>
+              <strong>当前体能诊断</strong>：{loadStatus.advice}
+            </div>
+          )}
+        </div>
       </div>
 
       <div className="card">
@@ -249,10 +356,52 @@ export default function Training({ onOpen, onOpenSession, onOpenWeek }: { onOpen
   );
 }
 
-function ratioColor(r: number | null) {
+function ratioColor(r: number | null | undefined) {
   if (r == null) return "var(--text)";
-  if (r > 1.3) return "var(--bad)";
-  if (r > 1.15) return "var(--warn)";
+  if (r >= 1.5) return "var(--bad)";
+  if (r >= 1.3) return "var(--warn)";
   if (r < 0.8) return "var(--hr)";
   return "var(--good)";
+}
+
+function ratioStatus(r: number | null | undefined) {
+  if (r == null) return null;
+  if (r >= 1.5) {
+    return {
+      label: "危险激增 (>1.5)",
+      color: "var(--bad)",
+      bg: "var(--bad-bg)",
+      border: "var(--bad-border)",
+      title: "危险激增区（高伤病风险）",
+      advice: "短期疲劳显著超过长期体能储备，软组织伤病发生率成倍飙升。强烈建议未来 48 小时以纯休息或 Z1 轻松慢摇排酸为主，严禁冲击高强度课表。",
+    };
+  }
+  if (r >= 1.3) {
+    return {
+      label: "负荷警示 (1.3–1.5)",
+      color: "var(--warn)",
+      bg: "var(--warn-bg)",
+      border: "var(--warn-border)",
+      title: "负荷警示累积区",
+      advice: "疲劳累积速度快于体能恢复速度，需密切关注跟腱、足底及小腿肌肉酸痛反馈，避免连续安排两场高强度训练。",
+    };
+  }
+  if (r >= 0.8) {
+    return {
+      label: "安全甜点区 (0.8–1.3)",
+      color: "var(--good)",
+      bg: "var(--good-bg)",
+      border: "var(--good-border)",
+      title: "最佳适宜甜点区（The Sweet Spot）",
+      advice: "短期疲劳与长期体能储备维持在极佳的动态平衡中，伤病发生概率极低（<5%），体能正处于高效率稳步累积期。",
+    };
+  }
+  return {
+    label: "减量恢复区 (<0.8)",
+    color: "var(--hr)",
+    bg: "var(--info-bg)",
+    border: "var(--info-border)",
+    title: "减量恢复/欠训练区",
+    advice: "短期负荷较低，身体处于充分休整或疲劳消退期。适合赛前 1~2 周减量恢复巅峰体能，若处于正常训练期则可逐步恢复跑量以维持体能储备。",
+  };
 }

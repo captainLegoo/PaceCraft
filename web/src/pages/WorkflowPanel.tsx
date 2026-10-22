@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { IconLayers } from "../icons";
 
 type StepMeta = {
   name: string;
@@ -55,7 +56,7 @@ const STATUS_COLOR: Record<StepRun["status"], string> = {
  *  2. 哪些步骤可以单独开关（可配置）
  *  3. 为什么某步没跑（跳过原因要说清楚，不能静默）
  */
-export default function WorkflowPanel({ aiConfigured }: { aiConfigured: boolean }) {
+export default function WorkflowPanel() {
   const [steps, setSteps] = useState<StepMeta[]>([]);
   const [config, setConfig] = useState<Config | null>(null);
   const [last, setLast] = useState<RunResult | null>(null);
@@ -108,22 +109,7 @@ export default function WorkflowPanel({ aiConfigured }: { aiConfigured: boolean 
         body: JSON.stringify(next),
       });
       setConfig(await r.json());
-    } catch (e) {
-      setErr(String(e));
-    }
-  };
-
-  const toggleAi = async (allow: boolean) => {
-    try {
-      const r = await fetch("/api/workflow/config", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          steps: config?.steps ?? {},
-          options: { ...(config?.options ?? {}), allowAi: allow },
-        }),
-      });
-      setConfig(await r.json());
+      load();
     } catch (e) {
       setErr(String(e));
     }
@@ -157,7 +143,7 @@ export default function WorkflowPanel({ aiConfigured }: { aiConfigured: boolean 
     <div className="card" style={{ marginBottom: 14 }}>
       <div className="wf-head">
         <div className="wf-head-main">
-          <h3 className="card-title" style={{ marginBottom: 2 }}>自动化工作流</h3>
+          <h3 className="card-title" style={{ marginBottom: 2 }}><IconLayers size={14} />自动化工作流</h3>
           <p className="card-sub" style={{ margin: 0 }}>
             同步完成后自动运行以下步骤，每步可单独开关
             {last && <span style={{ color: "var(--text-faint)" }}> · 上次 {last.summary}（{last.durationMs}ms）</span>}
@@ -175,49 +161,47 @@ export default function WorkflowPanel({ aiConfigured }: { aiConfigured: boolean 
 
       {err && <div className="banner error" style={{ marginTop: 10 }}>{err}</div>}
 
-      <table style={{ marginTop: 10 }}>
-        <thead>
-          <tr><th>步骤</th><th>说明</th><th>上次结果</th><th>状态</th></tr>
-        </thead>
-        <tbody>
-          {steps.map((s) => {
-            const r = lastByName.get(s.name);
-            const isAi = s.name === "ai-analyze";
-            return (
-              <tr key={s.name}>
-                <td style={{ fontWeight: 600, whiteSpace: "nowrap" }}>
-                  <span style={{ color: "var(--text-faint)", marginRight: 6 }}>{s.order}</span>
-                  {s.label}
-                </td>
-                <td className="cell-text" style={{ textAlign: "left", fontSize: 11.5, color: "var(--text-dim)" }}>{s.description}</td>
-                <td className="cell-text" style={{ textAlign: "left", fontSize: 11.5 }}>
-                  {r ? (
-                    <span style={{ color: r.status === "failed" ? "var(--warn)" : "var(--text-dim)" }}>
-                      <span style={{ color: STATUS_COLOR[r.status], marginRight: 5 }}>{STATUS_ICON[r.status]}</span>
-                      {r.message}
-                      <span style={{ color: "var(--text-faint)" }}> · {r.durationMs}ms</span>
-                    </span>
-                  ) : (
-                    <span style={{ color: "var(--text-faint)" }}>尚未运行</span>
-                  )}
-                </td>
-                <td>
-                  <label style={{ display: "inline-flex", alignItems: "center", gap: 6, cursor: "pointer" }}>
-                    <input
-                      type="checkbox"
-                      checked={isAi ? config?.options?.allowAi !== false : s.enabled}
-                      onChange={(e) => (isAi ? void toggleAi(e.target.checked) : void toggle(s.name, e.target.checked))}
-                    />
-                    <span style={{ fontSize: 11, color: "var(--text-faint)" }}>
-                      {isAi && !aiConfigured ? "未配置模型" : ""}
-                    </span>
-                  </label>
-                </td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
+      <div className="table-scroll">
+        <table style={{ marginTop: 10 }}>
+          <thead>
+            <tr><th>步骤</th><th>说明</th><th>上次结果</th><th>状态</th></tr>
+          </thead>
+          <tbody>
+            {steps.map((s) => {
+              const r = lastByName.get(s.name);
+              return (
+                <tr key={s.name}>
+                  <td style={{ fontWeight: 600, whiteSpace: "nowrap" }}>
+                    <span style={{ color: "var(--text-faint)", marginRight: 6 }}>{s.order}</span>
+                    {s.label}
+                  </td>
+                  <td className="cell-text" style={{ textAlign: "left", fontSize: 11.5, color: "var(--text-dim)" }}>{s.description}</td>
+                  <td className="cell-text" style={{ textAlign: "left", fontSize: 11.5 }}>
+                    {r ? (
+                      <span style={{ color: r.status === "failed" ? "var(--warn)" : "var(--text-dim)" }}>
+                        <span style={{ color: STATUS_COLOR[r.status], marginRight: 5 }}>{STATUS_ICON[r.status]}</span>
+                        {r.message}
+                        <span style={{ color: "var(--text-faint)" }}> · {r.durationMs}ms</span>
+                      </span>
+                    ) : (
+                      <span style={{ color: "var(--text-faint)" }}>尚未运行</span>
+                    )}
+                  </td>
+                  <td>
+                    <label style={{ display: "inline-flex", alignItems: "center", gap: 6, cursor: "pointer" }}>
+                      <input
+                        type="checkbox"
+                        checked={s.enabled}
+                        onChange={(e) => void toggle(s.name, e.target.checked)}
+                      />
+                    </label>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
 
       {open && (
         <div style={{ marginTop: 12, padding: 12, border: "1px solid var(--border)", borderRadius: 8 }}>
@@ -238,11 +222,6 @@ export default function WorkflowPanel({ aiConfigured }: { aiConfigured: boolean 
                 </div>
               ))}
           </div>
-          {!aiConfigured && (
-            <div className="banner info" style={{ marginTop: 10, fontSize: 12 }}>
-              AI 步骤当前会自动跳过（未配置模型）。到「设置」页填好 API Key 后，它会自动加入工作流 —— 不需要改任何配置。
-            </div>
-          )}
           <div className="hint" style={{ marginTop: 8 }}>
             配置文件保存在 <code>/tmp/coros-workflow.json</code>，也可以直接改这个文件调整参数。
           </div>

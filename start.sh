@@ -79,9 +79,11 @@ start_api() {
   # 必须在启动的那一刻就把它改成 0.0.0.0，事后没法再改。
   cd "$ROOT/server" || return 1
   if [[ "$MODE" == "lan" ]]; then
-    HOST=0.0.0.0 nohup bun run src/index.ts > "$LOG_DIR/api.log" 2>&1 &
+    HOST=0.0.0.0 nohup bun run src/index.ts </dev/null > "$LOG_DIR/api.log" 2>&1 &
+  elif [[ "$MODE" == "dev" ]]; then
+    nohup bun run --watch src/index.ts </dev/null > "$LOG_DIR/api.log" 2>&1 &
   else
-    nohup bun run src/index.ts > "$LOG_DIR/api.log" 2>&1 &
+    nohup bun run src/index.ts </dev/null > "$LOG_DIR/api.log" 2>&1 &
   fi
   local pid=$!
   cd "$ROOT" || return 1
@@ -103,7 +105,7 @@ lan_ip() {
 start_web() {
   info "启动前端 dev server（:${WEB_PORT}）…"
   cd "$ROOT/web" || return 1
-  nohup bun run dev > "$LOG_DIR/web.log" 2>&1 &
+  nohup bun run dev </dev/null > "$LOG_DIR/web.log" 2>&1 &
   local pid=$!
   cd "$ROOT" || return 1
   echo "$pid" > "$LOG_DIR/web.pid"
@@ -191,9 +193,18 @@ info "启动 COROS 训练看板（${MODE} 模式）"
 echo "${C_DIM}  日志目录：${LOG_DIR}${C_OFF}"
 echo
 
+# 如果指定了强制重启（例如通过 ./dev.sh 启动），先清理已有进程与端口
+if [[ "${FORCE_RESTART:-0}" == "1" ]]; then
+  if ([[ -f "$LOG_DIR/api.pid" ]] && kill -0 "$(cat "$LOG_DIR/api.pid")" 2>/dev/null) || port_busy "$API_PORT" || ([[ "$MODE" == "dev" ]] && port_busy "$WEB_PORT"); then
+    info "检测到已有服务运行或端口被占用，正在自动清理..."
+    "$ROOT/stop.sh" --force >/dev/null 2>&1 || true
+    sleep 0.2
+  fi
+fi
+
 # 已存在就直接退出，不要重复启动
 if [[ -f "$LOG_DIR/api.pid" ]] && kill -0 "$(cat "$LOG_DIR/api.pid")" 2>/dev/null; then
-  die "后端已在运行（PID $(cat "$LOG_DIR/api.pid")）。要重启请先跑 ./stop.sh"
+  die "后端已在运行（PID $(cat "$LOG_DIR/api.pid")）。要重启请先跑 ./dev.sh 或 ./stop.sh"
 fi
 
 check_port_free "$API_PORT" "后端 API"

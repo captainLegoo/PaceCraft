@@ -210,50 +210,54 @@ export default function Week({
       <div className="card" style={{ marginBottom: 14 }}>
         <h3 className="card-title">本周每日分布</h3>
         <p className="card-sub">看训练是怎么分布在这一周里的，堆得匀比堆在同一天更重要</p>
-        <table>
-          <thead>
-            <tr>
-              <th>日期</th><th>星期</th><th>距离</th><th>时长</th>
-              <th>配速</th><th>心率</th><th>负荷</th><th>类型</th>
-            </tr>
-          </thead>
-          <tbody>
-            {Array.from({ length: 7 }, (_, i) => {
-              const d = new Date(`${weekStart}T00:00:00Z`);
-              d.setUTCDate(d.getUTCDate() + i);
-              const label = d.toISOString().slice(0, 10);
-              const dow = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"][i];
-              const daySessions = weekSessions.filter((s) => s.date === label);
-              if (daySessions.length === 0) {
-                return (
-                  <tr key={label}>
-                    <td>{label.slice(5)}</td>
-                    <td style={{ color: "var(--text-faint)" }}>{dow}</td>
-                    <td colSpan={6} style={{ color: "var(--text-faint)" }}>休息</td>
-                  </tr>
-                );
-              }
-              const km = daySessions.reduce((n, s) => n + s.totals.distanceKm, 0);
-              const sec = daySessions.reduce((n, s) => n + s.totals.durationSec, 0);
-              return (
-                <tr key={label}>
-                  <td>{label.slice(5)}</td>
-                  <td style={{ color: "var(--text-dim)" }}>{dow}</td>
-                  <td className="num" style={{ fontWeight: 600 }}>{km.toFixed(2)}</td>
-                  <td className="num">{fmtDur(sec)}</td>
-                  <td className="num" style={{ color: paceColor(sec / km, 270, 330) }}>{fmtPace(km ? sec / km : null)}</td>
-                  <td className="num">{daySessions[0].totals.avgHr ?? "—"}</td>
-                  <td className="num">{daySessions.reduce((n, s) => n + (s.totals.trainingLoad || 0), 0) || "—"}</td>
-                  <td style={{ textAlign: "left" }}>
-                    <span className={`pill ${daySessions[0].classification === "间歇训练" ? "accent" : ""}`}>
-                      {daySessions.map((s) => s.classification).join(" + ")}
-                    </span>
-                  </td>
+        <div className="table-scroll-wrap">
+          <div className="table-scroll">
+            <table>
+              <thead>
+                <tr>
+                  <th>日期</th><th>星期</th><th>距离</th><th>时长</th>
+                  <th>配速</th><th>心率</th><th>负荷</th><th>类型</th>
                 </tr>
-              );
-            })}
-          </tbody>
-        </table>
+              </thead>
+              <tbody>
+                {Array.from({ length: 7 }, (_, i) => {
+                  const d = new Date(`${weekStart}T00:00:00Z`);
+                  d.setUTCDate(d.getUTCDate() + i);
+                  const label = d.toISOString().slice(0, 10);
+                  const dow = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"][i];
+                  const daySessions = weekSessions.filter((s) => s.date === label);
+                  if (daySessions.length === 0) {
+                    return (
+                      <tr key={label}>
+                        <td>{label.slice(5)}</td>
+                        <td style={{ color: "var(--text-faint)" }}>{dow}</td>
+                        <td colSpan={6} style={{ color: "var(--text-faint)" }}>休息</td>
+                      </tr>
+                    );
+                  }
+                  const km = daySessions.reduce((n, s) => n + s.totals.distanceKm, 0);
+                  const sec = daySessions.reduce((n, s) => n + s.totals.durationSec, 0);
+                  return (
+                    <tr key={label}>
+                      <td>{label.slice(5)}</td>
+                      <td style={{ color: "var(--text-dim)" }}>{dow}</td>
+                      <td className="num" style={{ fontWeight: 600 }}>{km.toFixed(2)}</td>
+                      <td className="num">{fmtDur(sec)}</td>
+                      <td className="num" style={{ color: paceColor(sec / km, 270, 330) }}>{fmtPace(km ? sec / km : null)}</td>
+                      <td className="num">{daySessions[0].totals.avgHr ?? "—"}</td>
+                      <td className="num">{daySessions.reduce((n, s) => n + (s.totals.trainingLoad || 0), 0) || "—"}</td>
+                      <td style={{ textAlign: "left" }}>
+                        <span className={`pill ${daySessions[0].classification === "间歇训练" ? "accent" : ""}`}>
+                          {daySessions.map((s) => s.classification).join(" + ")}
+                        </span>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
       </div>
 
       <div className="card">
@@ -262,35 +266,39 @@ export default function Week({
         {weekSessions.length === 0 ? (
           <div className="empty-run"><IconRun size={40} /><span>这一周没有训练</span></div>
         ) : (
-          <table>
-            <thead>
-              <tr>
-                <th>日期</th><th>类型</th><th>记录数</th><th>距离</th><th>时长</th>
-                <th>配速</th><th>心率</th><th>负荷</th><th>组结构</th>
-              </tr>
-            </thead>
-            <tbody>
-              {weekSessions.map((s) => (
-                <tr key={s.key} className="clickable" onClick={() => onOpenSession(s.key)}>
-                  <td>{s.date.slice(5)}</td>
-                  <td style={{ textAlign: "left" }}>
-                    <span className={`pill ${s.kind === "multi" ? "accent" : ""}`}>{s.classification}</span>
-                  </td>
-                  <td className="num">{s.activityCount}</td>
-                  <td className="num">{s.totals.distanceKm}</td>
-                  <td className="num">{fmtDur(s.totals.durationSec)}</td>
-                  <td className="num" style={{ color: paceColor(s.totals.durationSec / s.totals.distanceKm, 270, 330) }}>
-                    {fmtPace(s.totals.distanceKm ? s.totals.durationSec / s.totals.distanceKm : null)}
-                  </td>
-                  <td className="num">{s.totals.avgHr ?? "—"}</td>
-                  <td className="num">{s.totals.trainingLoad || "—"}</td>
-                  <td style={{ textAlign: "left", color: "var(--text-dim)", fontSize: 12 }}>
-                    {s.sets.length > 0 ? s.sets.map((x) => `${x.distanceLabel}×${x.reps}`).join(" + ") : "—"}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <div className="table-scroll-wrap">
+            <div className="table-scroll">
+              <table>
+                <thead>
+                  <tr>
+                    <th>日期</th><th>类型</th><th>记录数</th><th>距离</th><th>时长</th>
+                    <th>配速</th><th>心率</th><th>负荷</th><th>组结构</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {weekSessions.map((s) => (
+                    <tr key={s.key} className="clickable" onClick={() => onOpenSession(s.key)}>
+                      <td>{s.date.slice(5)}</td>
+                      <td style={{ textAlign: "left" }}>
+                        <span className={`pill ${s.kind === "multi" ? "accent" : ""}`}>{s.classification}</span>
+                      </td>
+                      <td className="num">{s.activityCount}</td>
+                      <td className="num">{s.totals.distanceKm}</td>
+                      <td className="num">{fmtDur(s.totals.durationSec)}</td>
+                      <td className="num" style={{ color: paceColor(s.totals.durationSec / s.totals.distanceKm, 270, 330) }}>
+                        {fmtPace(s.totals.distanceKm ? s.totals.durationSec / s.totals.distanceKm : null)}
+                      </td>
+                      <td className="num">{s.totals.avgHr ?? "—"}</td>
+                      <td className="num">{s.totals.trainingLoad || "—"}</td>
+                      <td style={{ textAlign: "left", color: "var(--text-dim)", fontSize: 12 }}>
+                        {s.sets.length > 0 ? s.sets.map((x) => `${x.distanceLabel}×${x.reps}`).join(" + ") : "—"}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
         )}
       </div>
 

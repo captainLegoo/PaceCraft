@@ -77,7 +77,7 @@ export function buildReport() {
 
   const age = profile?.birthday
     ? Math.floor((Date.now() - new Date(profile.birthday).getTime()) / (365.25 * 86400000))
-    : 26;
+    : 30;
   const hrMax = tanakaMaxHr(age);
 
   // ---- 拉全部分圈（join 出日期与开始时间），脏数据统一在这里过滤 ----
@@ -236,8 +236,8 @@ export function buildReport() {
     .orderBy(asc(dailyHealth.dateLabel))
     .all();
 
-  // 强度因子要用静息心率做 HRR 的下界，取实测中位数而非写死
-  const restHrForLoad = restingHrBaseline(healthRows) ?? 66;
+  // 强度因子要用静息心率做 HRR 的下界，优先取设置或实测基线
+  const restHrForLoad = profile?.restingHr ?? restingHrBaseline(healthRows) ?? 55;
 
   const dailyLoads = computeDailyLoads(
     db

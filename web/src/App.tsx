@@ -3,29 +3,42 @@ import { api } from "./api";
 import type { FollowState } from "./api";
 import { ThemeToggle, useTheme } from "./theme";
 import { useTableScroll } from "./table-scroll";
-import { IconChat, IconDatabase, IconFlag, IconMenu, IconPulse, IconShoe, IconSync, IconTrend, IconTrophy } from "./icons";
-import RacePrep from "./pages/RacePrep";
+import { IconDatabase, IconFlag, IconMenu, IconPulse, IconShoe, IconSync } from "./icons";
 import Training from "./pages/Training";
 import ActivityDetailView from "./pages/ActivityDetail";
-import Health from "./pages/Health";
-import Fitness from "./pages/Fitness";
 import Settings from "./pages/Settings";
 import SessionView from "./pages/Session";
 import Week from "./pages/Week";
-import Prediction from "./pages/Prediction";
-import RaceSetup from "./pages/RaceSetup";
-import WorkflowPanel from "./pages/WorkflowPanel";
+import RaceHub, { type RaceTab } from "./pages/RaceHub";
+import Readiness, { type ReadinessTab } from "./pages/Readiness";
 
-type Route = { page: "training" | "health" | "fitness" | "settings" | "activity" | "session" | "prediction" | "prep" | "race" | "week"; labelId?: string; sessionKey?: string; weekStart?: string };
+type Route = {
+  page:
+    | "training"
+    | "race"
+    | "readiness"
+    | "settings"
+    | "activity"
+    | "session"
+    | "week"
+    // 兼容历史直接调用
+    | "prediction"
+    | "prep"
+    | "fitness"
+    | "health";
+  raceTab?: RaceTab;
+  readinessTab?: ReadinessTab;
+  labelId?: string;
+  sessionKey?: string;
+  fromSessionKey?: string;
+  weekStart?: string;
+};
 
-const NAV: { key: Route["page"]; label: string; sub: string; icon: any }[] = [
-  { key: "training", label: "训练", sub: "跑量 · 负荷", icon: IconShoe },
-  { key: "prediction", label: "自建预测", sub: "我的模型", icon: IconTrend },
-  { key: "race", label: "赛事路线", sub: "赛道 · 备赛", icon: IconFlag },
-  { key: "prep", label: "备赛体检", sub: "能不能达标", icon: IconTrend },
-  { key: "fitness", label: "体能", sub: "配速 · 区间", icon: IconTrophy },
-  { key: "health", label: "恢复", sub: "睡眠 · 压力", icon: IconPulse },
-  { key: "settings", label: "设置", sub: "AI · 同步", icon: IconDatabase },
+const NAV: { key: "training" | "race" | "readiness" | "settings"; label: string; sub: string; icon: any }[] = [
+  { key: "training", label: "训练看板", sub: "跑量 · 课表 · 负荷", icon: IconShoe },
+  { key: "race", label: "赛事中心", sub: "赛道 · 预测 · 备赛", icon: IconFlag },
+  { key: "readiness", label: "身体状态", sub: "恢复 · 睡眠 · 体能", icon: IconPulse },
+  { key: "settings", label: "系统设置", sub: "AI · 同步 · 工作流", icon: IconDatabase },
 ];
 
 export default function App() {
@@ -138,13 +151,17 @@ export default function App() {
     }
   };
 
-  const openActivity = (labelId: string) => labelId && setRoute({ page: "activity", labelId });
+  const openActivity = (labelId: string, fromSessionKey?: string) =>
+    labelId && setRoute({ page: "activity", labelId, fromSessionKey });
   const openSession = (sessionKey: string) => sessionKey && setRoute({ page: "session", sessionKey });
   // 周跑量柱状图点进来的是「这一周」，不是某一条记录
   const openWeek = (weekStart: string) => weekStart && setRoute({ page: "week", weekStart });
 
   // 顶栏标题：详情页（某次活动/某次训练）在 NAV 里没有条目，用副标题兜底
-  const currentLabel = NAV.find((n) => n.key === route.page)?.label
+  const currentLabel =
+    (NAV.find((n) => n.key === route.page)?.label)
+    ?? (route.page === "prediction" || route.page === "prep" ? "赛事中心" : undefined)
+    ?? (route.page === "fitness" || route.page === "health" ? "身体状态" : undefined)
     ?? ({ activity: "活动详情", session: "训练详情", week: "本周" } as Record<string, string>)[route.page]
     ?? "看板";
 
@@ -175,10 +192,15 @@ export default function App() {
         <ThemeToggle theme={theme} onToggle={toggle} />
         {NAV.map((n) => {
           const Icon = n.icon;
+          const isActive =
+            route.page === n.key ||
+            (n.key === "training" && (route.page === "session" || route.page === "activity" || route.page === "week")) ||
+            (n.key === "race" && (route.page === "prediction" || route.page === "prep")) ||
+            (n.key === "readiness" && (route.page === "fitness" || route.page === "health"));
           return (
             <button
               key={n.key}
-              className={`nav-item ${route.page === n.key ? "active" : ""}`}
+              className={`nav-item ${isActive ? "active" : ""}`}
               onClick={() => go(n.key)}
             >
               <span className="nav-icon"><Icon size={17} /></span>
@@ -260,10 +282,6 @@ export default function App() {
             所以在正文里再挂一份 —— 宽屏 display:none，不会重复显示。 */}
         {syncMsg && <div className={`sync-msg mobile-sync-msg ${syncMsg.kind}`}>{syncMsg.text}</div>}
 
-        {/* 自动化工作流面板暂时下线（每次进站都要轮询 /api/workflow/last，
-            手机上尤其没必要占掉首屏）。组件本身保留，恢复时删掉这层注释即可。 */}
-        {/* <WorkflowPanel aiConfigured={!!status?.aiConfigured} /> */}
-
         {route.page === "training" && (
           <>
             <div className="page-head">
@@ -290,7 +308,8 @@ export default function App() {
           <ActivityDetailView
             labelId={route.labelId}
             aiConfigured={!!status?.aiConfigured}
-            onBack={() => setRoute({ page: "training" })}
+            onBack={() => route.fromSessionKey ? openSession(route.fromSessionKey) : setRoute({ page: "training" })}
+            onOpenSession={openSession}
           />
         )}
 
@@ -303,64 +322,56 @@ export default function App() {
           />
         )}
 
-        {route.page === "health" && (
-          <>
-            <div className="page-head">
-              <div>
-                <h2>恢复</h2>
-                <div className="sub">恢复度、压力、全天心率与睡眠</div>
-              </div>
-            </div>
-            <Health key={`health-${dataVersion}`} />
-          </>
+        {route.page === "race" && (
+          <RaceHub
+            key={`race-hub-${dataVersion}`}
+            dataVersion={dataVersion}
+            aiConfigured={!!status?.aiConfigured}
+            onRefresh={refresh}
+          />
         )}
 
         {route.page === "prediction" && (
-          <>
-            <div className="page-head">
-              <div>
-                <h2>自建成绩预测</h2>
-                <div className="sub">只用你自己的训练数据，不依赖官方体能评分</div>
-              </div>
-            </div>
-            <Prediction key={`prediction-${dataVersion}`} />
-          </>
-        )}
-
-        {route.page === "race" && (
-          <>
-            <div className="page-head">
-              <div>
-                <h2>赛事路线与备赛</h2>
-                <div className="sub">设置目标赛事，自动分析赛道爬升，并给出成绩预测与配速策略</div>
-              </div>
-            </div>
-            <RaceSetup key={`race-setup-${dataVersion}`} onChanged={refresh} />
-          </>
+          <RaceHub
+            key={`race-hub-pred-${dataVersion}`}
+            initialTab="prediction"
+            dataVersion={dataVersion}
+            aiConfigured={!!status?.aiConfigured}
+            onRefresh={refresh}
+          />
         )}
 
         {route.page === "prep" && (
-          <>
-            <div className="page-head">
-              <div>
-                <h2>备赛体检</h2>
-                <div className="sub">按最近几周的真实训练，判断能不能跑出目标成绩</div>
-              </div>
-            </div>
-            <RacePrep aiConfigured={!!status?.aiConfigured} dataVersion={dataVersion} />
-          </>
+          <RaceHub
+            key={`race-hub-prep-${dataVersion}`}
+            initialTab="prep"
+            dataVersion={dataVersion}
+            aiConfigured={!!status?.aiConfigured}
+            onRefresh={refresh}
+          />
+        )}
+
+        {route.page === "readiness" && (
+          <Readiness
+            key={`readiness-${dataVersion}`}
+            dataVersion={dataVersion}
+          />
+        )}
+
+        {route.page === "health" && (
+          <Readiness
+            key={`readiness-health-${dataVersion}`}
+            initialTab="recovery"
+            dataVersion={dataVersion}
+          />
         )}
 
         {route.page === "fitness" && (
-          <>
-            <div className="page-head">
-              <div>
-                <h2>体能</h2>
-                <div className="sub">VO₂max、阈值配速与各距离成绩预测</div>
-              </div>
-            </div>
-            <Fitness key={`fitness-${dataVersion}`} />
-          </>
+          <Readiness
+            key={`readiness-fit-${dataVersion}`}
+            initialTab="fitness"
+            dataVersion={dataVersion}
+          />
         )}
 
         {route.page === "settings" && (
@@ -375,6 +386,28 @@ export default function App() {
           </>
         )}
       </main>
+
+      {/* 移动端常驻底部导航 TabBar */}
+      <nav className="mobile-tabbar" aria-label="移动端主导航">
+        {NAV.map((n) => {
+          const Icon = n.icon;
+          const isActive =
+            route.page === n.key ||
+            (n.key === "training" && (route.page === "session" || route.page === "activity" || route.page === "week")) ||
+            (n.key === "race" && (route.page === "prediction" || route.page === "prep")) ||
+            (n.key === "readiness" && (route.page === "fitness" || route.page === "health"));
+          return (
+            <button
+              key={n.key}
+              className={`mobile-tab-item ${isActive ? "active" : ""}`}
+              onClick={() => go(n.key)}
+            >
+              <Icon size={19} />
+              <span>{n.label}</span>
+            </button>
+          );
+        })}
+      </nav>
     </div>
   );
 }

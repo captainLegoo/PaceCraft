@@ -302,6 +302,21 @@ export const users = sqliteTable("users", {
    * 让每个人自己填，而不是在代码里写死某个人的实测值。
    */
   restingHr: integer("resting_hr"),
+  /**
+   * 心率区间计算模式："auto"（按 HRR 百分比自动推算）| "custom"（自定义五区间绝对数值）
+   */
+  hrCalcMode: text("hr_calc_mode"),
+  /**
+   * 自定义五区间心率配置（JSON 字符串）。
+   * 格式：[
+   *   { zone: "Z1", label: "有氧耐力", hrLo: 125, hrHi: 142 },
+   *   { zone: "Z2", label: "有氧动力", hrLo: 143, hrHi: 156 },
+   *   { zone: "Z3", label: "乳酸阈", hrLo: 157, hrHi: 168 },
+   *   { zone: "Z4", label: "速度耐力", hrLo: 169, hrHi: 180 },
+   *   { zone: "Z5", label: "无氧动力", hrLo: 181, hrHi: 195 }
+   * ]
+   */
+  customHrZones: text("custom_hr_zones"),
   raw: text("raw"),
 });
 
@@ -322,7 +337,7 @@ export const users = sqliteTable("users", {
 export const races = sqliteTable(
   "races",
   {
-    id: integer("id").primaryKey({ autoincrement: true }),
+    id: integer("id").primaryKey({ autoIncrement: true }),
     /** 比赛日期 yyyy-mm-dd */
     date: text("date").notNull(),
     name: text("name").notNull(),

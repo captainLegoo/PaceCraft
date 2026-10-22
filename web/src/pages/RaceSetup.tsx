@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from "react";
-import { api, type Activity, type RaceDetail, type RouteFilePreview } from "../api";
+import { useEffect, useMemo, useState } from "react";
+import { api, type Activity, type RaceDetail, type RouteFilePreview, type Race } from "../api";
 import RouteProfileCard from "./RaceRouteProfile";
 import RaceBriefingCard, { type RaceBriefing } from "./RaceBriefing";
 import { fmtPace } from "../charts";
@@ -113,14 +113,14 @@ export default function RaceSetup({
   onChanged?: () => void;
 }) {
   const [open, setOpen] = useState(false);
+  const [formMode, setFormMode] = useState<"create" | "edit">("create");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [detail, setDetail] = useState<RaceDetail | null>(null);
   const [briefing, setBriefing] = useState<RaceBriefing | null>(null);
-  /** 全部已登记赛事，用于「同一天已有赛事」预检 */
-  const [allRaces, setAllRaces] = useState<{ id: number; date: string; name: string }[]>([]);
+  /** 全部已登记赛事列表 */
+  const [allRaces, setAllRaces] = useState<Race[]>([]);
   const [loading, setLoading] = useState(true);
-  const fileRef = useRef<HTMLInputElement>(null);
 
   // 新建赛事。默认值保持中性 —— 不要预填任何具体赛事，
   // 否则新用户会看到一个跟他无关的目标赛事，还以为是自己的。
@@ -145,71 +145,144 @@ export default function RaceSetup({
   // 选比赛用：历史训练候选
   const [acts, setActs] = useState<Activity[]>([]);
 
+  // 历史训练候选移至顶层，保证无条件调用 hooks 且不会因局部组件重新声明导致重新挂载失焦
+  const candidates = useMemo(
+    () => acts.filter((a) => !a.dateLabel || !date || a.dateLabel <= date).slice(0, 60),
+    [acts, date],
+  );
+
+  /** 按月调整比赛日期（+1 或 -1 个月），自动处理跨年和不同月份天数限制 */
+  const adjustMonth = (delta: number) => {
+    const cur = date || todayBeijing();
+    const parts = cur.split("-").map(Number);
+    if (parts.length !== 3 || parts.some(isNaN)) return;
+    let [y, m, d] = parts;
+    m += delta;
+    while (m > 12) {
+      m -= 12;
+      y += 1;
+    }
+    while (m < 1) {
+      m += 12;
+      y -= 1;
+    }
+    const maxDays = new Date(y, m, 0).getDate();
+    const safeDay = Math.min(d, maxDays);
+    setDate(`${y}-${String(m).padStart(2, "0")}-${String(safeDay).padStart(2, "0")}`);
+  };
+
   const loadBriefing = (id: number) =>
     fetch(`/api/races/${id}/briefing`)
       .then((r) => (r.ok ? r.json() : null))
       .then(setBriefing)
       .catch(() => setBriefing(null));
 
-  const load = () => {
+  const selectRace = async (id: number) => {
+    setLoading(true);
+    setErr(null);
+    try {
+      const [d] = await Promise.all([api.race(id), loadBriefing(id)]);
+      setDetail(d);
+      if (open && formMode === "edit") {
+        const r = d.race;
+        setDate(r.date);
+        setName(r.name);
+        setCity(r.city ?? "");
+        setDist(String(r.distanceKm));
+        setDistPreset(presetKeyFor(r.distanceKm));
+        setGoal(r.goalSec ? fmtDurInput(r.goalSec) : "");
+        setLabelId(r.labelId ?? null);
+        setRouteMode(r.routeSource === "gpx" ? "file" : r.routeSource === "waypoints" ? "lib" : "none");
+      }
+    } catch (e) {
+      setErr((e as Error).message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const load = (preferredId?: number) => {
     setLoading(true);
     api
       .races()
       .then((list) => {
-        /*
-         * 这一页是**赛前**工具：预测、备赛、配速方案，赛后就失去意义了。
-         * 所以只显示还没比的那场 —— 比赛日期过了今天（北京时间）就不再出现，
-         * 否则页面会一直停在上个月那场比赛上，让人以为预测还在针对它。
-         *
-         * 今天当天仍然显示：比赛当天还要用来核对当天分段数据。
-         * 判定用 yyyy-mm-dd 字符串比较，不解析 Date —— 避免时区把
-         * "2026-11-08" 变成 UTC 前一天那种坑。
-         */
+        setAllRaces(list);
+        if (list.length === 0) {
+          setDetail(null);
+          setBriefing(null);
+          return null;
+        }
+
         const today = todayBeijing();
-        const upcoming = list.filter((r) => r.date >= today);
-        if (upcoming.length === 0) return null;
-        // 取日期最近的那场，而不是 list 的最后一条：
-        // 按 id 排序不等于按日期排序，补登一场更早的比赛就会排到后面去
-        const next = upcoming.reduce((a, b) => (b.date > a.date ? b : a));
-        return Promise.all([api.race(next.id).then(setDetail), loadBriefing(next.id)]);
+        const upcoming = list.filter((r) => r.date >= today).sort((a, b) => a.date.localeCompare(b.date));
+
+        let targetId: number;
+        if (preferredId && list.some((r) => r.id === preferredId)) {
+          targetId = preferredId;
+        } else if (upcoming.length > 0) {
+          // 优先取距离今天最近的那场未来赛事
+          targetId = upcoming[0].id;
+        } else {
+          // 没有未来赛事时，倒序取最近一场往期赛事供回顾
+          const sorted = [...list].sort((a, b) => b.date.localeCompare(a.date));
+          targetId = sorted[0].id;
+        }
+
+        return Promise.all([api.race(targetId).then(setDetail), loadBriefing(targetId)]);
       })
       .catch((e) => setErr(e.message))
       .finally(() => setLoading(false));
   };
+
   useEffect(() => {
     load();
-    api.races().then(setAllRaces).catch(() => {});
     api.activities({ limit: "120" }).then(setActs).catch(() => {});
     // 只在挂载时拉一次
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  /** 打开新建赛事表单 */
+  const openCreateForm = () => {
+    setDate("");
+    setName("");
+    setCity("");
+    setDist("42.195");
+    setDistPreset("full");
+    setGoal("");
+    setLabelId(null);
+    setRouteMode("none");
+    setGpxText("");
+    setRouteFileName(null);
+    setPreview(null);
+    setErr(null);
+    setFormMode("create");
+    setOpen(true);
+  };
+
   /**
-   * 打开表单。编辑已登记的赛事时必须把已有值回填，
+   * 打开编辑表单。编辑已登记的赛事时必须把已有值回填，
    * 否则用户改一个字段保存，别的字段全被空值冲掉。
    */
-  const openForm = () => {
-    if (detail) {
-      const r = detail.race;
-      setDate(r.date);
-      setName(r.name);
-      setCity(r.city ?? "");
-      setDist(String(r.distanceKm));
-      setDistPreset(presetKeyFor(r.distanceKm));
-      setGoal(r.goalSec ? fmtDurInput(r.goalSec) : "");
-      setLabelId(r.labelId ?? null);
-      // 路线来源要跟着库里已有的值回填，否则打开「修改」会看到"先不填"，
-      // 用户随手一存就以为把已上传的轨迹弄丢了
-      setRouteMode(r.routeSource === "gpx" ? "file" : r.routeSource === "waypoints" ? "lib" : "none");
-    } else {
-      setRouteMode("none");
-    }
+  const openEditForm = () => {
+    if (!detail) return;
+    const r = detail.race;
+    setDate(r.date);
+    setName(r.name);
+    setCity(r.city ?? "");
+    setDist(String(r.distanceKm));
+    setDistPreset(presetKeyFor(r.distanceKm));
+    setGoal(r.goalSec ? fmtDurInput(r.goalSec) : "");
+    setLabelId(r.labelId ?? null);
+    // 路线来源要跟着库里已有的值回填，否则打开「修改」会看到"先不填"，
+    // 用户随手一存就以为把已上传的轨迹弄丢了
+    setRouteMode(r.routeSource === "gpx" ? "file" : r.routeSource === "waypoints" ? "lib" : "none");
     // 文件内容不进 state 回填（库里存的是抽稀后的剖面，不是原始文件）：
     // 编辑时不重新导入就保持原样，显式选新文件才算替换
     setGpxText("");
     setRouteFileName(null);
     setPreview(null);
     setErr(null);
+    setFormMode("edit");
     setOpen(true);
   };
 
@@ -217,12 +290,8 @@ export default function RaceSetup({
    * 保存赛事。
    *
    * 分两种语义，不能混：
-   *  - 已有 detail → 修改，走 PUT /api/races/:id，明确按 id 更新
-   *  - 没有 detail → 新建，走 POST /api/races，由服务端按 (日期,名称) 判断插或改
-   *
-   * 为什么不一律走 POST 让服务端猜：改赛事名时（"XX马拉松" → "XX马拉松 全程"），
-   * 服务端会认为这是新赛事而插一条，留下两条同日期记录。
-   * 前端明确知道自己在编辑哪一条，就该按 id 更新。
+   *  - edit 模式 → 修改，走 PUT /api/races/:id，明确按 id 更新
+   *  - create 模式 → 新建，走 POST /api/races
    */
   const save = async () => {
     setBusy(true);
@@ -235,7 +304,8 @@ export default function RaceSetup({
       }
 
       // 同一天只能参加一场 —— 保存前先提示，别让用户白填一遍
-      const sameDay = allRaces.find((r) => r.date === date && r.id !== detail?.race.id);
+      const targetId = formMode === "edit" ? detail?.race.id : undefined;
+      const sameDay = allRaces.find((r) => r.date === date && r.id !== targetId);
       if (sameDay) {
         const okToReplace = confirm(
           `${date} 已经登记过「${sameDay.name}」。\n\n` +
@@ -256,6 +326,7 @@ export default function RaceSetup({
        * （服务端也这么判：没提交路线字段就当"这次没提"）。
        */
       const clearingRoute =
+        formMode === "edit" &&
         routeMode === "none" &&
         !!detail &&
         detail.race.routeSource !== "none" &&
@@ -270,7 +341,8 @@ export default function RaceSetup({
       }
 
       // 选了"上传/粘贴"却什么都没给：说清楚，别静默存成一条没路线的赛事
-      const keepingExistingRoute = !!detail && detail.race.routeSource === "gpx" && gpxText.trim().length === 0;
+      const keepingExistingRoute =
+        formMode === "edit" && !!detail && detail.race.routeSource === "gpx" && gpxText.trim().length === 0;
       if (routeMode === "file" && gpxText.trim().length === 0 && !keepingExistingRoute) {
         setErr(
           "你选了「上传/粘贴轨迹文件」，但还没有选文件。\n" +
@@ -297,50 +369,16 @@ export default function RaceSetup({
         useLibraryRoute: routeMode === "lib",
         clearRoute: clearingRoute,
         labelId,
-        // 刻意不发 notes：这一页不再编辑备注，而 undefined = 服务端保留原值。
-        // 发 null 会把库里已有的备注清掉 —— 这正是原来每点一次「修改」就丢一次的原因。
       };
 
-      const d = detail
+      const d = formMode === "edit" && detail
         ? await api.uploadRaceRoute(detail.race.id, payload)
         : await api.createRace(payload);
 
       setDetail(d);
       setOpen(false);
       void loadBriefing(d.race.id);
-      onChanged?.();
-    } catch (e) {
-      setErr((e as Error).message);
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const uploadGpx = async (file: File) => {
-    if (!detail) return;
-    setBusy(true);
-    setErr(null);
-    try {
-      // 详情卡这个框也走同一套前端即时检查，免得选错格式要等服务端才报错
-      if (/\.kmz$/i.test(file.name)) {
-        setErr("KMZ 是压缩包，服务端读不了。请在两步路导出时改选「GPX格式」，或先解压出 .kml。");
-        return;
-      }
-      const text = await file.text();
-      // 预检一次：解析不了就别去覆盖已有的路线
-      const p = await api.parseRouteFile({ text, fileName: file.name, routeKind: "auto" });
-      if (!p.ok) {
-        setErr(p.error ?? "这个文件解析失败");
-        return;
-      }
-      const d = await api.uploadRaceRoute(detail.race.id, {
-        routeText: text,
-        routeKind: "auto",
-        routeFileName: file.name,
-        clearRoute: false,
-      });
-      setDetail(d);
-      void loadBriefing(d.race.id);
+      api.races().then(setAllRaces).catch(() => {});
       onChanged?.();
     } catch (e) {
       setErr((e as Error).message);
@@ -426,9 +464,18 @@ export default function RaceSetup({
     setBusy(true);
     try {
       await api.deleteRace(detail.race.id);
-      setDetail(null);
-      setBriefing(null);
+      const remaining = allRaces.filter((r) => r.id !== detail.race.id);
+      setAllRaces(remaining);
       onChanged?.();
+      if (remaining.length > 0) {
+        const today = todayBeijing();
+        const upcoming = remaining.filter((r) => r.date >= today).sort((a, b) => a.date.localeCompare(b.date));
+        const nextId = upcoming.length > 0 ? upcoming[0].id : remaining[remaining.length - 1].id;
+        await selectRace(nextId);
+      } else {
+        setDetail(null);
+        setBriefing(null);
+      }
     } catch (e) {
       setErr((e as Error).message);
     } finally {
@@ -436,105 +483,24 @@ export default function RaceSetup({
     }
   };
 
-  if (loading) {
-    // 路线分析要查 DEM 高程，可能耗时几秒 —— 必须给占位，
-    // 否则用户看到的是一片空白，会以为功能坏了
-    return (
-      <div className="card" style={{ marginBottom: 14 }}>
-        <h3 className="card-title">目标赛事</h3>
-        <div className="hint" style={{ marginTop: 8 }}>正在载入赛事与路线数据…</div>
-        <div className="skeleton" style={{ marginTop: 12, height: 22, width: "55%" }} />
-        <div className="skeleton" style={{ marginTop: 10, height: 14, width: "35%" }} />
-      </div>
-    );
-  }
-
-  if (!detail) {
-    return (
-      <div className="card" style={{ marginBottom: 14 }}>
-        <h3 className="card-title">目标赛事</h3>
-        <p className="card-sub">设置你要参加的比赛，系统会自动分析赛道爬升并给出配速方案。</p>
-        {err && <div className="banner error" style={{ marginTop: 10 }}>{err}</div>}
-        <button className="sync-btn" style={{ marginTop: 10, maxWidth: 200 }} onClick={openForm}>
-          + 添加赛事
-        </button>
-        {open && <Form />}
-      </div>
-    );
-  }
-
-  return (
-    <div className="card" style={{ marginBottom: 14 }}>
-      <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 12 }}>
-        <div>
-          <h3 className="card-title" style={{ marginBottom: 2 }}>{detail.race.name}</h3>
-          <p className="card-sub" style={{ margin: 0 }}>
-            {detail.race.date} · {detail.race.distanceKm} km
-            {detail.race.goalSec ? ` · 目标 ${fmtDurInput(detail.race.goalSec)}` : ""}
-          </p>
-          {/* 未填路线要显式标出来：不标的话用户看到"没有剖面图"会以为功能坏了 */}
-          {detail.race.routeSource === "none" && (
-            <span className="pill" style={{ display: "inline-block", marginTop: 6, fontSize: 11 }}>
-              未填路线 · 爬升还没算
-            </span>
-          )}
-        </div>
-        <div style={{ display: "flex", gap: 8 }}>
-          <label className="pill" style={{ cursor: "pointer" }}>
-            上传轨迹文件
-            <input
-              ref={fileRef}
-              type="file"
-              accept=".gpx,.kml"
-              style={{ display: "none" }}
-              onChange={(e) => {
-                const f = e.target.files?.[0];
-                if (f) void uploadGpx(f);
-                e.target.value = "";
-              }}
-            />
-          </label>
-          <button className="pill" onClick={openForm} style={{ cursor: "pointer", border: "none", background: "none" }}>
-            修改
-          </button>
-          <button
-            className="pill"
-            onClick={() => { if (confirm("删除这场赛事设定？")) void remove(); }}
-            style={{ cursor: "pointer", border: "none", background: "none", color: "var(--warn)" }}
-          >
-            删除
-          </button>
-        </div>
-      </div>
-
-      {err && <div className="banner error" style={{ marginTop: 10 }}>{err}</div>}
-      {busy && <div className="banner info" style={{ marginTop: 10 }}>处理中…</div>}
-
-      {open && <Form />}
-
-      <RouteProfileCard d={detail} />
-
-      {briefing ? (
-        <RaceBriefingCard d={briefing} onChanged={() => loadBriefing(briefing.race.id)} />
-      ) : (
-        <div className="spin" style={{ display: "block", margin: "18px 0" }} />
-      )}
-    </div>
-  );
-
-  function Form() {
-    // 历史训练候选：比赛当天在手表里就是一次普通训练，从这里选最省事
-    const candidates = useMemo(
-      () =>
-        acts
-          .filter((a) => !a.dateLabel || a.dateLabel <= date)
-          .slice(0, 60),
-      [acts, date],
-    );
+  function renderForm() {
     const picked = candidates.find((a) => a.labelId === labelId);
 
     return (
       <div style={{ marginTop: 14, padding: 14, border: "1px solid var(--border)", borderRadius: 8 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+          <strong style={{ fontSize: 14 }}>
+            {formMode === "create" ? "添加新赛事" : `修改赛事信息（${detail?.race.name ?? ""}）`}
+          </strong>
+          <button
+            type="button"
+            onClick={() => setOpen(false)}
+            style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text-faint)", fontSize: 16 }}
+            aria-label="关闭"
+          >
+            ✕
+          </button>
+        </div>
         <div style={{ marginBottom: 12 }}>
           <div className="label" style={{ marginBottom: 6 }}>从已同步的训练里选比赛</div>
           {candidates.length === 0 ? (
@@ -574,8 +540,44 @@ export default function RaceSetup({
 
         <div className="grid g4" style={{ marginBottom: 10 }}>
           <label className="stat">
-            <span className="label">比赛日期</span>
-            <input value={date} onChange={(e) => setDate(e.target.value)} type="date" />
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 4 }}>
+              <span className="label" style={{ margin: 0 }}>比赛日期</span>
+              <div style={{ display: "flex", gap: 4 }}>
+                <button
+                  type="button"
+                  className="pill"
+                  onClick={(e) => { e.preventDefault(); adjustMonth(-1); }}
+                  title="上一个月（快捷键：在输入框内按键盘向下箭头）"
+                  style={{ cursor: "pointer", padding: "1px 6px", fontSize: 11 }}
+                >
+                  ◀ 上月
+                </button>
+                <button
+                  type="button"
+                  className="pill"
+                  onClick={(e) => { e.preventDefault(); adjustMonth(1); }}
+                  title="下一个月（快捷键：在输入框内按键盘向上箭头）"
+                  style={{ cursor: "pointer", padding: "1px 6px", fontSize: 11 }}
+                >
+                  下月 ▶
+                </button>
+              </div>
+            </div>
+            <input
+              value={date}
+              onChange={(e) => setDate(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "ArrowUp") {
+                  e.preventDefault();
+                  adjustMonth(1);
+                } else if (e.key === "ArrowDown") {
+                  e.preventDefault();
+                  adjustMonth(-1);
+                }
+              }}
+              type="date"
+              style={{ width: "100%" }}
+            />
           </label>
           <label className="stat">
             <span className="label">赛事名称</span>
@@ -616,7 +618,6 @@ export default function RaceSetup({
           <label className="stat">
             <span className="label">目标成绩</span>
             <input value={goal} onChange={(e) => setGoal(e.target.value)} placeholder="3:00 或 3:05:37" />
-            {/* 这条提示原来被放在 GPX 粘贴框底下（放错字段了），挪回它该在的地方 */}
             <span className="hint">格式：3:00 = 3 小时；185:37 = 3:05:37</span>
           </label>
           <label className="stat">
@@ -629,17 +630,9 @@ export default function RaceSetup({
           </label>
         </div>
 
-        {/*
-         * 轨迹文件区 —— **新建赛事时的主路径就在这里**，不是只藏在详情卡里。
-         * 用户刚导完文件就顺手导入是最自然的动作，让他先去保存、
-         * 再去卡片右上角找上传框，是把一步能做完的事拆成两步。
-         */}
         {routeMode === "file" && (
           <div className="stat" style={{ display: "block", marginBottom: 10 }}>
-            {/* 先说清"已有一份"这件事，再放文件框。
-                不说的话，用户打开「修改」看到空白的文件框和空白的粘贴框，
-                合理推断是路线丢了，然后就会手滑再导一次把现有数据覆盖掉。 */}
-            {detail && detail.race.routeSource === "gpx" && (
+            {formMode === "edit" && detail && detail.race.routeSource === "gpx" && (
               <div className="banner info" style={{ marginBottom: 10, lineHeight: 1.7 }}>
                 <strong>这场比赛已经有一份轨迹文件。</strong>
                 {detail.profile && (
@@ -676,7 +669,6 @@ export default function RaceSetup({
                   onChange={(e) => {
                     const f = e.target.files?.[0];
                     if (f) void readRouteFile(f);
-                    // 清掉 value：否则连选同一个文件不会触发 change，用户以为没反应
                     e.target.value = "";
                   }}
                 />
@@ -718,9 +710,6 @@ export default function RaceSetup({
                   (() => {
                     const drift = Math.abs(preview.distanceKm - Number(dist)) / Number(dist);
                     if (drift <= 0.005) return null;
-                    // 分档说人话。GPS 漂移解释不了 10% 以上的偏差 ——
-                    // 那种情况几乎一定是选错了轨迹（导了另一天的、或者只有半程那一段），
-                    // 硬说成"漂移"会让用户以为没事，白白拿一份错路线去算配速。
                     const big = drift > 0.05;
                     return (
                       <>
@@ -751,7 +740,7 @@ export default function RaceSetup({
                 value={gpxText}
                 onChange={(e) => onPasteChange(e.target.value)}
                 placeholder={
-                  detail && detail.race.routeSource === "gpx"
+                  formMode === "edit" && detail && detail.race.routeSource === "gpx"
                     ? "粘贴新的轨迹内容会覆盖现在这份。不粘贴就是保留。"
                     : "手机上只有文本、或者要排查解析问题时，可以直接把文件内容粘到这里"
                 }
@@ -759,7 +748,7 @@ export default function RaceSetup({
               />
               <span className="hint">
                 文件框与粘贴框写的是同一份内容，谁先填谁生效。
-                {detail && detail.race.routeSource === "gpx" && gpxText.trim().length === 0 &&
+                {formMode === "edit" && detail && detail.race.routeSource === "gpx" && gpxText.trim().length === 0 &&
                   "（这场赛事已有轨迹文件，不选新文件直接保存会保留原来的。）"}
               </span>
             </label>
@@ -787,19 +776,9 @@ export default function RaceSetup({
           </div>
         )}
 
-        {/*
-          「主观体感备注」已从这一页移除。
-          这一页是赛前设定，而体感备注（累不累、抽筋、掉速）是**跑完之后**才写得出来的；
-          赛前摆一个填不了的框，只会让人以为有什么该填但填不了。
-          字段本身保留在库里（races.notes，可经 PUT /api/races/:id/notes 写入），
-          但现在**没有任何预测会读它** —— 比赛日 AI 分析整块已删除。
-          注意：本表单现在**不下发 notes**（undefined = 服务端保留原值），
-          别再加回去，否则又会变成"每次保存都清空备注"。
-        */}
-
         <div style={{ display: "flex", gap: 10, marginTop: 14 }}>
           <button className="sync-btn" style={{ maxWidth: 160 }} onClick={() => void save()} disabled={busy}>
-            {busy ? "保存中…" : detail ? "保存修改" : "创建赛事"}
+            {busy ? "保存中…" : formMode === "create" ? "创建赛事" : "保存修改"}
           </button>
           <button className="sync-btn" style={{ maxWidth: 120 }} onClick={() => setOpen(false)}>
             取消
@@ -808,4 +787,118 @@ export default function RaceSetup({
       </div>
     );
   }
+
+  if (loading && !detail) {
+    // 路线分析要查 DEM 高程，可能耗时几秒 —— 必须给占位，
+    // 否则用户看到的是一片空白，会以为功能坏了
+    return (
+      <div className="card" style={{ marginBottom: 14 }}>
+        <h3 className="card-title">目标赛事</h3>
+        <div className="hint" style={{ marginTop: 8 }}>正在载入赛事与路线数据…</div>
+        <div className="skeleton" style={{ marginTop: 12, height: 22, width: "55%" }} />
+        <div className="skeleton" style={{ marginTop: 10, height: 14, width: "35%" }} />
+      </div>
+    );
+  }
+
+  if (!detail) {
+    return (
+      <div className="card" style={{ marginBottom: 14 }}>
+        <h3 className="card-title">目标赛事</h3>
+        <p className="card-sub">设置你要参加的比赛，系统会自动分析赛道爬升并给出配速方案。</p>
+        {err && <div className="banner error" style={{ marginTop: 10 }}>{err}</div>}
+        <button className="sync-btn" style={{ marginTop: 10, maxWidth: 200 }} onClick={openCreateForm}>
+          + 添加赛事
+        </button>
+        {open && renderForm()}
+      </div>
+    );
+  }
+
+  return (
+    <div className="card" style={{ marginBottom: 14 }}>
+      {/* 顶部赛事切换器与操作栏 */}
+      <div className="race-selector-bar">
+        <div className="race-selector-left">
+          <div className="race-selector-header">
+            <span style={{ fontSize: 13, color: "var(--text-dim)", whiteSpace: "nowrap" }}>目标赛事：</span>
+            <button
+              type="button"
+              className="pill accent mobile-only-btn"
+              onClick={openCreateForm}
+              style={{ cursor: "pointer", border: "none", fontWeight: 600 }}
+            >
+              + 添加赛事
+            </button>
+          </div>
+          <select
+            className="race-selector-select"
+            value={detail.race.id}
+            onChange={(e) => void selectRace(Number(e.target.value))}
+            style={{ padding: "6px 12px", fontSize: 13 }}
+          >
+            {allRaces.map((r) => {
+              const isPast = r.date < todayBeijing();
+              return (
+                <option key={r.id} value={r.id}>
+                  {r.date} · {r.name} ({r.distanceKm}km){isPast ? " (往期)" : ""}
+                </option>
+              );
+            })}
+          </select>
+        </div>
+        <button
+          type="button"
+          className="pill accent desktop-only-btn"
+          onClick={openCreateForm}
+          style={{ cursor: "pointer", border: "none", fontWeight: 600, flexShrink: 0 }}
+        >
+          + 添加赛事
+        </button>
+      </div>
+
+      {/* 当前选中的具体赛事标题与操作（仅保留修改与删除，轨迹导入统一在修改表单中操作） */}
+      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12, padding: "12px 0 6px", borderTop: "1px solid var(--border)" }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <h3 className="card-title" style={{ marginBottom: 2, wordBreak: "break-word" }}>{detail.race.name}</h3>
+          <p className="card-sub" style={{ margin: 0 }}>
+            {detail.race.date} · {detail.race.distanceKm} km
+            {detail.race.goalSec ? ` · 目标 ${fmtDurInput(detail.race.goalSec)}` : ""}
+          </p>
+          {/* 未填路线要显式标出来：不标的话用户看到"没有剖面图"会以为功能坏了 */}
+          {detail.race.routeSource === "none" && (
+            <span className="pill" style={{ display: "inline-block", marginTop: 6, fontSize: 11 }}>
+              未填路线 · 爬升还没算
+            </span>
+          )}
+        </div>
+        <div style={{ display: "flex", gap: 8, flexShrink: 0 }}>
+          <button className="pill" onClick={openEditForm} style={{ cursor: "pointer", border: "none", background: "none" }}>
+            修改
+          </button>
+          <button
+            className="pill"
+            onClick={() => { if (confirm(`删除「${detail.race.name}」这场赛事设定？`)) void remove(); }}
+            style={{ cursor: "pointer", border: "none", background: "none", color: "var(--warn)" }}
+          >
+            删除
+          </button>
+        </div>
+      </div>
+
+      {err && <div className="banner error" style={{ marginTop: 10 }}>{err}</div>}
+      {busy && <div className="banner info" style={{ marginTop: 10 }}>处理中…</div>}
+
+      {open && renderForm()}
+
+      <RouteProfileCard d={detail} />
+
+      {briefing ? (
+        <RaceBriefingCard d={briefing} onChanged={() => loadBriefing(briefing.race.id)} />
+      ) : (
+        <div className="spin" style={{ display: "block", margin: "18px 0" }} />
+      )}
+    </div>
+  );
+
 }

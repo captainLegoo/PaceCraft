@@ -579,6 +579,30 @@ export function paceHrResidual(rows: ResidualRow[], height = 240) {
   return (
     <div className="chart-wrap" ref={ref}>
       <svg className="chart-svg" height={height} role="img">
+        {/* 背景分区：上半区吃力硬撑，下半区充沛轻松 */}
+        <rect
+          x={padL} y={padT} width={iw} height={ih / 2}
+          fill="var(--chart-bad)" opacity={0.06} rx={2}
+        />
+        <rect
+          x={padL} y={zero} width={iw} height={ih / 2}
+          fill="var(--chart-good)" opacity={0.06} rx={2}
+        />
+        <text
+          x={padL + iw - 6} y={padT + 13}
+          textAnchor="end" className="axis-label"
+          style={{ fill: "var(--chart-bad)", opacity: 0.85, fontSize: 11, fontWeight: 500 }}
+        >
+          ▲ 吃力硬撑区（心率偏高）
+        </text>
+        <text
+          x={padL + iw - 6} y={padT + ih - 6}
+          textAnchor="end" className="axis-label"
+          style={{ fill: "var(--chart-good)", opacity: 0.85, fontSize: 11, fontWeight: 500 }}
+        >
+          ▼ 充沛轻松区（心率偏低）
+        </text>
+
         {/* 参考线：±maxAbs 的上下界 + 零线 */}
         {[-maxAbs, -maxAbs / 2, maxAbs / 2, maxAbs].map((t, i) => (
           <g key={i}>
@@ -588,6 +612,9 @@ export function paceHrResidual(rows: ResidualRow[], height = 240) {
             </text>
           </g>
         ))}
+
+        <text className="axis-label" x={padL - 6} y={zero + 3} textAnchor="end" style={{ fontWeight: 600 }}>0</text>
+        <line className="axis-line" x1={padL} x2={padL + iw} y1={zero} y2={zero} strokeDasharray="3 3" />
 
         {rows.map((r, i) => {
           const up = r.residual >= 0;
@@ -599,7 +626,7 @@ export function paceHrResidual(rows: ResidualRow[], height = 240) {
             <g key={i}>
               <rect
                 x={cx - barW / 2} y={top} width={barW} height={h} rx={2.5}
-                fill={fill} opacity={1}
+                fill={fill} opacity={0.9}
                 onPointerMove={(e) => tip.show(e, <TipRows title={r.label} rows={r.tip} />)}
                 onPointerLeave={tip.hide}
               />
@@ -610,6 +637,7 @@ export function paceHrResidual(rows: ResidualRow[], height = 240) {
                   y={up ? top - 5 : top + h + 11}
                   textAnchor="middle"
                   fill={fill}
+                  style={{ fontWeight: 600 }}
                 >
                   {up ? `+${Math.round(r.residual)}` : Math.round(r.residual)}
                 </text>
@@ -618,7 +646,6 @@ export function paceHrResidual(rows: ResidualRow[], height = 240) {
           );
         })}
 
-        <line className="axis-line" x1={padL} x2={padL + iw} y1={zero} y2={zero} />
         {/* 条形是等距分槽，横轴标签按槽位列全标；折线用的 tickIndexes 会退化成只标首尾 */}
         {rows.map((r, i) => (
           i % xStep === 0 || i === n - 1 ? (
@@ -634,8 +661,8 @@ export function paceHrResidual(rows: ResidualRow[], height = 240) {
         ))}
       </svg>
       <div className="legend">
-        <div className="legend-item"><span className="legend-swatch" style={{ background: "var(--chart-bad)" }} />心率高于该配速应有值（硬顶）</div>
-        <div className="legend-item"><span className="legend-swatch" style={{ background: "var(--chart-good)" }} />心率低于该配速应有值（有余量）</div>
+        <div className="legend-item"><span className="legend-swatch" style={{ background: "var(--chart-bad)" }} />心率高于配速基准（吃力硬撑 / 后程漂移）</div>
+        <div className="legend-item"><span className="legend-swatch" style={{ background: "var(--chart-good)" }} />心率低于配速基准（充沛轻松 / 经济性好）</div>
       </div>
       {tip.el}
     </div>
@@ -677,15 +704,33 @@ export function hrResiduals(
 /** r 的绝对值分档，用于给一句人话结论 */
 export function couplingVerdict(r: number) {
   const a = Math.abs(r);
-  if (a < 0.3) return { level: "none" as const, text: "本次配速与心率没有明显关系" };
-  if (a < 0.6) return { level: "weak" as const, text: "配速与心率关系较弱，参考价值有限" };
-  return { level: "strong" as const, text: r < 0 ? "耦合良好：跑得慢心率就降" : "耦合良好：跑得快心率就升" };
+  if (a < 0.3) {
+    return {
+      level: "none" as const,
+      title: "配速与心率离散度大",
+      text: "心率起伏受配速以外的因素影响较多（如爬升起伏、气温或后程疲劳），不宜单凭配速直接对标能力。",
+    };
+  }
+  if (a < 0.6) {
+    return {
+      level: "weak" as const,
+      title: "配速与心率基本匹配",
+      text: "心率随配速变化有一定起伏，整体在正常调节范围内。",
+    };
+  }
+  return {
+    level: "strong" as const,
+    title: "配速与心率高度联动",
+    text: r < 0
+      ? "身体对速度变化反应灵敏，提速心率升、降速心率降，体能控制处于良好状态。"
+      : "配速与心率呈反常同向，可能存在数据异常或极特殊地形影响。",
+  };
 }
 
 // ---------- 心率区间条 ----------
 export type ZoneInput = {
   zone: string; label: string; seconds: number; pct: number; color: string;
-  hrLo?: number; hrHi?: number; pctLabel?: string;
+  hrLo?: number | null; hrHi?: number | null; pctLabel?: string;
 };
 
 export type ZoneBasis = {
@@ -709,10 +754,10 @@ export function ZoneBar({ zones, basis }: { zones: ZoneInput[]; basis: number | 
   return (
     <div>
       <div style={{ display: "flex", height: 22, borderRadius: 6, overflow: "hidden", gap: 1 }}>
-        {/* 低于 Z1 下界（热身/走路）用灰色占位，避免百分比看起来对不上 */}
+        {/* 低于 Z1 下界（Z0 积极恢复/热身/走路）用灰色占位，避免百分比看起来对不上 */}
         {belowPct > 0 && (
           <div
-            title={`区间外（< ${zones[0]?.hrLo ?? 136} bpm，热身/恢复）— ${belowPct}%`}
+            title={`Z0 积极恢复（${zones[0]?.hrLo != null ? `< ${zones[0].hrLo}` : "低于 Z1"} bpm）— ${belowPct}%`}
             style={{
               width: `${belowPct}%`,
               background: "var(--chart-muted)",
@@ -724,7 +769,7 @@ export function ZoneBar({ zones, basis }: { zones: ZoneInput[]; basis: number | 
         {zones.map((z) => (
           <div
             key={z.zone}
-            title={`${z.zone} ${z.label}${z.hrLo ? ` ${z.hrLo}–${z.hrHi} bpm（${z.pctLabel ?? ""}）` : ""} — ${fmtDur(z.seconds)} (${z.pct}%)`}
+            title={`${z.zone} ${z.label}${z.hrLo != null ? ` ${z.hrHi && z.hrHi < 900 ? `${z.hrLo}–${z.hrHi}` : `>${z.hrLo}`} bpm（${z.pctLabel ?? ""}）` : ""} — ${fmtDur(z.seconds)} (${z.pct}%)`}
             style={{
               width: `${(z.seconds / total) * 100}%`,
               background: `var(--chart-${z.zone.toLowerCase()})`,
@@ -735,33 +780,37 @@ export function ZoneBar({ zones, basis }: { zones: ZoneInput[]; basis: number | 
         ))}
       </div>
       <div className="legend" style={{ marginTop: 10 }}>
+        {belowPct > 0 && (
+          <div className="legend-item" style={{ opacity: 0.7 }}>
+            <span className="legend-swatch" style={{ background: "var(--chart-muted)", opacity: 0.5 }} />
+            Z0 积极恢复
+            <span className="num" style={{ color: "var(--text-faint)", fontSize: 11 }}>
+              &lt; {zones[0]?.hrLo ?? "—"}
+            </span>
+            <span className="num" style={{ color: "var(--text-faint)" }}>{belowPct}%</span>
+          </div>
+        )}
         {zones.map((z) => (
           <div className="legend-item" key={z.zone} style={{ opacity: z.seconds > 0 ? 1 : 0.4 }}>
             <span className="legend-swatch" style={{ background: `var(--chart-${z.zone.toLowerCase()})` }} />
             {z.zone} {z.label}
             {hasHrRange && z.hrLo != null && (
               <span className="num" style={{ color: "var(--text-faint)", fontSize: 11 }}>
-                {z.hrLo}–{z.hrHi}{z.pctLabel ? ` (${z.pctLabel})` : ""}
+                {z.hrHi && z.hrHi < 900 ? `${z.hrLo}–${z.hrHi}` : `>${z.hrLo}`}{z.pctLabel ? ` (${z.pctLabel})` : ""}
               </span>
             )}
             <span className="num" style={{ color: "var(--text-faint)" }}>{z.pct}%</span>
           </div>
         ))}
-        {belowPct > 0 && (
-          <div className="legend-item" style={{ opacity: 0.7 }}>
-            <span className="legend-swatch" style={{ background: "var(--chart-muted)", opacity: 0.35 }} />
-            热身/恢复
-            <span className="num" style={{ color: "var(--text-faint)", fontSize: 11 }}>
-              &lt; {zones[0]?.hrLo ?? 136}
-            </span>
-            <span className="num" style={{ color: "var(--text-faint)" }}>{belowPct}%</span>
-          </div>
-        )}
       </div>
       <div className="hint" style={{ marginTop: 8 }}>
-        按<strong>五区间心率法</strong>划分（绝对心率判定）
-        {b.restingHr ? `，最大心率 ${b.maxHr ?? b.basis} bpm − 静息 ${b.restingHr} bpm = 储备 ${b.reserve} bpm` : ""}。
-        括号内百分比是对应的 HRR 占比。COROS 未提供分区字段，此处为自算。
+        按<strong>{b.method ?? "五区间心率法"}</strong>划分
+        {b.method?.includes("自定义")
+          ? "（使用你在设置中指定的各区间绝对心率）"
+          : b.restingHr
+            ? `，最大心率 ${b.maxHr ?? b.basis} bpm − 静息 ${b.restingHr} bpm = 储备 ${b.reserve} bpm。括号内百分比是对应的 HRR 占比`
+            : ""}
+        。COROS 未提供分区字段，此处为自算。
       </div>
     </div>
   );
@@ -882,4 +931,261 @@ function inline(text: string): ReactNode {
     if (p.startsWith("`") && p.endsWith("`")) return <code key={i}>{p.slice(1, -1)}</code>;
     return <span key={i}>{p}</span>;
   });
+}
+
+// ---------- 有氧脱钩率（Aerobic Decoupling）计算与卡片 ----------
+
+export type DecouplingResult = {
+  eligible: boolean;
+  reason?: string;
+  decouplingPct?: number;
+  badge?: {
+    label: string;
+    level: "good" | "warn" | "bad" | "info";
+    text: string;
+  };
+  half1?: {
+    paceSec: number;
+    avgHr: number;
+    speed: number;
+    ef: number;
+    distKm: number;
+    durationSec: number;
+  };
+  half2?: {
+    paceSec: number;
+    avgHr: number;
+    speed: number;
+    ef: number;
+    distKm: number;
+    durationSec: number;
+  };
+  deltaHr?: number;
+  deltaPaceSec?: number;
+};
+
+export function calculateAerobicDecoupling(
+  laps: { distanceM: number; timeSec: number; avgPaceSec?: number; avgHr?: number; elevGain?: number }[],
+  options?: { distanceKm?: number; durationSec?: number; isInterval?: boolean },
+): DecouplingResult {
+  const isInterval = options?.isInterval ?? false;
+  if (isInterval) {
+    return { eligible: false, reason: "间歇训练快慢交替，心率与配速剧烈波动，不适用稳态有氧脱钩分析" };
+  }
+
+  const validLaps = (laps ?? []).filter((l) => l.avgHr && l.avgHr > 40 && l.timeSec > 0 && l.distanceM > 0);
+  if (validLaps.length < 4) {
+    return { eligible: false, reason: "有效分圈不足（至少需要 4 段有效心率与配速数据）" };
+  }
+
+  const totalDistM = validLaps.reduce((s, l) => s + l.distanceM, 0);
+  const totalTimeSec = validLaps.reduce((s, l) => s + l.timeSec, 0);
+
+  if (totalDistM < 5000 || totalTimeSec < 1500) {
+    return {
+      eligible: false,
+      reason: `距离或用时偏短（${(totalDistM / 1000).toFixed(1)}km / ${Math.round(totalTimeSec / 60)}分钟），有氧脱钩需在持续稳态长距离（建议 ≥5km）中评估`,
+    };
+  }
+
+  const totalGain = validLaps.reduce((s, l) => s + (l.elevGain ?? 0), 0);
+  const gainPerKm = totalDistM > 0 ? (totalGain / totalDistM) * 1000 : 0;
+  if (gainPerKm > 18) {
+    return {
+      eligible: false,
+      reason: `路线爬升较大（${Math.round(totalGain)}m，${gainPerKm.toFixed(1)} m/km），坡度对配速心率比扰动过大，脱钩率计算失真`,
+    };
+  }
+
+  // 按时间等分前后两半
+  const halfTime = totalTimeSec / 2;
+  let time1 = 0, dist1 = 0, hrTime1 = 0;
+  let time2 = 0, dist2 = 0, hrTime2 = 0;
+  let accumTime = 0;
+
+  for (const lap of validLaps) {
+    const lapStart = accumTime;
+    const lapEnd = accumTime + lap.timeSec;
+    accumTime = lapEnd;
+
+    if (lapEnd <= halfTime) {
+      time1 += lap.timeSec;
+      dist1 += lap.distanceM;
+      hrTime1 += (lap.avgHr ?? 0) * lap.timeSec;
+    } else if (lapStart >= halfTime) {
+      time2 += lap.timeSec;
+      dist2 += lap.distanceM;
+      hrTime2 += (lap.avgHr ?? 0) * lap.timeSec;
+    } else {
+      const t1 = halfTime - lapStart;
+      const t2 = lapEnd - halfTime;
+      const f1 = t1 / lap.timeSec;
+      const f2 = t2 / lap.timeSec;
+
+      time1 += t1;
+      dist1 += lap.distanceM * f1;
+      hrTime1 += (lap.avgHr ?? 0) * t1;
+
+      time2 += t2;
+      dist2 += lap.distanceM * f2;
+      hrTime2 += (lap.avgHr ?? 0) * t2;
+    }
+  }
+
+  if (time1 <= 0 || time2 <= 0 || dist1 <= 0 || dist2 <= 0) {
+    return { eligible: false, reason: "分段耗时异常，未能计算前后半效率因子" };
+  }
+
+  const speed1 = dist1 / time1;
+  const avgHr1 = hrTime1 / time1;
+  const ef1 = speed1 / avgHr1;
+  const paceSec1 = time1 / (dist1 / 1000);
+
+  const speed2 = dist2 / time2;
+  const avgHr2 = hrTime2 / time2;
+  const ef2 = speed2 / avgHr2;
+  const paceSec2 = time2 / (dist2 / 1000);
+
+  const decouplingPct = Number((((ef1 - ef2) / ef1) * 100).toFixed(1));
+  const deltaHr = Math.round(avgHr2 - avgHr1);
+  const deltaPaceSec = Math.round(paceSec2 - paceSec1);
+
+  let badge: NonNullable<DecouplingResult["badge"]>;
+  if (decouplingPct < -3.0) {
+    badge = {
+      label: "越跑越顺 (负脱钩)",
+      level: "info",
+      text: "后程效率反超前半程（配速明显提速且心率平稳），处于充沛兴奋或渐加速状态",
+    };
+  } else if (decouplingPct <= 5.0) {
+    badge = {
+      label: "优秀有氧 (<5%)",
+      level: "good",
+      text: "前后半程心率与配速高度平行，心血管未发生明显漂移，基础有氧耐力与代谢能力非常扎实",
+    };
+  } else if (decouplingPct <= 8.0) {
+    badge = {
+      label: "轻度漂移 (5%–8%)",
+      level: "warn",
+      text: "后程出现轻微心率上浮或配速微降，属于长距离后期的正常生理疲劳或散热温升，在合理控制范围内",
+    };
+  } else {
+    badge = {
+      label: "显著脱钩 (>8%)",
+      level: "bad",
+      text: "后程效率明显衰减（心率持续升高或配速衰退严重），提示当前配速略高于有氧舒适区，或存在脱水、糖原耗尽等耐力短板",
+    };
+  }
+
+  return {
+    eligible: true,
+    decouplingPct,
+    badge,
+    half1: {
+      paceSec: paceSec1,
+      avgHr: Math.round(avgHr1),
+      speed: speed1,
+      ef: ef1,
+      distKm: Number((dist1 / 1000).toFixed(2)),
+      durationSec: Math.round(time1),
+    },
+    half2: {
+      paceSec: paceSec2,
+      avgHr: Math.round(avgHr2),
+      speed: speed2,
+      ef: ef2,
+      distKm: Number((dist2 / 1000).toFixed(2)),
+      durationSec: Math.round(time2),
+    },
+    deltaHr,
+    deltaPaceSec,
+  };
+}
+
+export function AerobicDecouplingCard({
+  laps,
+  options,
+}: {
+  laps: { distanceM: number; timeSec: number; avgPaceSec?: number; avgHr?: number; elevGain?: number }[];
+  options?: { distanceKm?: number; durationSec?: number; isInterval?: boolean };
+}) {
+  const result = calculateAerobicDecoupling(laps, options);
+
+  if (!result.eligible) {
+    return (
+      <div className="card" style={{ marginBottom: 14 }}>
+        <h3 className="card-title">有氧脱钩率分析（Aerobic Decoupling）</h3>
+        <p className="card-sub">基于 Joe Friel 有氧模型（EF = 配速 / 心率）评估心血管漂移与有氧耐力储备。</p>
+        <div className="banner info" style={{ marginTop: 10, marginBottom: 0, fontSize: 12.5 }}>
+          {result.reason ?? "当前训练暂不适用有氧脱钩评估"}
+        </div>
+      </div>
+    );
+  }
+
+  const { decouplingPct, badge, half1, half2, deltaHr, deltaPaceSec } = result;
+  const pillClass = badge?.level === "good" ? "good" : badge?.level === "bad" ? "bad" : badge?.level === "warn" ? "warn" : "accent";
+  const numColor = badge?.level === "good" ? "var(--good)" : badge?.level === "bad" ? "var(--bad)" : badge?.level === "warn" ? "var(--warn)" : "var(--accent)";
+
+  return (
+    <div className="card" style={{ marginBottom: 14 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", flexWrap: "wrap", gap: 10 }}>
+        <div>
+          <h3 className="card-title" style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            有氧脱钩率分析（Aerobic Decoupling）
+            <span className={`pill ${pillClass}`} style={{ fontSize: 12, fontWeight: 600 }}>
+              {badge?.label}
+            </span>
+          </h3>
+          <p className="card-sub" style={{ margin: 0 }}>
+            基于 Joe Friel 耐力模型：对比前后半程效率因子（EF = 速度 / 心率）。脱钩率 &lt; 5% 证明有氧底子扎实，无明显心血管漂移。
+          </p>
+        </div>
+        <div style={{ textAlign: "right" }}>
+          <span className="num" style={{ fontSize: 26, fontWeight: 700, color: numColor }}>
+            {decouplingPct! > 0 ? `+${decouplingPct}%` : `${decouplingPct}%`}
+          </span>
+        </div>
+      </div>
+
+      <div className="grid g3" style={{ marginTop: 14 }}>
+        <div className="stat" style={{ background: "var(--surface-2)", padding: "12px 14px", borderRadius: 8 }}>
+          <span className="label" style={{ fontWeight: 600, color: "var(--text)" }}>前半程（前 50% 时间）</span>
+          <span className="value num" style={{ fontSize: 20 }}>
+            {fmtPace(half1?.paceSec)}
+            <span className="unit" style={{ fontSize: 13, marginRight: 8 }}>/km</span>
+            <span style={{ fontSize: 16, color: "var(--chart-hr)" }}>{half1?.avgHr}</span>
+            <span className="unit" style={{ fontSize: 13 }}>bpm</span>
+          </span>
+          <span className="hint">耗时 {fmtDur(half1?.durationSec)} · {half1?.distKm} km</span>
+        </div>
+
+        <div className="stat" style={{ background: "var(--surface-2)", padding: "12px 14px", borderRadius: 8 }}>
+          <span className="label" style={{ fontWeight: 600, color: "var(--text)" }}>后半程（后 50% 时间）</span>
+          <span className="value num" style={{ fontSize: 20 }}>
+            {fmtPace(half2?.paceSec)}
+            <span className="unit" style={{ fontSize: 13, marginRight: 8 }}>/km</span>
+            <span style={{ fontSize: 16, color: "var(--chart-hr)" }}>{half2?.avgHr}</span>
+            <span className="unit" style={{ fontSize: 13 }}>bpm</span>
+          </span>
+          <span className="hint">耗时 {fmtDur(half2?.durationSec)} · {half2?.distKm} km</span>
+        </div>
+
+        <div className="stat" style={{ background: "var(--surface-2)", padding: "12px 14px", borderRadius: 8 }}>
+          <span className="label" style={{ fontWeight: 600, color: "var(--text)" }}>后程变化量</span>
+          <span className="value num" style={{ fontSize: 20 }}>
+            心率 {deltaHr! >= 0 ? `+${deltaHr}` : deltaHr} <span className="unit" style={{ fontSize: 13, marginRight: 8 }}>bpm</span>
+            配速 {deltaPaceSec! >= 0 ? `+${deltaPaceSec}s` : `${deltaPaceSec}s`}
+          </span>
+          <span className="hint">
+            {deltaHr! > 5 ? "后程心率明显上浮（心血管漂移）" : deltaHr! < -2 ? "后程心率下降" : "心率与配速高度平稳"}
+          </span>
+        </div>
+      </div>
+
+      <div className={`banner ${badge?.level === "good" ? "info" : badge?.level === "warn" ? "warn" : badge?.level === "bad" ? "error" : "info"}`} style={{ marginTop: 12, marginBottom: 0, fontSize: 12.5 }}>
+        <strong>诊断结论</strong>：{badge?.text}
+      </div>
+    </div>
+  );
 }

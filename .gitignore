@@ -30,6 +30,7 @@ docs/
 # 然后 git add . 一把提交上去（tokens.json 是明文 OAuth token）。
 .env
 .env.*
+!.env.example
 *.db
 *.db-shm
 *.db-wal

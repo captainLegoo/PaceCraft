@@ -60,7 +60,7 @@ export type RacePrepReport = {
   };
   checklist: ReadinessItem[];
   prediction: { seconds: number; paceSec: number } | null;
-  profile: { age: number; weightKg: number | null; heightCm: number | null } | null;
+  profile: { age: number | null; weightKg: number | null; heightCm: number | null } | null;
 };
 
 // 强度课判定见 training-focus.ts：改用自建引擎的配速-心率回归，

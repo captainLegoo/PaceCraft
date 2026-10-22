@@ -119,24 +119,23 @@ function PredictionCard({ b, goalSec }: { b: Briefing; goalSec: number | null })
 
   return (
     <>
-      <div className="grid g3" style={{ marginBottom: 10 }}>
+      <div className="grid g3" style={{ marginBottom: 12 }}>
         <div className="stat">
           <span className="label">你的目标</span>
           <span className="value num" style={{ fontSize: 24, color: "var(--text)" }}>
             {goalSec != null ? fDur(goalSec) : <span style={{ color: "var(--text-faint)" }}>未设定</span>}
           </span>
-          <span className="hint">手动填写 · 不会因训练变化而改变</span>
+          <span className="hint">手动设定目标用时</span>
         </div>
         <div className="stat">
           <span className="label">当前预测</span>
-          <span className="value num" style={{ color: "var(--accent)", fontSize: 26 }}>{fDur(p.bestSec)}</span>
-          <span className="hint">按现有数据算出 · 训练变了会跟着变</span>
-          <span className="hint">已折算本场地形与海拔</span>
+          <span className="value num" style={{ color: "var(--accent)", fontSize: 24 }}>{fDur(p.bestSec)}</span>
+          <span className="hint">已折算地形与海拔</span>
         </div>
         <div className="stat">
           <span className="label">距比赛</span>
-          <span className="value num">{b.daysToRace ?? "—"}<span className="unit">天</span></span>
-          <span className="hint">置信度 {p.confidence} · 区间 {fDur(p.lowSec)}~{fDur(p.highSec)}</span>
+          <span className="value num" style={{ fontSize: 24 }}>{b.daysToRace ?? "—"}<span className="unit">天</span></span>
+          <span className="hint">置信度：{p.confidence} 级</span>
         </div>
       </div>
 
@@ -144,9 +143,12 @@ function PredictionCard({ b, goalSec }: { b: Briefing; goalSec: number | null })
         <div
           className="banner"
           style={{
-            fontSize: 12.5,
+            fontSize: 12,
+            padding: "8px 12px",
+            marginBottom: 10,
             background: reachable ? "var(--info-bg)" : "var(--warn-bg)",
             border: `1px solid ${reachable ? "var(--info-border)" : "var(--warn-border)"}`,
+            lineHeight: 1.5,
           }}
         >
           {reachable ? (
@@ -157,38 +159,111 @@ function PredictionCard({ b, goalSec }: { b: Briefing; goalSec: number | null })
             </>
           ) : gapHard ? (
             <>
-              目标 <strong>{fDur(goalSec!)}</strong> 比当前预测 <strong>{fDur(p.bestSec)}</strong> 慢{" "}
-              <strong>{fDur(Math.abs(gapSec))}</strong>，余量约 {(Math.abs(gapSec) / p.bestSec * 100).toFixed(1)}%。
-              这是个偏保守的目标，适合赛前稳定发挥。
+              目标 <strong>{fDur(goalSec!)}</strong> 仅比当前预测 <strong>{fDur(p.bestSec)}</strong> 慢{" "}
+              <strong>{fDur(Math.abs(gapSec))}</strong>（余量约 {(Math.abs(gapSec) / p.bestSec * 100).toFixed(1)}%），需稳定控速，容错较小。
             </>
           ) : (
             <>
               目标 <strong>{fDur(goalSec!)}</strong> 比当前预测 <strong>{fDur(p.bestSec)}</strong> 慢{" "}
-              <strong>{fDur(Math.abs(gapSec))}</strong>，余量较宽。以当前状态跑进这个成绩的把握较大。
+              <strong>{fDur(Math.abs(gapSec))}</strong>，余量充裕，以当前状态跑进目标的把握较大。
             </>
           )}
         </div>
       )}
 
-      <details style={{ marginTop: 10 }}>
-        <summary style={{ cursor: "pointer", fontSize: 12, color: "var(--text-dim)" }}>
-          预测是怎么算出来的（纯数据，不含 AI）
+      <details style={{ marginTop: 4 }}>
+        <summary style={{ cursor: "pointer", fontSize: 12, color: "var(--text-dim)", userSelect: "none" }}>
+          查看预测算法依据与关键影响因子
         </summary>
-        <div style={{ marginTop: 8 }}>
-          <div className="hint" style={{ fontSize: 11.5, lineHeight: 1.6 }}>{p.basis}</div>
+        <div style={{ marginTop: 8, padding: "8px 10px", background: "var(--surface)", borderRadius: 6, border: "1px solid var(--border)" }}>
+          <div style={{ fontSize: 11.5, color: "var(--text-dim)", lineHeight: 1.6 }}>{p.basis}</div>
           <div style={{ marginTop: 8 }}>
-            <h4 style={{ margin: "0 0 6px", fontSize: 12.5, color: "var(--text-dim)" }}>影响因素</h4>
-            <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+            <div style={{ margin: "0 0 6px", fontSize: 11.5, color: "var(--text-dim)", fontWeight: 500 }}>关键影响因子</div>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
               {p.factors.map((f, i) => (
-                <span key={i} className="pill" style={{ color: TONE_COLOR[f.tone], borderColor: "var(--border-strong)", fontSize: 11 }}>
+                <span key={i} className="pill" style={{ color: TONE_COLOR[f.tone], fontSize: 11, padding: "2px 8px" }}>
                   {f.label}：{f.effect}
                 </span>
               ))}
             </div>
           </div>
-          <div className="hint" style={{ marginTop: 8, fontSize: 11.5 }}>{p.confidenceNote}</div>
+          <div style={{ marginTop: 6, fontSize: 11.5, color: "var(--text-faint)" }}>{p.confidenceNote}</div>
         </div>
       </details>
+    </>
+  );
+}
+
+function TrainingStateCard({ training: t }: { training: Briefing["training"] }) {
+  return (
+    <>
+      <div className="grid g2" style={{ marginBottom: 12 }}>
+        <div className="stat">
+          <span className="label">近 4 周周均</span>
+          <span className="value num">{t.weeklyKm4}<span className="unit">km</span></span>
+          <span className="hint">
+            {t.trendPct != null
+              ? `较前4周 ${t.trendPct > 0 ? "+" : ""}${t.trendPct}%`
+              : `8周均 ${t.weeklyKm8} km`}
+          </span>
+        </div>
+        <div className="stat">
+          <span className="label">当前负荷比</span>
+          <span className="value num" style={{ color: (t.loadRatio ?? 1) > 1.4 ? "var(--warn)" : "var(--good)" }}>
+            {t.loadRatio ?? "—"}
+          </span>
+          <span className="hint">
+            {(t.loadRatio ?? 1) > 1.4 ? "偏高 · 需防疲劳" : (t.loadRatio ?? 1) < 0.75 ? "偏低 · 刺激不足" : "负荷处于安全区间"}
+          </span>
+        </div>
+        <div className="stat">
+          <span className="label">基础有氧占比</span>
+          <span className="value num" style={{ color: (t.easyPct ?? 100) < 75 ? "var(--warn)" : "var(--good)" }}>
+            {t.easyPct ?? "—"}<span className="unit">%</span>
+          </span>
+          <span className="hint">合理基准 75%–80%</span>
+        </div>
+        <div className="stat">
+          <span className="label">长距离储备</span>
+          <span className="value num" style={{ color: t.longRun.ready ? "var(--good)" : "var(--warn)" }}>
+            {(t.longRun.ready?.km ?? t.longRun.max?.km) ?? "—"}<span className="unit">km</span>
+          </span>
+          <span className="hint">
+            {t.longRun.ready
+              ? `近4周有 ≥28km 实测`
+              : t.longRun.max
+                ? `最长单次 ${t.longRun.max.km} km`
+                : "近4周无 ≥25km 训练"}
+          </span>
+        </div>
+      </div>
+
+      <div
+        className="banner info"
+        style={{
+          fontSize: 12,
+          padding: "8px 12px",
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          flexWrap: "wrap",
+          gap: 6,
+          lineHeight: 1.5,
+        }}
+      >
+        <span>统计窗口：截至 <strong>{t.asOf}</strong></span>
+        {t.daysSinceAnchor > 0 && (
+          <span style={{ color: t.daysSinceAnchor >= 3 ? "var(--warn)" : "var(--text-dim)" }}>
+            距上次训练 {t.daysSinceAnchor} 天{t.daysSinceAnchor >= 3 ? "（建议尽快同步新数据）" : ""}
+          </span>
+        )}
+      </div>
+
+      {t.loadAsOf && (
+        <div style={{ fontSize: 11.5, color: "var(--text-faint)", marginTop: 4, paddingLeft: 2 }}>
+          负荷比计算基准日：{t.loadAsOf}
+        </div>
+      )}
     </>
   );
 }
@@ -198,35 +273,38 @@ function PacingCard({ b }: { b: Briefing }) {
   if (!p) return null;
   return (
     <>
-      <p className="card-sub" style={{ marginTop: 0 }}>{p.strategySummary}</p>
-      <table>
-        <thead>
-          <tr><th>阶段</th><th>里程</th><th>目标配速</th><th>心率上限</th><th>意图</th></tr>
-        </thead>
-        <tbody>
-          {p.segments.map((s, i) => (
-            <tr key={i}>
-              <td style={{ fontWeight: 600 }}>{s.label}</td>
-              <td className="num">{s.fromKm}–{s.toKm} km</td>
-              <td className="num" style={{ color: "var(--accent)", fontWeight: 600 }}>
-                {fPace(s.targetPaceSec)}<span style={{ color: "var(--text-faint)" }}> /km</span>
-              </td>
-              <td className="num" style={{ color: s.targetHr ? "var(--hr)" : "var(--text-faint)" }}>
-                {s.targetHr ? `≤ ${s.targetHr}` : "不限"}
-              </td>
-              <td className="cell-text" style={{ textAlign: "left", fontSize: 11.5, color: "var(--text-dim)" }}>
-                {s.intent}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+      <p className="card-sub" style={{ marginTop: 0, marginBottom: 10 }}>{p.strategySummary}</p>
+      <div className="table-scroll-wrap">
+        <div className="table-scroll briefing-table-scroll">
+          <table>
+            <thead>
+              <tr><th>阶段</th><th>里程</th><th>建议配速</th><th>心率上限</th><th>战术执行意图</th></tr>
+            </thead>
+            <tbody>
+              {p.segments.map((s, i) => (
+                <tr key={i}>
+                  <td style={{ fontWeight: 600 }}>{s.label}</td>
+                  <td className="num">{s.fromKm}–{s.toKm} km</td>
+                  <td className="num" style={{ color: "var(--accent)", fontWeight: 600 }}>
+                    {fPace(s.targetPaceSec)}<span style={{ color: "var(--text-faint)" }}> /km</span>
+                  </td>
+                  <td className="num" style={{ color: s.targetHr ? "var(--hr)" : "var(--text-faint)" }}>
+                    {s.targetHr ? `≤ ${s.targetHr} bpm` : "不限"}
+                  </td>
+                  <td className="cell-text" style={{ textAlign: "left", fontSize: 12, color: "var(--text-dim)" }}>
+                    {s.intent}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
       <div className="hint" style={{ marginTop: 8 }}>
-        心率上限来源：{p.hrCapSource === "anchors" ? "实测比赛" : "最大心率百分比"}
-        —— {p.hrCapNote}
+        心率上限设定依据：{p.hrCapSource === "anchors" ? "历史实测比赛心率" : "最大心率储备比例"} —— {p.hrCapNote}
       </div>
       {p.warnings.length > 0 && (
-        <div style={{ marginTop: 12 }}>
+        <div style={{ marginTop: 10 }}>
           {p.warnings.map((w, i) => (
             <div key={i} className="banner warn" style={{ marginBottom: 6, fontSize: 12 }}>⚠ {w}</div>
           ))}
@@ -269,100 +347,132 @@ function AnchorTable({ anchors, onChanged }: { anchors: RaceAnchor[]; onChanged?
   return (
     <>
       {err && <div className="banner error" style={{ marginBottom: 6, fontSize: 12 }}>{err}</div>}
-      <table>
-        <thead>
-          <tr><th>日期</th><th>赛事</th><th>实测</th><th>海平面等效</th><th>爬升</th><th>海拔</th><th>前后半</th><th>状态</th></tr>
-        </thead>
-        <tbody>
-          {anchors.map((a, i) => (
-            <tr key={a.labelId || i} style={{ opacity: a.excluded ? 0.55 : 1 }}>
-              <td>{a.date}</td>
-              <td style={{ textAlign: "left" }}>{a.label}</td>
-              <td className="num">{fDur(a.seconds)}</td>
-              <td className="num" style={{ color: "var(--accent)", fontWeight: 600 }}>{fDur(a.seaLevelSec)}</td>
-              <td className="num">{a.climbRate} m/km</td>
-              <td className="num" style={{ color: a.altitudeSource === "unknown" ? "var(--warn)" : undefined }}
-                  title={a.altitudeSource === "fit"
-                    ? "来自手环气压计实测（最准）"
-                    : a.altitudeSource === "city-table"
-                      ? "来自城市海拔兜底表（按城市中心点）"
-                      : "未知：这场没折算海拔，跨比赛比较可能偏差"}>
-                {a.altitude >= 1000
-                  ? `${Math.round(a.altitude)} m ⚠`
-                  : a.altitudeSource === "unknown" ? "未知" : `${Math.round(a.altitude)} m`}
-              </td>
-              <td className="num" style={{ color: (a.fadePct ?? 0) < 0 ? "var(--good)" : "var(--warn)" }}>
-                {a.fadePct != null ? `${a.fadePct > 0 ? "+" : ""}${a.fadePct}%` : "—"}
-              </td>
-              <td>
-                <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
-                  {a.excluded ? (
-                    <span className="pill warn" style={{ fontSize: 10.5 }} title={a.excludeReason}>
-                      {a.excludeSource === "manual" ? "已排除·手动" : "已排除·自动"}
-                    </span>
-                  ) : a.excludeSource === "included" ? (
-                    <span className="pill good" style={{ fontSize: 10.5 }} title="自动判定为异常，但你要求纳入基准">
-                      有效·手动纳入
-                    </span>
-                  ) : (
-                    <span className="pill good" style={{ fontSize: 10.5 }}>有效</span>
-                  )}
-                  {editing === a.labelId ? (
-                    <span style={{ display: "inline-flex", gap: 4, alignItems: "center" }}>
-                      <input
-                        value={draft}
-                        onChange={(e) => setDraft(e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter") run(a.labelId, true, draft);
-                          if (e.key === "Escape") setEditing(null);
-                        }}
-                        placeholder="排除原因（只有你知道）"
-                        style={{ width: 180, fontSize: 11.5, padding: "2px 6px" }}
-                        autoFocus
-                      />
-                      <button className="btn" style={{ fontSize: 11, padding: "2px 8px" }}
-                        disabled={busy === a.labelId}
-                        onClick={() => run(a.labelId, true, draft)}>确定</button>
-                      <button className="btn" style={{ fontSize: 11, padding: "2px 8px" }}
-                        onClick={() => setEditing(null)}>取消</button>
-                    </span>
-                  ) : (
-                    <span style={{ display: "inline-flex", gap: 4 }}>
+      <div className="table-scroll-wrap">
+        <div className="table-scroll briefing-table-scroll">
+          <table>
+            <thead>
+              <tr><th>日期</th><th>赛事</th><th>实测</th><th>海平面等效</th><th>爬升</th><th>海拔</th><th>前后半</th><th>状态与操作</th></tr>
+            </thead>
+            <tbody>
+              {anchors.map((a, i) => (
+                <tr key={a.labelId || i} style={{ opacity: a.excluded ? 0.55 : 1 }}>
+                  <td>{a.date}</td>
+                  <td style={{ textAlign: "left" }}>{a.label}</td>
+                  <td className="num">{fDur(a.seconds)}</td>
+                  <td className="num" style={{ color: "var(--accent)", fontWeight: 600 }}>{fDur(a.seaLevelSec)}</td>
+                  <td className="num">{a.climbRate} m/km</td>
+                  <td className="num" style={{ color: a.altitudeSource === "unknown" ? "var(--warn)" : undefined }}
+                      title={a.altitudeSource === "fit"
+                        ? "来自手环气压计实测（最准）"
+                        : a.altitudeSource === "city-table"
+                          ? "来自城市海拔兜底表（按城市中心点）"
+                          : "未知：这场没折算海拔，跨比赛比较可能偏差"}>
+                    {a.altitude >= 1000
+                      ? `${Math.round(a.altitude)} m ⚠`
+                      : a.altitudeSource === "unknown" ? "未知" : `${Math.round(a.altitude)} m`}
+                  </td>
+                  <td className="num" style={{ color: (a.fadePct ?? 0) < 0 ? "var(--good)" : "var(--warn)" }}>
+                    {a.fadePct != null ? `${a.fadePct > 0 ? "+" : ""}${a.fadePct}%` : "—"}
+                  </td>
+                  <td>
+                    <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
                       {a.excluded ? (
-                        <>
-                          <button className="btn" style={{ fontSize: 11, padding: "2px 8px" }}
-                            disabled={busy === a.labelId}
-                            title="强制纳入基准，覆盖自动判定"
-                            onClick={() => run(a.labelId, false)}>纳入</button>
-                          {a.excludeSource === "manual" && (
-                            <button className="btn" style={{ fontSize: 11, padding: "2px 8px" }}
-                              disabled={busy === a.labelId}
-                              title="撤销人工设定，交回自动判定"
-                              onClick={() => run(a.labelId, null)}>撤销</button>
-                          )}
-                        </>
+                        <span className="pill warn" style={{ fontSize: 10.5 }} title={a.excludeReason}>
+                          {a.excludeSource === "manual" ? "已排除·手动" : "已排除·自动"}
+                        </span>
+                      ) : a.excludeSource === "included" ? (
+                        <span className="pill good" style={{ fontSize: 10.5 }} title="自动判定为异常，但你要求纳入基准">
+                          有效·手动纳入
+                        </span>
                       ) : (
-                        <>
+                        <span className="pill good" style={{ fontSize: 10.5 }}>有效</span>
+                      )}
+                      {editing === a.labelId ? (
+                        <span style={{ display: "inline-flex", gap: 4, alignItems: "center" }}>
+                          <input
+                            value={draft}
+                            onChange={(e) => setDraft(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") run(a.labelId, true, draft);
+                              if (e.key === "Escape") setEditing(null);
+                            }}
+                            placeholder="排除原因（仅本地记账）"
+                            style={{ width: 180, fontSize: 11.5, padding: "2px 6px" }}
+                            autoFocus
+                          />
                           <button className="btn" style={{ fontSize: 11, padding: "2px 8px" }}
                             disabled={busy === a.labelId}
-                            title="移出能力基准"
-                            onClick={() => { setDraft(""); setEditing(a.labelId); }}>排除</button>
-                          {a.excludeSource === "included" && (
-                            <button className="btn" style={{ fontSize: 11, padding: "2px 8px" }}
-                              disabled={busy === a.labelId}
-                              title="撤销人工纳入，交回自动判定"
-                              onClick={() => run(a.labelId, null)}>撤销</button>
+                            onClick={() => run(a.labelId, true, draft)}>确定</button>
+                          <button className="btn" style={{ fontSize: 11, padding: "2px 8px" }}
+                            onClick={() => setEditing(null)}>取消</button>
+                        </span>
+                      ) : (
+                        <span style={{ display: "inline-flex", gap: 4 }}>
+                          {a.excluded ? (
+                            <>
+                              <button className="btn" style={{ fontSize: 11, padding: "2px 8px" }}
+                                disabled={busy === a.labelId}
+                                title="强制纳入基准，覆盖自动判定"
+                                onClick={() => run(a.labelId, false)}>纳入</button>
+                              {a.excludeSource === "manual" && (
+                                <button className="btn" style={{ fontSize: 11, padding: "2px 8px" }}
+                                  disabled={busy === a.labelId}
+                                  title="撤销人工设定，交回自动判定"
+                                  onClick={() => run(a.labelId, null)}>撤销</button>
+                              )}
+                            </>
+                          ) : (
+                            <>
+                              <button className="btn" style={{ fontSize: 11, padding: "2px 8px" }}
+                                disabled={busy === a.labelId}
+                                title="移出能力基准"
+                                onClick={() => { setDraft(""); setEditing(a.labelId); }}>排除</button>
+                              {a.excludeSource === "included" && (
+                                <button className="btn" style={{ fontSize: 11, padding: "2px 8px" }}
+                                  disabled={busy === a.labelId}
+                                  title="撤销人工纳入，交回自动判定"
+                                  onClick={() => run(a.labelId, null)}>撤销</button>
+                              )}
+                            </>
                           )}
-                        </>
+                        </span>
                       )}
-                    </span>
-                  )}
-                </div>
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <details className="briefing-explain-details" style={{ marginTop: 10 }}>
+        <summary style={{ cursor: "pointer", fontSize: 11.5, color: "var(--text-dim)", userSelect: "none", padding: "4px 2px" }}>
+          💡 什么是「海平面等效」与「基准调控」？<span style={{ fontSize: 10.5, color: "var(--text-faint)", marginLeft: 4 }}>（点击展开说明）</span>
+        </summary>
+        <div
+          style={{
+            marginTop: 6,
+            padding: "9px 12px",
+            background: "var(--surface)",
+            borderRadius: 7,
+            border: "1px solid var(--border)",
+            fontSize: 11.5,
+            color: "var(--text-dim)",
+            lineHeight: 1.55,
+          }}
+        >
+          <div style={{ display: "flex", gap: 8, alignItems: "flex-start", marginBottom: 6 }}>
+            <span className="pill" style={{ fontSize: 10, padding: "1px 5px", flexShrink: 0 }}>海平面等效</span>
+            <span>扣除赛道爬升代价与高原惩罚后的标准成绩，是跨赛事公平横向对标能力的唯一基准。</span>
+          </div>
+          <div style={{ display: "flex", gap: 8, alignItems: "flex-start" }}>
+            <span className="pill" style={{ fontSize: 10, padding: "1px 5px", flexShrink: 0 }}>基准调控</span>
+            <span>
+              系统会自动识别后程掉速且心率反常下降的异常场次并默认移出基准。你可以通过表格中的按钮随时手动「纳入 / 排除 / 撤销」，定制符合个人真实水平的基准池。
+            </span>
+          </div>
+        </div>
+      </details>
     </>
   );
 }
@@ -376,90 +486,154 @@ function AnchorTable({ anchors, onChanged }: { anchors: RaceAnchor[]; onChanged?
  */
 export default function RaceBriefingCard({ d, onChanged }: { d: RaceBriefing; onChanged?: () => void }) {
   const b = d.briefing;
+
+  const [pacingOpen, setPacingOpen] = useState(() => {
+    if (typeof window === "undefined") return true;
+    const saved = sessionStorage.getItem("race_pacing_open");
+    if (saved !== null) return saved === "true";
+    return window.innerWidth > 900;
+  });
+  const [anchorsOpen, setAnchorsOpen] = useState(() => {
+    if (typeof window === "undefined") return true;
+    const saved = sessionStorage.getItem("race_anchors_open");
+    if (saved !== null) return saved === "true";
+    return window.innerWidth > 900;
+  });
+
+  const togglePacing = () => {
+    setPacingOpen(prev => {
+      const next = !prev;
+      sessionStorage.setItem("race_pacing_open", String(next));
+      return next;
+    });
+  };
+
+  const toggleAnchors = () => {
+    setAnchorsOpen(prev => {
+      const next = !prev;
+      sessionStorage.setItem("race_anchors_open", String(next));
+      return next;
+    });
+  };
+
+  const distKm = d.race?.distanceKm || (b.pacing?.segments.length ? b.pacing.segments[b.pacing.segments.length - 1].toKm : 42.195);
+  const avgPaceSec = b.pacing ? b.pacing.goalSec / distKm : null;
+  const validAnchorsCount = b.anchors.filter(a => !a.excluded).length;
+  const excludedAnchorsCount = b.anchors.length - validAnchorsCount;
+
   return (
-    <div style={{ marginTop: 18, paddingTop: 16, borderTop: "1px solid var(--border)" }}>
-      <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 12, marginBottom: 6 }}>
-        <h3 className="card-title" style={{ margin: 0 }}>备赛简报</h3>
-        <span className="hint">随训练数据自动更新 · 同步后重算</span>
-      </div>
-      <div className="hint" style={{ marginBottom: 12 }}>
-        以下全部是<strong>数据陈述</strong>，不是训练建议 —— 训练计划由你的教练负责。
-      </div>
-
-      <div className="grid g2" style={{ alignItems: "start" }}>
+    <div style={{ marginTop: 20, paddingTop: 18, borderTop: "1px solid var(--border)" }}>
+      {/* 头部标题与定位 */}
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, marginBottom: 14, flexWrap: "wrap" }}>
         <div>
-          <h4 style={{ margin: "0 0 8px", fontSize: 13, color: "var(--text-dim)" }}>成绩预测</h4>
-          <PredictionCard b={b} goalSec={d.race.goalSec} />
+          <h3 className="card-title" style={{ margin: 0 }}>备赛简报</h3>
+          <p className="card-sub" style={{ margin: "3px 0 0" }}>
+            数据驱动的赛前状态客观推导，战术策略供备赛参考，实际执行以教练方案为准
+          </p>
+        </div>
+        <span className="pill" style={{ fontSize: 11 }}>随训练数据自动重算</span>
+      </div>
 
-          <h4 style={{ margin: "20px 0 8px", fontSize: 13, color: "var(--text-dim)" }}>配速策略</h4>
-          <PacingCard b={b} />
+      {/* 第一层：双列指标看板（左右完全对称） */}
+      <div className="grid g2" style={{ alignItems: "stretch", marginBottom: 18 }}>
+        <div className="card" style={{ background: "var(--surface-2)", border: "1px solid var(--border)", margin: 0, padding: 14 }}>
+          <h4 style={{ margin: "0 0 12px", fontSize: 13, color: "var(--text-dim)", display: "flex", justifyContent: "space-between" }}>
+            <span>成绩预测与目标</span>
+            <span style={{ fontSize: 11, fontWeight: "normal" }}>折算地形与海拔</span>
+          </h4>
+          <PredictionCard b={b} goalSec={d.race.goalSec} />
         </div>
 
-        <div>
-          <h4 style={{ margin: "0 0 8px", fontSize: 13, color: "var(--text-dim)" }}>训练状态</h4>
-          <div className="grid g2" style={{ marginBottom: 14 }}>
-            <div className="stat">
-              <span className="label">近 4 周周均</span>
-              <span className="value num">{b.training.weeklyKm4}<span className="unit">km</span></span>
-              <span className="hint">
-                {b.training.trendPct != null
-                  ? `趋势 ${b.training.trendPct > 0 ? "+" : ""}${b.training.trendPct}%`
-                  : `8周均 ${b.training.weeklyKm8}km`}
+        <div className="card" style={{ background: "var(--surface-2)", border: "1px solid var(--border)", margin: 0, padding: 14 }}>
+          <h4 style={{ margin: "0 0 12px", fontSize: 13, color: "var(--text-dim)", display: "flex", justifyContent: "space-between" }}>
+            <span>备赛体能状态</span>
+            <span style={{ fontSize: 11, fontWeight: "normal" }}>近 4 周动态窗口</span>
+          </h4>
+          <TrainingStateCard training={b.training} />
+        </div>
+      </div>
+
+      {/* 第二层：配速策略（可折叠，移动端省空间） */}
+      {b.pacing && (
+        <div className="card briefing-collapsible-card" style={{ background: "var(--surface-2)", border: "1px solid var(--border)", margin: "0 0 18px", padding: 14 }}>
+          <div
+            className="briefing-collapse-header"
+            onClick={togglePacing}
+            role="button"
+            tabIndex={0}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                togglePacing();
+              }
+            }}
+            title={pacingOpen ? "点击收起各阶段配速策略" : "点击展开各阶段配速策略"}
+          >
+            <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", flex: 1, minWidth: 0 }}>
+              <h4 style={{ margin: 0, fontSize: 13, color: "var(--text-dim)" }}>
+                各阶段配速策略
+              </h4>
+              <span className="pill" style={{ fontSize: 11 }}>{b.pacing.segments.length} 个阶段</span>
+              <span className="pill accent" style={{ fontSize: 11 }}>
+                目标 {fDur(b.pacing.goalSec)}（均速 {avgPaceSec ? fPace(avgPaceSec) : "--"}/km）
               </span>
-              <span className="hint">
-                截至 {b.training.asOf} 的 28 天 · 同步新训练即更新
-              </span>
-              {b.training.daysSinceAnchor > 0 && (
-                <span className="hint" style={b.training.daysSinceAnchor >= 3 ? { color: "var(--warn)" } : undefined}>
-                  距上次训练 {b.training.daysSinceAnchor} 天
-                  {b.training.daysSinceAnchor >= 3 ? "（数据可能已过时）" : ""}
+              {b.pacing.warnings.length > 0 && (
+                <span className="pill warn" style={{ fontSize: 11 }}>⚠ {b.pacing.warnings.length} 条提醒</span>
+              )}
+            </div>
+            <div className="briefing-toggle-btn">
+              <span>{pacingOpen ? "收起" : "展开"}</span>
+              <span style={{ fontSize: 10, transition: "transform 0.18s", transform: pacingOpen ? "rotate(180deg)" : "rotate(0deg)" }}>▼</span>
+            </div>
+          </div>
+          {pacingOpen && (
+            <div style={{ marginTop: 12 }}>
+              <PacingCard b={b} />
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* 第三层：历史比赛锚点基准（可折叠，移动端省空间） */}
+      {b.anchors.length > 0 && (
+        <div className="card briefing-collapsible-card" style={{ background: "var(--surface-2)", border: "1px solid var(--border)", margin: 0, padding: 14 }}>
+          <div
+            className="briefing-collapse-header"
+            onClick={toggleAnchors}
+            role="button"
+            tabIndex={0}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                toggleAnchors();
+              }
+            }}
+            title={anchorsOpen ? "点击收起能力基准锚点" : "点击展开能力基准锚点"}
+          >
+            <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", flex: 1, minWidth: 0 }}>
+              <h4 style={{ margin: 0, fontSize: 13, color: "var(--text-dim)" }}>
+                能力基准锚点（历史赛事记录）
+              </h4>
+              <span className="pill" style={{ fontSize: 11 }}>收录 {b.anchors.length} 场</span>
+              <span className="pill good" style={{ fontSize: 11 }}>{validAnchorsCount} 场有效基准</span>
+              {excludedAnchorsCount > 0 && (
+                <span className="pill warn" style={{ fontSize: 11 }}>
+                  {excludedAnchorsCount} 场已排除
                 </span>
               )}
             </div>
-            <div className="stat">
-              <span className="label">负荷比</span>
-              <span className="value num" style={{ color: (b.training.loadRatio ?? 1) > 1.4 ? "var(--warn)" : "var(--good)" }}>
-                {b.training.loadRatio ?? "—"}
-              </span>
-              <span className="hint">
-                {(b.training.loadRatio ?? 1) > 1.4 ? "偏高，有累积疲劳" : (b.training.loadRatio ?? 1) < 0.75 ? "偏低，刺激不足" : "处于合理区间"}
-              </span>
-              {b.training.loadAsOf && (
-                <span className="hint">截至 {b.training.loadAsOf}</span>
-              )}
-            </div>
-            <div className="stat">
-              <span className="label">有氧占比</span>
-              <span className="value num" style={{ color: (b.training.easyPct ?? 100) < 75 ? "var(--warn)" : "var(--good)" }}>
-                {b.training.easyPct ?? "—"}<span className="unit">%</span>
-              </span>
-              <span className="hint">目标 75–80%</span>
-            </div>
-            <div className="stat">
-              <span className="label">长距离准备</span>
-              <span className="value num" style={{ fontSize: 20, color: b.training.longRun.ready ? "var(--good)" : "var(--warn)" }}>
-                {(b.training.longRun.ready?.km ?? b.training.longRun.max?.km) ?? "—"}<span className="unit">km</span>
-              </span>
-              <span className="hint">
-                {b.training.longRun.ready
-                  ? `近 4 周有 ${b.training.longRun.ready.km}km（${b.training.longRun.ready.date}）`
-                  : b.training.longRun.max
-                    ? `近 4 周最长 ${b.training.longRun.max.km}km`
-                    : "近 4 周无 ≥25km 训练"}
-              </span>
+            <div className="briefing-toggle-btn">
+              <span>{anchorsOpen ? "收起" : "展开"}</span>
+              <span style={{ fontSize: 10, transition: "transform 0.18s", transform: anchorsOpen ? "rotate(180deg)" : "rotate(0deg)" }}>▼</span>
             </div>
           </div>
-
-          <h4 style={{ margin: "0 0 8px", fontSize: 13, color: "var(--text-dim)" }}>比赛锚点</h4>
-          <AnchorTable anchors={b.anchors} onChanged={onChanged} />
-          <div className="hint" style={{ marginTop: 6 }}>
-            「海平面等效」= 扣掉爬升代价与高原惩罚后的成绩，是唯一能跨比赛比较的指标。
-            自动判定会挑出<strong>异常场次</strong>（后程配速下降的同时心率反而下降，与正常疲劳相反）并移出基准 ——
-            但这只看数据形态，不推断原因，也未必适用于每个人。
-            每行都能<strong>手动排除 / 纳入 / 撤销</strong>，原因只有你清楚。
-          </div>
+          {anchorsOpen && (
+            <div style={{ marginTop: 12 }}>
+              <AnchorTable anchors={b.anchors} onChanged={onChanged} />
+            </div>
+          )}
         </div>
-      </div>
+      )}
     </div>
   );
 }

@@ -33,7 +33,7 @@ import {
   saveConfig,
   type WorkflowConfig,
 } from "./workflow/engine.ts";
-import { analyzeActivity, analyzeSession, getAiConfig, saveAiConfig } from "./ai/provider.ts";
+import { analyzeActivity, analyzeSession, callModel, getAiConfig, saveAiConfig } from "./ai/provider.ts";
 import { analyzeWeek, normalizeWeekStart } from "./ai/week.ts";
 import { buildReport } from "./prediction/pipeline.ts";
 import { analyzeRacePrep, marathonPrep } from "./prediction/prep.ts";
@@ -442,10 +442,12 @@ const app = new Elysia()
     const first = lapRows[0];
     const profile = one(db.select().from(users).all());
     const age = ageFromBirthday(profile?.birthday ?? null);
+    const session = buildSessions().find((s) => s.labelIds.includes(params.labelId));
 
     return {
       activity,
       detail,
+      sessionKey: session?.key ?? null,
       laps: lapRows,
       scatter: paceHrScatter(params.labelId),
       reports,
@@ -492,17 +494,25 @@ const app = new Elysia()
     latest: one(db.select().from(recovery).orderBy(desc(recovery.capturedAt)).limit(1).all()),
   }))
 
-  .get("/api/profile", () => one(db.select().from(users).all()))
+  .get("/api/profile", () => {
+    const row = one(db.select().from(users).all());
+    if (!row) return null;
+    const age = ageFromBirthday(row.birthday ?? null);
+    const z = hrZones([], hrZoneOptions(age));
+    return {
+      ...row,
+      effectiveZones: z?.zones ?? [],
+      observedMaxHr: z?.maxHr ?? null,
+      hrMethod: z?.method ?? "五区间心率法",
+    };
+  })
 
   /**
    * 写入心率档案。
    *
-   * 只有 max_hr / resting_hr 走这个端点 —— 其余字段由 COROS 同步负责，
-   * 这里不碰，避免用户填的值被下一次同步覆盖。
-   *
-   * 存 null / 空串表示「交回自动推算」：max_hr 回退到 observedMaxHr（从分圈推算），
-   * resting_hr 回退到生理中位数。校验范围按生理可能区间给，
-   * 明显不合理的值直接拒绝而不是静默存进去 —— 错的值会让全部分区错位，比没有更糟。
+   * 支持两种模式：
+   *  - auto：只配置 max_hr / resting_hr，由系统按 HRR 储备百分比推导
+   *  - custom：用户直接设定 Z1–Z5 各自的绝对心率范围（可直接对标手表设置）
    */
   .put("/api/profile/hr", async ({ body }) => {
     const b = (body ?? {}) as Record<string, unknown>;
@@ -537,8 +547,93 @@ const app = new Elysia()
       );
     }
 
-    db.update(users).set({ maxHr, restingHr }).where(eq(users.nickname, row.nickname ?? "")).run();
-    return one(db.select().from(users).all());
+    const hrCalcMode = b.hrCalcMode === "custom" ? "custom" : "auto";
+    let customHrZonesStr: string | null = null;
+
+    if (hrCalcMode === "custom") {
+      const cz = b.customHrZones;
+      if (!Array.isArray(cz) || cz.length < 5) {
+        return new Response(JSON.stringify({ error: "自定义心率模式需填写全部 5 个区间" }), { status: 400 });
+      }
+      const validatedZones: Array<{ zone: string; label: string; hrLo: number; hrHi: number | null }> = [];
+      const DEFAULT_ZONE_NAMES = [
+        { zone: "Z1", label: "有氧耐力" },
+        { zone: "Z2", label: "有氧动力" },
+        { zone: "Z3", label: "乳酸阈" },
+        { zone: "Z4", label: "速度耐力" },
+        { zone: "Z5", label: "无氧动力" },
+      ];
+      for (let i = 0; i < 5; i++) {
+        const item = cz[i];
+        const lo = parse(item?.hrLo);
+        const hi = parse(item?.hrHi);
+        if (lo === null || Number.isNaN(lo)) {
+          return new Response(
+            JSON.stringify({ error: `第 ${i + 1} 区间（${DEFAULT_ZONE_NAMES[i].label}）必须填写有效的心率下限` }),
+            { status: 400 },
+          );
+        }
+        if (lo < 40 || lo > 240) {
+          return new Response(JSON.stringify({ error: `第 ${i + 1} 区间心率需在 40–240 bpm 之间` }), { status: 400 });
+        }
+        if (i < 4) {
+          if (hi === null || Number.isNaN(hi)) {
+            return new Response(
+              JSON.stringify({ error: `第 ${i + 1} 区间（${DEFAULT_ZONE_NAMES[i].label}）必须填写有效的心率上限` }),
+              { status: 400 },
+            );
+          }
+          if (hi < 40 || hi > 240) {
+            return new Response(JSON.stringify({ error: `第 ${i + 1} 区间上限需在 40–240 bpm 之间` }), { status: 400 });
+          }
+          if (lo >= hi) {
+            return new Response(JSON.stringify({ error: `第 ${i + 1} 区间下限 (${lo}) 必须小于上限 (${hi})` }), { status: 400 });
+          }
+        } else {
+          // 第 5 区间（无氧动力）：上限允许留空（表示无上限 / > lo）
+          if (hi !== null && !Number.isNaN(hi) && (hi <= lo || hi > 250)) {
+            return new Response(JSON.stringify({ error: `第 5 区间若设置上限，必须大于下限 (${lo}) 且不超过 250` }), { status: 400 });
+          }
+        }
+        if (i > 0 && lo < validatedZones[i - 1].hrLo) {
+          return new Response(
+            JSON.stringify({ error: `第 ${i + 1} 区间起点 (${lo}) 不能低于前一个区间起点 (${validatedZones[i - 1].hrLo})` }),
+            { status: 400 },
+          );
+        }
+        validatedZones.push({
+          zone: DEFAULT_ZONE_NAMES[i].zone,
+          label: String(item?.label || DEFAULT_ZONE_NAMES[i].label),
+          hrLo: lo,
+          hrHi: hi ?? null,
+        });
+      }
+      customHrZonesStr = JSON.stringify(validatedZones);
+    } else if (Array.isArray(b.customHrZones)) {
+      try {
+        customHrZonesStr = JSON.stringify(b.customHrZones);
+      } catch {}
+    }
+
+    db.update(users)
+      .set({
+        maxHr,
+        restingHr,
+        hrCalcMode,
+        ...(customHrZonesStr !== null ? { customHrZones: customHrZonesStr } : {}),
+      })
+      .where(eq(users.nickname, row.nickname ?? ""))
+      .run();
+
+    const updated = one(db.select().from(users).all());
+    const age = ageFromBirthday(updated?.birthday ?? null);
+    const z = hrZones([], hrZoneOptions(age));
+    return {
+      ...updated,
+      effectiveZones: z?.zones ?? [],
+      observedMaxHr: z?.maxHr ?? null,
+      hrMethod: z?.method ?? "五区间心率法",
+    };
   })
 
   // ---------- 训练次（session）：同一天的多次记录合并 ----------
@@ -688,18 +783,56 @@ const app = new Elysia()
 
   .put("/api/ai/settings", async ({ body }) => {
     const b = body as any;
-    if (!b?.baseUrl || !b?.apiKey || !b?.model) {
-      return new Response(JSON.stringify({ error: "baseUrl / apiKey / model 都不能为空" }), { status: 400 });
+    if (!b?.baseUrl || !b?.model) {
+      return new Response(JSON.stringify({ error: "baseUrl / model 都不能为空" }), { status: 400 });
+    }
+    const old = getAiConfig();
+    let apiKey = String(b.apiKey ?? "").trim();
+    if (!apiKey || apiKey.includes("…") || apiKey.includes("...")) {
+      if (old?.apiKey) {
+        apiKey = old.apiKey;
+      } else {
+        return new Response(JSON.stringify({ error: "API Key 不能为空" }), { status: 400 });
+      }
     }
     saveAiConfig({
       provider: b.provider === "anthropic" ? "anthropic" : "openai",
       baseUrl: String(b.baseUrl),
-      apiKey: String(b.apiKey),
+      apiKey,
       model: String(b.model),
       temperature: Number(b.temperature ?? 0.7),
       maxTokens: Number(b.maxTokens ?? 2000),
     });
     return { ok: true };
+  })
+
+  .post("/api/ai/test", async ({ body }) => {
+    try {
+      const b = body as any;
+      const old = getAiConfig();
+      let apiKey = String(b?.apiKey ?? "").trim();
+      if (!apiKey || apiKey.includes("…") || apiKey.includes("...")) {
+        if (old?.apiKey) {
+          apiKey = old.apiKey;
+        } else {
+          return new Response(JSON.stringify({ error: "请先填写 API Key" }), { status: 400 });
+        }
+      }
+      const testCfg = {
+        provider: (b?.provider === "anthropic" ? "anthropic" : "openai") as "openai" | "anthropic",
+        baseUrl: String(b?.baseUrl || "https://api.openai.com/v1"),
+        apiKey,
+        model: String(b?.model || "gpt-4o-mini"),
+        temperature: 0.3,
+        maxTokens: Math.max(Number(b?.maxTokens ?? 2000), 2000),
+      };
+      const t0 = Date.now();
+      const reply = await callModel(testCfg, "你是一个连通性测试助手。请只回复：连接成功。", "ping");
+      const latencyMs = Date.now() - t0;
+      return { ok: true, reply: reply.trim().slice(0, 80), latencyMs };
+    } catch (e) {
+      return new Response(JSON.stringify({ error: e instanceof Error ? e.message : String(e) }), { status: 400 });
+    }
   })
 
   .post("/api/ai/analyze/:labelId", async ({ params, body }) => {
