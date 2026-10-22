@@ -3,19 +3,31 @@ import { api, type SyncSportsPayload } from "../api";
 import { IconDatabase, IconGear, IconHeart, IconSync } from "../icons";
 import WorkflowPanel from "./WorkflowPanel";
 
-const PRESETS = [
-  { name: "OpenAI 兼容", provider: "openai", baseUrl: "https://api.openai.com/v1", model: "gpt-4o-mini" },
-  { name: "DeepSeek", provider: "openai", baseUrl: "https://api.deepseek.com/v1", model: "deepseek-chat" },
-  { name: "Kimi / 月之暗面", provider: "openai", baseUrl: "https://api.moonshot.cn/v1", model: "moonshot-v1-8k" },
-  { name: "通义千问", provider: "openai", baseUrl: "https://dashscope.aliyuncs.com/compatible-mode/v1", model: "qwen-plus" },
-  { name: "Anthropic", provider: "anthropic", baseUrl: "https://api.anthropic.com", model: "claude-sonnet-4-5" },
+const PROVIDERS = [
+  { id: "deepseek", name: "DeepSeek (推荐 · 深度思考与高性价比)", provider: "openai", baseUrl: "https://api.deepseek.com/v1", defaultModel: "deepseek-chat" },
+  { id: "qwen", name: "通义千问 (阿里云 Qwen)", provider: "openai", baseUrl: "https://dashscope.aliyuncs.com/compatible-mode/v1", defaultModel: "qwen-plus" },
+  { id: "kimi", name: "Kimi (月之暗面 Moonshot)", provider: "openai", baseUrl: "https://api.moonshot.cn/v1", defaultModel: "moonshot-v1-8k" },
+  { id: "openai", name: "OpenAI (官方 / 第三方中转)", provider: "openai", baseUrl: "https://api.openai.com/v1", defaultModel: "gpt-4o-mini" },
+  { id: "anthropic", name: "Anthropic (Claude)", provider: "anthropic", baseUrl: "https://api.anthropic.com", defaultModel: "claude-sonnet-4-5" },
+  { id: "custom", name: "自定义平台 / 本地 Ollama / OneAPI", provider: "openai", baseUrl: "", defaultModel: "" },
 ];
+
+function detectProviderId(baseUrl: string, provider: string): string {
+  if (!baseUrl) return "custom";
+  if (baseUrl.includes("deepseek.com")) return "deepseek";
+  if (baseUrl.includes("aliyuncs.com") || baseUrl.includes("dashscope")) return "qwen";
+  if (baseUrl.includes("moonshot.cn")) return "kimi";
+  if (provider === "anthropic" || baseUrl.includes("anthropic.com")) return "anthropic";
+  if (baseUrl.includes("openai.com")) return "openai";
+  return "custom";
+}
 
 export default function Settings({ onStatus }: { onStatus: () => void }) {
   const [cfg, setCfg] = useState<any>({
     provider: "openai", baseUrl: "https://api.openai.com/v1", apiKey: "",
     model: "gpt-4o-mini", temperature: 0.7, maxTokens: 8000,
   });
+  const [showAdvanced, setShowAdvanced] = useState(false);
   const [status, setStatus] = useState<any>(null);
   const [msg, setMsg] = useState<{ kind: "ok" | "error"; text: string } | null>(null);
   const [aiMsg, setAiMsg] = useState<{ kind: "ok" | "error"; text: string } | null>(null);
@@ -243,8 +255,20 @@ export default function Settings({ onStatus }: { onStatus: () => void }) {
     } finally { setSyncing(false); }
   };
 
-  const applyPreset = (p: typeof PRESETS[number]) =>
-    setCfg((c: any) => ({ ...c, provider: p.provider, baseUrl: p.baseUrl, model: p.model }));
+  const onSelectProvider = (pid: string) => {
+    const found = PROVIDERS.find((p) => p.id === pid);
+    if (!found) return;
+    if (found.id === "custom") {
+      setShowAdvanced(true);
+      return;
+    }
+    setCfg((c: any) => ({
+      ...c,
+      provider: found.provider,
+      baseUrl: found.baseUrl,
+      model: found.defaultModel || c.model,
+    }));
+  };
 
   return (
     <>
@@ -252,66 +276,130 @@ export default function Settings({ onStatus }: { onStatus: () => void }) {
         {/* 左列：AI 模型配置 + 心率档案 */}
         <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
           <div className="card">
-            <h3 className="card-title"><IconGear size={14} />AI 模型</h3>
-            <p className="card-sub">
-              任意 OpenAI 兼容接口或 Anthropic 均可。配置只保存在本机 SQLite，不会外传。
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 2 }}>
+              <h3 className="card-title" style={{ marginBottom: 0 }}>
+                <IconGear size={14} /> AI 教练模型
+              </h3>
+              {status?.aiConfigured ? (
+                <span className="pill good" style={{ fontSize: 11, fontWeight: 500 }}>
+                  已就绪 · {cfg.model || "已配置"}
+                </span>
+              ) : (
+                <span className="pill" style={{ fontSize: 11, fontWeight: 500 }}>未配置</span>
+              )}
+            </div>
+            <p className="card-sub" style={{ margin: "2px 0 12px" }}>
+              配置 AI 模型用于训练场次深度复盘、周报评析与赛事备战推演。
             </p>
 
-            <div className="hint" style={{ marginBottom: 12 }}>快速填入</div>
-            <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 16 }}>
-              {PRESETS.map((p) => (
-                <button key={p.name} className="btn sm" onClick={() => applyPreset(p)}>{p.name}</button>
-              ))}
-            </div>
-
+            {/* 1. 服务商选择（自动带出 Base URL 与推荐模型） */}
             <label className="field">
-              <span>接口协议</span>
-              <select value={cfg.provider} onChange={(e) => setCfg({ ...cfg, provider: e.target.value })}>
-                <option value="openai">OpenAI 兼容（/chat/completions）</option>
-                <option value="anthropic">Anthropic（/v1/messages）</option>
+              <span>服务商平台</span>
+              <select
+                value={detectProviderId(cfg.baseUrl, cfg.provider)}
+                onChange={(e) => onSelectProvider(e.target.value)}
+              >
+                {PROVIDERS.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name}
+                  </option>
+                ))}
               </select>
             </label>
 
-            <label className="field">
-              <span>Base URL</span>
-              <input value={cfg.baseUrl} onChange={(e) => setCfg({ ...cfg, baseUrl: e.target.value })} placeholder="https://api.openai.com/v1" />
-              <div className="hint">
-                {cfg.provider === "openai"
-                  ? "需包含到 /v1 这一层，程序会自动拼 /chat/completions"
-                  : "填到域名即可，程序会自动拼 /v1/messages"}
-              </div>
-            </label>
-
+            {/* 2. API Key */}
             <label className="field">
               <span>API Key</span>
               <input
-                type="password" value={cfg.apiKey} autoComplete="off"
+                type="password"
+                value={cfg.apiKey}
+                autoComplete="off"
                 onChange={(e) => setCfg({ ...cfg, apiKey: e.target.value })}
-                placeholder={status?.aiConfigured ? "已保存（留空则不修改）" : "sk-..."}
+                placeholder={status?.aiConfigured ? "已保存（留空则保持不变）" : "请输入 API Key"}
               />
             </label>
 
+            {/* 3. 模型名 */}
             <label className="field">
-              <span>模型名</span>
-              <input value={cfg.model} onChange={(e) => setCfg({ ...cfg, model: e.target.value })} placeholder="gpt-4o-mini" />
+              <span>模型名称</span>
+              <input
+                value={cfg.model}
+                onChange={(e) => setCfg({ ...cfg, model: e.target.value })}
+                placeholder="例如 deepseek-chat 或 gpt-4o-mini"
+              />
             </label>
 
-            <div className="grid g2">
-              <label className="field">
-                <span>温度</span>
-                <input type="number" step="0.1" value={cfg.temperature} onChange={(e) => setCfg({ ...cfg, temperature: Number(e.target.value) })} />
-              </label>
-              <label className="field">
-                <span>最大输出 token</span>
-                <input type="number" step="500" value={cfg.maxTokens} onChange={(e) => setCfg({ ...cfg, maxTokens: Number(e.target.value) })} />
-                <div className="hint">
-                  用推理模型（如 deepseek-r1 / o-series / 带 thinking 的模型）时建议给 8000+：
-                  它们的「思考」和「正文」共用这一个预算，思考烧光了正文就是空的。
+            {/* 高级选项折叠器：Base URL、接口协议、温度、Token */}
+            <div style={{ marginTop: 2, marginBottom: 12 }}>
+              <button
+                type="button"
+                className="pill"
+                style={{
+                  cursor: "pointer",
+                  fontSize: 11.5,
+                  background: "transparent",
+                  border: "none",
+                  color: "var(--accent)",
+                  padding: "4px 0",
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 4,
+                }}
+                onClick={() => setShowAdvanced(!showAdvanced)}
+              >
+                <span>{showAdvanced ? "▾ 收起高级设置" : "▸ 展开高级设置（自定义 Base URL / 温度 / Token）"}</span>
+              </button>
+
+              {showAdvanced && (
+                <div style={{ marginTop: 8, padding: "12px", background: "var(--surface-2)", borderRadius: 8, display: "flex", flexDirection: "column", gap: 10, border: "1px solid var(--border)" }}>
+                  <label className="field" style={{ margin: 0 }}>
+                    <span>接口协议</span>
+                    <select value={cfg.provider} onChange={(e) => setCfg({ ...cfg, provider: e.target.value })}>
+                      <option value="openai">OpenAI 兼容（/chat/completions）</option>
+                      <option value="anthropic">Anthropic（/v1/messages）</option>
+                    </select>
+                  </label>
+
+                  <label className="field" style={{ margin: 0 }}>
+                    <span>Base URL</span>
+                    <input
+                      value={cfg.baseUrl}
+                      onChange={(e) => setCfg({ ...cfg, baseUrl: e.target.value })}
+                      placeholder="https://api.openai.com/v1"
+                    />
+                    <div className="hint" style={{ marginTop: 3 }}>
+                      {cfg.provider === "openai"
+                        ? "需包含到 /v1 这一层，程序会自动拼 /chat/completions"
+                        : "填到域名即可，程序会自动拼 /v1/messages"}
+                    </div>
+                  </label>
+
+                  <div className="grid g2" style={{ gap: 10 }}>
+                    <label className="field" style={{ margin: 0 }}>
+                      <span>温度 (Temperature)</span>
+                      <input
+                        type="number"
+                        step="0.1"
+                        value={cfg.temperature}
+                        onChange={(e) => setCfg({ ...cfg, temperature: Number(e.target.value) })}
+                      />
+                    </label>
+                    <label className="field" style={{ margin: 0 }}>
+                      <span>最大输出 Token</span>
+                      <input
+                        type="number"
+                        step="500"
+                        value={cfg.maxTokens}
+                        onChange={(e) => setCfg({ ...cfg, maxTokens: Number(e.target.value) })}
+                      />
+                    </label>
+                  </div>
                 </div>
-              </label>
+              )}
             </div>
 
-            <div style={{ display: "flex", gap: 10, marginTop: 4, alignItems: "center" }}>
+            {/* 操作按键与连接测试 */}
+            <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
               <button
                 className="btn primary"
                 onClick={save}
@@ -333,22 +421,6 @@ export default function Settings({ onStatus }: { onStatus: () => void }) {
                 {aiMsg.text}
               </div>
             )}
-
-            <div style={{ marginTop: 16, paddingTop: 14, borderTop: "1px solid var(--border)", fontSize: 12, color: "var(--text-dim)", lineHeight: 1.6 }}>
-              <div style={{ fontWeight: 600, color: "var(--text)", marginBottom: 6, display: "flex", alignItems: "center", gap: 6 }}>
-                <span>💡 AI 赋能场景</span>
-                {status?.aiConfigured ? (
-                  <span className="pill good" style={{ fontSize: 11, fontWeight: 500 }}>已就绪</span>
-                ) : (
-                  <span className="pill" style={{ fontSize: 11, fontWeight: 500 }}>未配置</span>
-                )}
-              </div>
-              <ul style={{ margin: 0, paddingLeft: 18, display: "flex", flexDirection: "column", gap: 4 }}>
-                <li><strong>单次训练深度复盘</strong>：训练详情页分析心率漂移、配速与体能消耗</li>
-                <li><strong>周期训练周报解读</strong>：结合负荷比（ACWR）评估疲劳积累与超量恢复</li>
-                <li><strong>赛事备战策略推演</strong>：基于历史锚点预测完赛用时与分段配速</li>
-              </ul>
-            </div>
           </div>
 
           {/* 心率档案：支持自动推算与直接自定义五区间 */}
