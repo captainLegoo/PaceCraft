@@ -544,6 +544,9 @@ export default function Settings({ onStatus }: { onStatus: () => void }) {
               </div>
             )}
           </div>
+
+          {/* 自动化工作流：紧凑展示，消除左列留白 */}
+          <WorkflowPanel />
         </div>
 
         {/* 右列：COROS 数据同步 + 当前数据状态 */}
@@ -658,8 +661,6 @@ export default function Settings({ onStatus }: { onStatus: () => void }) {
           </div>
         </div>
       </div>
-
-      <WorkflowPanel />
 
       <div className="card">
         <h3 className="card-title">关于数据来源</h3>
