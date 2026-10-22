@@ -290,7 +290,14 @@ export default function App() {
                 <div className="sub">周跑量、训练负荷与负荷比趋势</div>
               </div>
             </div>
-            <Training key={`training-${dataVersion}`} onOpen={openActivity} onOpenSession={openSession} onOpenWeek={openWeek} />
+            <Training
+              key={`training-${dataVersion}`}
+              onOpen={openActivity}
+              onOpenSession={openSession}
+              onOpenWeek={openWeek}
+              onGoRace={() => go("race")}
+              onGoReadiness={() => go("readiness")}
+            />
           </>
         )}
 

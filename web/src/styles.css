@@ -406,6 +406,7 @@ tr.clickable { cursor: pointer; }
 .pill.good { color: var(--good-text); border-color: var(--good-border); background: var(--good-bg); }
 .pill.warn { color: var(--warn-text); border-color: var(--warn-border); background: var(--warn-bg); }
 .pill.bad { color: var(--bad-text); border-color: var(--bad-border); background: var(--bad-bg); }
+.pill.info { color: var(--info-text); border-color: var(--info-border); background: var(--info-bg); }
 .pill.accent { color: var(--accent); border-color: var(--accent-border); background: var(--accent-bg); }
 
 /* ---------- 运动类型勾选 ---------- */

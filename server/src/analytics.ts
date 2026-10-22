@@ -466,6 +466,12 @@ export type SessionSet = {
   paceTolerance: number;
 };
 
+export type SessionDecoupling = {
+  pct: number;
+  level: "good" | "warn" | "bad" | "info";
+  label: string;
+};
+
 export type Session = {
   key: string;
   date: string;
@@ -489,6 +495,7 @@ export type Session = {
   kind: "single" | "multi";
   classification: string;
   classificationReason: string;
+  decoupling?: SessionDecoupling | null;
 };
 
 /**
@@ -508,6 +515,14 @@ export function buildSessions(opts: { from?: string; to?: string; gapSec?: numbe
   const details = db.select().from(activityDetails).all();
   const detailById = new Map(details.map((d) => [d.labelId, d]));
 
+  const allLaps = db.select().from(laps).all();
+  const lapsByLabel = new Map<string, typeof allLaps>();
+  for (const l of allLaps) {
+    const list = lapsByLabel.get(l.labelId) ?? [];
+    list.push(l);
+    lapsByLabel.set(l.labelId, list);
+  }
+
   // 先按日期分桶，再在桶内按时间间隔切分
   const byDate = new Map<string, typeof rows>();
   for (const a of rows) {
@@ -524,7 +539,7 @@ export function buildSessions(opts: { from?: string; to?: string; gapSec?: numbe
 
     const flush = () => {
       if (bucket.length === 0) return;
-      sessions.push(makeSession(date, bucket, detailById));
+      sessions.push(makeSession(date, bucket, detailById, lapsByLabel));
       bucket = [];
     };
 
@@ -539,9 +554,78 @@ export function buildSessions(opts: { from?: string; to?: string; gapSec?: numbe
   return sessions.sort((a, b) => b.startTs - a.startTs);
 }
 
-function makeSession(date: string, acts: any[], detailById: Map<string, any>): Session {
+function computeSessionDecoupling(
+  rawLaps: any[],
+  distanceKm: number,
+  durationSec: number,
+  classification: string
+): SessionDecoupling | null {
+  if (classification === "间歇训练" || durationSec < 1500 || distanceKm < 4.0) {
+    return null;
+  }
+  const validLaps = rawLaps.filter((l) => l.avgHr && l.avgHr > 40 && l.timeSec > 0 && l.distanceM > 0);
+  if (validLaps.length < 4) return null;
+
+  const totalGain = validLaps.reduce((s, l) => s + (l.elevGain ?? 0), 0);
+  if (distanceKm > 0 && totalGain / distanceKm > 20) return null;
+
+  const totalTime = validLaps.reduce((s, l) => s + l.timeSec, 0);
+  const halfTime = totalTime / 2;
+
+  let time1 = 0, dist1 = 0, hrTime1 = 0;
+  let time2 = 0, dist2 = 0, hrTime2 = 0;
+  let accumTime = 0;
+
+  for (const lap of validLaps) {
+    const lapStart = accumTime;
+    const lapEnd = accumTime + lap.timeSec;
+    accumTime = lapEnd;
+
+    if (lapEnd <= halfTime) {
+      time1 += lap.timeSec; dist1 += lap.distanceM; hrTime1 += lap.avgHr * lap.timeSec;
+    } else if (lapStart >= halfTime) {
+      time2 += lap.timeSec; dist2 += lap.distanceM; hrTime2 += lap.avgHr * lap.timeSec;
+    } else {
+      const t1 = halfTime - lapStart;
+      const t2 = lapEnd - halfTime;
+      const f1 = t1 / lap.timeSec;
+      const f2 = t2 / lap.timeSec;
+      time1 += t1; dist1 += lap.distanceM * f1; hrTime1 += lap.avgHr * t1;
+      time2 += t2; dist2 += lap.distanceM * f2; hrTime2 += lap.avgHr * t2;
+    }
+  }
+
+  if (time1 <= 0 || time2 <= 0 || hrTime1 <= 0 || hrTime2 <= 0 || dist1 <= 0 || dist2 <= 0) return null;
+
+  const avgHr1 = hrTime1 / time1;
+  const avgHr2 = hrTime2 / time2;
+  const speed1 = dist1 / time1;
+  const speed2 = dist2 / time2;
+  const ef1 = speed1 / avgHr1;
+  const ef2 = speed2 / avgHr2;
+  if (ef1 <= 0 || ef2 <= 0) return null;
+
+  const decouplingPct = Math.round(((ef1 - ef2) / ef1) * 1000) / 10;
+  if (decouplingPct < -3.0) {
+    return { pct: decouplingPct, level: "info", label: `负脱钩 ${decouplingPct > 0 ? "+" : ""}${decouplingPct}%` };
+  } else if (decouplingPct <= 5.0) {
+    return { pct: decouplingPct, level: "good", label: `稳态 ${decouplingPct > 0 ? "+" : ""}${decouplingPct}%` };
+  } else if (decouplingPct <= 8.0) {
+    return { pct: decouplingPct, level: "warn", label: `轻漂移 +${decouplingPct}%` };
+  } else {
+    return { pct: decouplingPct, level: "bad", label: `明显漂移 +${decouplingPct}%` };
+  }
+}
+
+function makeSession(
+  date: string,
+  acts: any[],
+  detailById: Map<string, any>,
+  lapsByLabel: Map<string, any[]>
+): Session {
   const labelIds = acts.map((a) => a.labelId);
   const withDetails = acts.map((a) => ({ a, d: detailById.get(a.labelId) ?? null }));
+  const sessionLaps = acts.flatMap((a) => lapsByLabel.get(a.labelId) ?? []);
 
   const distanceKm = acts.reduce((s, a) => s + (a.distanceKm ?? 0), 0);
   const durationSec = acts.reduce((s, a) => s + (a.durationSec ?? 0), 0);
@@ -594,6 +678,7 @@ function makeSession(date: string, acts: any[], detailById: Map<string, any>): S
     kind: acts.length === 1 ? "single" : "multi",
     classification,
     classificationReason: reason,
+    decoupling: computeSessionDecoupling(sessionLaps, distanceKm, durationSec, classification),
   };
 }
 

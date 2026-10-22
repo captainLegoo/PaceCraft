@@ -1,22 +1,42 @@
 import { useEffect, useState } from "react";
-import { api, type Activity, type LoadPoint, type Session, type Weekly } from "../api";
+import { api, type Activity, type LoadPoint, type Race, type Session, type Weekly } from "../api";
 import { BarChart, LineChart, fmtDate, fmtDur, fmtPace } from "../charts";
-import { IconCalendar, IconLoad, IconRoute, IconRun, IconShoe } from "../icons";
+import { IconCalendar, IconFlag, IconLoad, IconPulse, IconRoute, IconRun, IconShoe } from "../icons";
 
-export default function Training({ onOpen, onOpenSession, onOpenWeek }: { onOpen: (labelId: string) => void; onOpenSession: (key: string) => void; onOpenWeek: (weekStart: string) => void }) {
+export default function Training({
+  onOpen,
+  onOpenSession,
+  onOpenWeek,
+  onGoRace,
+  onGoReadiness,
+}: {
+  onOpen: (labelId: string) => void;
+  onOpenSession: (key: string) => void;
+  onOpenWeek: (weekStart: string) => void;
+  onGoRace?: () => void;
+  onGoReadiness?: () => void;
+}) {
   const [weekly, setWeekly] = useState<Weekly[]>([]);
   const [load, setLoad] = useState<LoadPoint[]>([]);
   const [acts, setActs] = useState<Activity[]>([]);
+  const [races, setRaces] = useState<Race[]>([]);
   const [err, setErr] = useState<string | null>(null);
   const [weeks, setWeeks] = useState(16);
   const [view, setView] = useState<"session" | "record">("session");
+  const [loadMode, setLoadMode] = useState<"combo" | "acwr">("combo");
   // 默认只看最近两周：116 场全渲染既慢又没人会从上往下翻
   const [range, setRange] = useState<"2w" | "1m" | "3m" | "all">("2w");
   const [sessions, setSessions] = useState<Session[]>([]);
 
   useEffect(() => {
-    Promise.all([api.weekly(weeks), api.load(90), api.activities({ limit: "200" }), api.sessions()])
-      .then(([w, l, a, s]) => { setWeekly(w); setLoad(l); setActs(a); setSessions(s); })
+    Promise.all([api.weekly(weeks), api.load(90), api.activities({ limit: "200" }), api.sessions(), api.races()])
+      .then(([w, l, a, s, r]) => {
+        setWeekly(w);
+        setLoad(l);
+        setActs(a);
+        setSessions(s);
+        setRaces(r);
+      })
       .catch((e) => setErr(e.message));
   }, [weeks]);
 
@@ -28,7 +48,6 @@ export default function Training({ onOpen, onOpenSession, onOpenWeek }: { onOpen
   const deltaKm = prev ? last.distanceKm - prev.distanceKm : null;
   const totalKm = weekly.reduce((s, w) => s + w.distanceKm, 0);
   const totalRun = weekly.reduce((s, w) => s + w.count, 0);
-
 
   const recentLoad = load.slice(-42);
   const multiSessions = sessions.filter((s) => s.activityCount > 1);
@@ -42,13 +61,132 @@ export default function Training({ onOpen, onOpenSession, onOpenWeek }: { onOpen
   })();
   const sessionsInRange = cutoff ? sessions.filter((s) => s.date >= cutoff) : sessions;
   const actsInRange = cutoff ? acts.filter((a) => a.dateLabel >= cutoff) : acts;
+
   const rangeKm = sessionsInRange.reduce((n, s) => n + s.totals.distanceKm, 0);
   const multiInRange = sessionsInRange.filter((s) => s.activityCount > 1);
   const latestLoad = load[load.length - 1];
   const loadStatus = ratioStatus(latestLoad?.ratio);
 
+  // 寻找最近的未来目标赛事
+  const today = new Date().toISOString().slice(0, 10);
+  const upcomingRaces = races.filter((r) => r.date >= today).sort((a, b) => a.date.localeCompare(b.date));
+  const targetRace = upcomingRaces[0] ?? (races.length > 0 ? races[races.length - 1] : null);
+  const daysLeft = targetRace
+    ? Math.ceil((new Date(`${targetRace.date}T00:00:00`).getTime() - new Date().setHours(0, 0, 0, 0)) / 86400000)
+    : null;
+
   return (
     <>
+      {/* 备战与今日状态 Hero 摘要 */}
+      <div
+        className="card"
+        style={{
+          marginBottom: 14,
+          padding: "16px 20px",
+          position: "relative",
+          overflow: "hidden",
+        }}
+      >
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 14 }}>
+          {/* 目标赛事倒计时与信息 */}
+          <div style={{ display: "flex", alignItems: "center", gap: 14, minWidth: 260, flex: "1 1 280px" }}>
+            <div
+              style={{
+                width: 44,
+                height: 44,
+                borderRadius: 12,
+                background: "var(--accent-bg)",
+                border: "1px solid var(--accent-border)",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                color: "var(--accent)",
+                flexShrink: 0,
+              }}
+            >
+              <IconFlag size={22} />
+            </div>
+            <div>
+              <div style={{ fontSize: 12, color: "var(--text-dim)", display: "flex", alignItems: "center", gap: 6 }}>
+                <span>目标赛事备赛</span>
+                {targetRace && (
+                  <span className="pill accent" style={{ fontSize: 11, padding: "1px 6px" }}>
+                    {daysLeft != null ? (daysLeft > 0 ? `倒计时 ${daysLeft} 天` : daysLeft === 0 ? "今天比赛" : "已完赛") : targetRace.date}
+                  </span>
+                )}
+              </div>
+              <div style={{ fontSize: 15, fontWeight: 700, color: "var(--text)", marginTop: 2 }}>
+                {targetRace ? targetRace.name : "尚未配置目标赛事"}
+              </div>
+              <div style={{ fontSize: 12, color: "var(--text-faint)", marginTop: 2 }}>
+                {targetRace
+                  ? `${targetRace.distanceKm} km · ${targetRace.city ?? "城市待定"}${targetRace.goalSec ? ` · 目标 ${fmtDur(targetRace.goalSec)}` : ""}`
+                  : "前往「赛事中心」上传 GPX 路线并设定目标成绩"}
+              </div>
+            </div>
+          </div>
+
+          {/* 今日伤病监控与负荷指导 */}
+          <div style={{ display: "flex", alignItems: "center", gap: 12, minWidth: 280, flex: "2 1 360px" }}>
+            <div
+              style={{
+                width: 44,
+                height: 44,
+                borderRadius: 12,
+                background: loadStatus ? loadStatus.bg : "var(--surface-3)",
+                border: `1px solid ${loadStatus ? loadStatus.border : "var(--border)"}`,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                color: loadStatus ? loadStatus.color : "var(--text)",
+                flexShrink: 0,
+              }}
+            >
+              <IconPulse size={22} />
+            </div>
+            <div style={{ flex: 1 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <span style={{ fontSize: 12, color: "var(--text-dim)" }}>今日训练指导</span>
+                {loadStatus && (
+                  <span
+                    className="pill"
+                    style={{
+                      fontSize: 11,
+                      padding: "1px 6px",
+                      color: loadStatus.color,
+                      background: loadStatus.bg,
+                      borderColor: loadStatus.border,
+                      fontWeight: 600,
+                    }}
+                  >
+                    ACWR {latestLoad?.ratio?.toFixed(2)} · {loadStatus.label}
+                  </span>
+                )}
+              </div>
+              <div style={{ fontSize: 13, color: "var(--text)", marginTop: 3, fontWeight: 500, lineHeight: 1.4 }}>
+                {loadStatus ? loadStatus.advice : "暂无负荷诊断"}
+              </div>
+            </div>
+          </div>
+
+          {/* 快捷跳转操作 */}
+          <div style={{ display: "flex", gap: 8, alignItems: "center", flexShrink: 0 }}>
+            {onGoRace && (
+              <button className="btn" onClick={onGoRace} style={{ fontSize: 12, padding: "6px 12px" }}>
+                <IconFlag size={13} />
+                赛事中心
+              </button>
+            )}
+            {onGoReadiness && (
+              <button className="btn" onClick={onGoReadiness} style={{ fontSize: 12, padding: "6px 12px" }}>
+                <IconPulse size={13} />
+                身体状态
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+
       <div className="grid g4" style={{ marginBottom: 14 }}>
         <div className="card stat-card">
           <div className="stat">
@@ -165,87 +303,113 @@ export default function Training({ onOpen, onOpenSession, onOpenWeek }: { onOpen
             overlayColor="var(--hr)"
             overlayLabel="平均心率"
             height={200}
-            // 点柱子进的是「这一周」的汇总，不是其中某一条记录
             onSelect={(i) => onOpenWeek(weekly[i].weekStart)}
           />
         </div>
 
         <div className="card">
-          <h3 className="card-title">训练负荷（近 6 周）</h3>
-          <p className="card-sub">短期 / 长期负荷与负荷比，负荷比 0.8–1.3 通常视为合理区间</p>
-          <LineChart
-            labels={recentLoad.map((p) => p.date)}
-            series={[
-              { key: "short", label: "短期负荷", color: "var(--chart-accent)", values: recentLoad.map((p) => p.shortLoad) },
-              { key: "long", label: "长期负荷", color: "var(--chart-muted)", values: recentLoad.map((p) => p.longLoad) },
-              { key: "ratio", label: "负荷比 (ACWR)", color: "var(--chart-warn)", values: recentLoad.map((p) => p.ratio), axis: "right" },
-            ]}
-            height={230}
-            yFmt={(n) => String(Math.round(n))}
-            yFmtRight={(n) => n.toFixed(2)}
-          />
-        </div>
-      </div>
-
-      <div className="card" style={{ marginBottom: 14 }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", flexWrap: "wrap", gap: 8 }}>
-          <div>
-            <h3 className="card-title">急慢性负荷比趋势（ACWR · 伤病风险监控）</h3>
-            <p className="card-sub" style={{ margin: 0 }}>
-              基于 Tim Gabbett (BJSM 2016) 理论：负荷比（ACWR）= 7天急性负荷 / 28天慢性负荷。0.80–1.30 为伤病风险极低的最佳甜点区。
-            </p>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 10, flexWrap: "wrap", gap: 8 }}>
+            <div>
+              <h3 className="card-title" style={{ marginBottom: 2 }}>训练负荷与伤病监控</h3>
+              <p className="card-sub" style={{ margin: 0 }}>
+                {loadMode === "combo"
+                  ? "短期(疲劳) / 长期(体能)与急慢性负荷比，双轴联动"
+                  : "Tim Gabbett 理论：ACWR 7日均比值与 0.8–1.3 最佳甜点区"}
+              </p>
+            </div>
+            <div className="seg">
+              <button className={loadMode === "combo" ? "active" : ""} onClick={() => setLoadMode("combo")}>
+                体能与疲劳
+              </button>
+              <button className={loadMode === "acwr" ? "active" : ""} onClick={() => setLoadMode("acwr")}>
+                ACWR 甜点区
+              </button>
+            </div>
           </div>
-          {loadStatus && (
-            <span
-              className="pill"
-              style={{
-                fontSize: 12,
-                fontWeight: 600,
-                color: loadStatus.color,
-                background: loadStatus.bg,
-                borderColor: loadStatus.border,
-              }}
-            >
-              当前：{loadStatus.title}
-            </span>
+
+          {loadMode === "combo" ? (
+            <LineChart
+              labels={recentLoad.map((p) => p.date)}
+              series={[
+                { key: "short", label: "短期负荷", color: "var(--chart-accent)", values: recentLoad.map((p) => p.shortLoad) },
+                { key: "long", label: "长期负荷", color: "var(--chart-muted)", values: recentLoad.map((p) => p.longLoad) },
+                { key: "ratio", label: "负荷比 (ACWR)", color: "var(--chart-warn)", values: recentLoad.map((p) => p.ratio), axis: "right" },
+              ]}
+              height={190}
+              yFmt={(n) => String(Math.round(n))}
+              yFmtRight={(n) => n.toFixed(2)}
+            />
+          ) : (
+            <LineChart
+              labels={recentLoad.map((p) => p.date)}
+              series={[{ key: "ratio", label: "负荷比（7日均）", color: "var(--chart-warn)", values: recentLoad.map((p) => p.ratioAvg7 ?? p.ratio) }]}
+              bands={[{ from: 0.8, to: 1.3, color: "var(--chart-good)" }]}
+              height={190}
+              yMin={0.4}
+              yMax={1.8}
+              yFmt={(n) => n.toFixed(2)}
+            />
           )}
-        </div>
 
-        <div style={{ marginTop: 12 }}>
-          <LineChart
-            labels={recentLoad.map((p) => p.date)}
-            series={[{ key: "ratio", label: "负荷比（7日均）", color: "var(--chart-warn)", values: recentLoad.map((p) => p.ratioAvg7 ?? p.ratio) }]}
-            bands={[{ from: 0.8, to: 1.3, color: "var(--chart-good)" }]}
-            height={160}
-            yMin={0.4}
-            yMax={1.8}
-            yFmt={(n) => n.toFixed(2)}
-          />
-        </div>
-
-        {/* Gabbett ACWR 科学诊断栏 */}
-        <div style={{ marginTop: 12, padding: "10px 14px", background: "var(--surface-2)", borderRadius: 8, fontSize: 12.5, lineHeight: 1.6 }}>
-          <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 6, fontWeight: 500, fontSize: 12 }}>
-            <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
-              <span style={{ width: 8, height: 8, borderRadius: 2, background: "var(--good)" }} />
-              0.80–1.30 最佳甜点区（伤病率最低 &lt;5%）
-            </span>
-            <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
-              <span style={{ width: 8, height: 8, borderRadius: 2, background: "var(--warn)" }} />
-              1.30–1.50 负荷警示区（疲劳较快蓄积）
-            </span>
-            <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
-              <span style={{ width: 8, height: 8, borderRadius: 2, background: "var(--bad)" }} />
-              &gt;1.50 危险区（伤病风险翻倍）
-            </span>
-            <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
-              <span style={{ width: 8, height: 8, borderRadius: 2, background: "var(--info)" }} />
-              &lt;0.80 减量恢复区
-            </span>
-          </div>
-          {loadStatus && (
-            <div style={{ color: "var(--text)" }}>
-              <strong>当前体能诊断</strong>：{loadStatus.advice}
+          {/* 依据当前选中的 Tab 动态展示对应视角的科学诊断 */}
+          {loadMode === "combo" ? (
+            <div style={{ marginTop: 10, padding: "8px 12px", background: "var(--surface-2)", borderRadius: 8, fontSize: 12, lineHeight: 1.5 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 6, marginBottom: 4 }}>
+                <span style={{ fontWeight: 600, color: "var(--text)", fontSize: 11.5 }}>
+                  Banister 冲量反应模型 · 体能与疲劳消长
+                </span>
+                <span style={{ fontSize: 11.5, color: "var(--text-dim)" }}>
+                  短期疲劳 {latestLoad?.shortLoad ?? "—"} ｜ 长期体能 {latestLoad?.longLoad ?? "—"} ｜ 负荷比 {latestLoad?.ratio?.toFixed(2) ?? "—"}
+                </span>
+              </div>
+              {(() => {
+                const s = latestLoad?.shortLoad ?? 0;
+                const l = latestLoad?.longLoad ?? 0;
+                const diff = s - l;
+                return (
+                  <div style={{ color: "var(--text)", fontSize: 11.5 }}>
+                    <strong style={{ color: diff > 10 ? "var(--chart-accent)" : diff < -10 ? "var(--good)" : "var(--text)" }}>
+                      {diff > 10
+                        ? `负荷刺激冲击期（疲劳高于体能 +${Math.round(diff)}）`
+                        : diff < -10
+                        ? `减量消退期（疲劳低于体能 ${Math.round(diff)}）`
+                        : "平稳维持期（疲劳与体能均衡）"}
+                    </strong>
+                    ：
+                    {diff > 10
+                      ? "近期训练刺激高于过去四周基准，体能处于积极蓄能期，需注意软组织放松与营养补充以促进超量代偿。"
+                      : diff < -10
+                      ? "近期训练负荷主动回落，前期疲劳正加速消退，长期体能储备即将释放，适合赛前减量或状态摸底。"
+                      : "当前短期刺激与长期储备高度同步，训练负荷稳步推进，没有过量疲劳积压。"}
+                  </div>
+                );
+              })()}
+            </div>
+          ) : (
+            <div style={{ marginTop: 10, padding: "8px 12px", background: "var(--surface-2)", borderRadius: 8, fontSize: 12, lineHeight: 1.5 }}>
+              <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 4, fontWeight: 500, fontSize: 11.5 }}>
+                <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+                  <span style={{ width: 7, height: 7, borderRadius: 2, background: "var(--good)" }} />
+                  0.80–1.30 最佳甜点区
+                </span>
+                <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+                  <span style={{ width: 7, height: 7, borderRadius: 2, background: "var(--warn)" }} />
+                  1.30–1.50 负荷警示
+                </span>
+                <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+                  <span style={{ width: 7, height: 7, borderRadius: 2, background: "var(--bad)" }} />
+                  &gt;1.50 高危区
+                </span>
+                <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+                  <span style={{ width: 7, height: 7, borderRadius: 2, background: "var(--info)" }} />
+                  &lt;0.80 减量区
+                </span>
+              </div>
+              {loadStatus && (
+                <div style={{ color: "var(--text)", fontSize: 11.5 }}>
+                  <strong style={{ color: loadStatus.color }}>当前伤病诊断</strong>：{loadStatus.advice}
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -257,7 +421,7 @@ export default function Training({ onOpen, onOpenSession, onOpenWeek }: { onOpen
             <h3 className="card-title" style={{ marginBottom: 2 }}>{view === "session" ? "训练场次" : "训练记录（逐条）"}</h3>
             <p className="card-sub" style={{ marginBottom: 0 }}>
               {view === "session"
-                ? "同一天的多次记录已合并为一场，AI 会按整场结构分析"
+                ? "同一天的多次记录已合并为一场；脱钩率评估持续稳态跑（保护性门槛：≥4km 且 ≥25min），<5% 证明基础有氧扎实"
                 : "这是手表记录的原始条目，一条一次训练"}
             </p>
           </div>
@@ -294,13 +458,26 @@ export default function Training({ onOpen, onOpenSession, onOpenWeek }: { onOpen
             <table>
               <thead>
                 <tr>
-                  <th>日期</th><th>类型</th><th>记录数</th><th>总距离</th><th>总时长</th>
-                  <th>均配速</th><th>均心率</th><th>负荷</th><th>组结构</th>
+                  <th>日期</th>
+                  <th>类型</th>
+                  <th>记录数</th>
+                  <th>总距离</th>
+                  <th>总时长</th>
+                  <th>均配速</th>
+                  <th>均心率</th>
+                  <th>负荷</th>
+                  <th
+                    title="基于 Joe Friel 耐力模型：稳态有氧跑对比前后半程效率因子（EF = 配速 / 心率）。保护性过滤：需满足时长 ≥25min、距离 ≥4km、分圈 ≥4 且非间歇跑。"
+                    style={{ cursor: "help" }}
+                  >
+                    有氧脱钩率 (Pw:Hr) ⓘ
+                  </th>
+                  <th>组结构</th>
                 </tr>
               </thead>
               <tbody>
                 {sessionsInRange.length === 0 && (
-                  <tr><td colSpan={9}><div className="empty-run"><IconCalendar size={40} /><span>该时间范围内没有训练</span></div></td></tr>
+                  <tr><td colSpan={10}><div className="empty-run"><IconCalendar size={40} /><span>该时间范围内没有训练</span></div></td></tr>
                 )}
                 {sessionsInRange.map((s) => (
                   <tr key={s.key} className="clickable" onClick={() => onOpenSession(s.key)}>
@@ -316,6 +493,24 @@ export default function Training({ onOpen, onOpenSession, onOpenWeek }: { onOpen
                     <td className="num">{fmtPace(s.totals.distanceKm ? s.totals.durationSec / s.totals.distanceKm : null)}</td>
                     <td className="num">{s.totals.avgHr ?? "—"}</td>
                     <td className="num">{s.totals.trainingLoad || "—"}</td>
+                    <td>
+                      {s.decoupling ? (
+                        <span
+                          className={`pill ${s.decoupling.level}`}
+                          style={{ fontSize: 11, fontWeight: 600 }}
+                          title={`Joe Friel 有氧脱钩率：后程效率因子变化 ${s.decoupling.pct}%`}
+                        >
+                          {s.decoupling.label}
+                        </span>
+                      ) : (
+                        <span
+                          style={{ color: "var(--text-faint)", fontSize: 12, cursor: "help" }}
+                          title={decouplingReason(s)}
+                        >
+                          —
+                        </span>
+                      )}
+                    </td>
                     <td style={{ textAlign: "left", color: "var(--text-dim)", fontSize: 12 }}>
                       {s.sets.length > 0
                         ? s.sets.map((x) => `${x.distanceLabel}×${x.reps}`).join(" + ")
@@ -335,7 +530,7 @@ export default function Training({ onOpen, onOpenSession, onOpenWeek }: { onOpen
             </tr>
           </thead>
           <tbody>
-            {acts.map((a) => (
+            {actsInRange.map((a) => (
               <tr key={a.labelId} className="clickable" onClick={() => onOpen(a.labelId)}>
                 <td>{a.dateLabel.slice(5)}</td>
                 <td style={{ textAlign: "left", color: "var(--text-dim)" }}>{a.sportName}</td>
@@ -404,4 +599,14 @@ function ratioStatus(r: number | null | undefined) {
     title: "减量恢复/欠训练区",
     advice: "短期负荷较低，身体处于充分休整或疲劳消退期。适合赛前 1~2 周减量恢复巅峰体能，若处于正常训练期则可逐步恢复跑量以维持体能储备。",
   };
+}
+
+function decouplingReason(s: Session): string {
+  if (s.classification === "间歇训练") {
+    return "不适用：间歇训练快慢交替、心率剧烈起伏，不符合稳态跑评估前提";
+  }
+  if (s.totals.durationSec < 1500 || s.totals.distanceKm < 4.0) {
+    return `保护性过滤：当前单次 ${s.totals.distanceKm}km / ${fmtDur(s.totals.durationSec)}，时长或距离较短，处于前程心率爬坡升温期，不满足稳态门槛（需 ≥4km 且 ≥25min）`;
+  }
+  return "不适用：分圈样本数不足、心率缺失或山地大爬升（>20m/km）扰动";
 }

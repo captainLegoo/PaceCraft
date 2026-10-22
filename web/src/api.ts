@@ -45,6 +45,12 @@ export type SessionSet = {
   distanceTolerance: number; paceTolerance: number;
 };
 
+export type SessionDecoupling = {
+  pct: number;
+  level: "good" | "warn" | "bad" | "info";
+  label: string;
+};
+
 export type Session = {
   key: string; date: string; startTs: number; endTs: number; maxGapSec: number;
   activityCount: number; labelIds: string[];
@@ -52,6 +58,7 @@ export type Session = {
   sets: SessionSet[];
   kind: "single" | "multi";
   classification: string; classificationReason: string;
+  decoupling?: SessionDecoupling | null;
 };
 
 export type SessionLap = {
