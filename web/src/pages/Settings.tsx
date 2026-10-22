@@ -329,7 +329,7 @@ export default function Settings({ onStatus }: { onStatus: () => void }) {
               />
             </label>
 
-            {/* 高级选项折叠器：Base URL、接口协议、温度、Token */}
+            {/* 高级选项折叠器：仅供自定义代理或特殊中转修改 Base URL 与协议 */}
             <div style={{ marginTop: 2, marginBottom: 12 }}>
               <button
                 type="button"
@@ -347,7 +347,7 @@ export default function Settings({ onStatus }: { onStatus: () => void }) {
                 }}
                 onClick={() => setShowAdvanced(!showAdvanced)}
               >
-                <span>{showAdvanced ? "▾ 收起高级设置" : "▸ 展开高级设置（自定义 Base URL / 温度 / Token）"}</span>
+                <span>{showAdvanced ? "▾ 收起自定义接口（Base URL / 协议）" : "▸ 展开自定义接口（Base URL / 协议）"}</span>
               </button>
 
               {showAdvanced && (
@@ -373,27 +373,6 @@ export default function Settings({ onStatus }: { onStatus: () => void }) {
                         : "填到域名即可，程序会自动拼 /v1/messages"}
                     </div>
                   </label>
-
-                  <div className="grid g2" style={{ gap: 10 }}>
-                    <label className="field" style={{ margin: 0 }}>
-                      <span>温度 (Temperature)</span>
-                      <input
-                        type="number"
-                        step="0.1"
-                        value={cfg.temperature}
-                        onChange={(e) => setCfg({ ...cfg, temperature: Number(e.target.value) })}
-                      />
-                    </label>
-                    <label className="field" style={{ margin: 0 }}>
-                      <span>最大输出 Token</span>
-                      <input
-                        type="number"
-                        step="500"
-                        value={cfg.maxTokens}
-                        onChange={(e) => setCfg({ ...cfg, maxTokens: Number(e.target.value) })}
-                      />
-                    </label>
-                  </div>
                 </div>
               )}
             </div>
