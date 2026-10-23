@@ -35,7 +35,7 @@ export default function WorkflowPanel() {
       {err && <div className="banner error">{err}</div>}
 
       <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-        {steps.map((s) => (
+        {steps.map((s, idx) => (
           <div
             key={s.name}
             style={{
@@ -59,7 +59,7 @@ export default function WorkflowPanel() {
                 marginTop: 1,
               }}
             >
-              {s.order} · {s.label}
+              步骤 {idx + 1} · {s.label}
             </span>
             <span style={{ color: "var(--text-dim)", lineHeight: 1.5 }}>
               {s.description}

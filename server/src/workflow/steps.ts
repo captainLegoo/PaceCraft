@@ -80,7 +80,7 @@ registerStep({
   name: "check-acwr-risk",
   label: "急慢性负荷比 (ACWR)",
   description: "基于 Gabbett 负荷模型评估短期疲劳与长期体能比值，预警负荷激增与伤病风险",
-  order: 25,
+  order: 30,
   critical: false,
   async run() {
     const loads = db.select().from(trainingLoad).orderBy(desc(trainingLoad.date)).limit(14).all();
@@ -134,7 +134,7 @@ registerStep({
   name: "compute-race-briefing",
   label: "赛事路线与备赛",
   description: "重算目标赛事的路线爬升画像与备赛简报（预测、配速、备赛日历）",
-  order: 30,
+  order: 40,
   critical: false,
   async run(ctx) {
     const races = listRaces();
@@ -179,7 +179,7 @@ registerStep({
   name: "compute-aerobic-decoupling",
   label: "有氧脱钩率分析",
   description: "基于 Joe Friel 有氧脱钩模型，检测长距离稳态跑前后半程效率因子衰减（<5% 优秀）",
-  order: 35,
+  order: 50,
   critical: false,
   async run(ctx) {
     const sessions = buildSessions();
