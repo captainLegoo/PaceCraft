@@ -102,18 +102,25 @@ export async function callModel(cfg: AiConfig, system: string, user: string): Pr
 
 async function callOpenAiCompatible(cfg: AiConfig, system: string, user: string): Promise<string> {
   const url = `${cfg.baseUrl.replace(/\/+$/, "")}/chat/completions`;
+  const isOpenAiReasoning = /^(o1|o3|o4)(-|$)/i.test(cfg.model);
+  const payload: any = {
+    model: cfg.model,
+    messages: [
+      { role: "system", content: system },
+      { role: "user", content: user },
+    ],
+  };
+  if (isOpenAiReasoning) {
+    payload.max_completion_tokens = cfg.maxTokens;
+  } else {
+    payload.temperature = cfg.temperature;
+    payload.max_tokens = cfg.maxTokens;
+  }
+
   const res = await fetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${cfg.apiKey}` },
-    body: JSON.stringify({
-      model: cfg.model,
-      temperature: cfg.temperature,
-      max_tokens: cfg.maxTokens,
-      messages: [
-        { role: "system", content: system },
-        { role: "user", content: user },
-      ],
-    }),
+    body: JSON.stringify(payload),
   });
 
   const body = (await res.json().catch(() => ({}))) as any;

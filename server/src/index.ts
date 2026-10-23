@@ -806,10 +806,13 @@ const app = new Elysia()
       return new Response(JSON.stringify({ error: "baseUrl / model 都不能为空" }), { status: 400 });
     }
     const old = getAiConfig();
+    const isLocal = /localhost|127\.0\.0\.1|11434/.test(String(b.baseUrl));
     let apiKey = String(b.apiKey ?? "").trim();
     if (!apiKey || apiKey.includes("…") || apiKey.includes("...")) {
       if (old?.apiKey) {
         apiKey = old.apiKey;
+      } else if (isLocal) {
+        apiKey = "ollama";
       } else {
         return new Response(JSON.stringify({ error: "API Key 不能为空" }), { status: 400 });
       }
@@ -829,10 +832,13 @@ const app = new Elysia()
     try {
       const b = body as any;
       const old = getAiConfig();
+      const isLocal = /localhost|127\.0\.0\.1|11434/.test(String(b?.baseUrl));
       let apiKey = String(b?.apiKey ?? "").trim();
       if (!apiKey || apiKey.includes("…") || apiKey.includes("...")) {
         if (old?.apiKey) {
           apiKey = old.apiKey;
+        } else if (isLocal) {
+          apiKey = "ollama";
         } else {
           return new Response(JSON.stringify({ error: "请先填写 API Key" }), { status: 400 });
         }

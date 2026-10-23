@@ -612,13 +612,38 @@ export default function RaceSetup({
         </div>
         <div className="grid g4" style={{ marginBottom: 10, alignItems: "start" }}>
           <div className="stat" style={{ gridColumn: "span 2" }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", minHeight: 22 }}>
-              <span className="label" style={{ margin: 0 }}>目标成绩（选填）</span>
-              <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", minHeight: 22, marginBottom: 4 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                <span className="label" style={{ margin: 0 }}>目标成绩（选填）</span>
                 {pacePreview && (
                   <span className="pill info" style={{ fontSize: 11, fontWeight: 600 }}>
                     {pacePreview}
                   </span>
+                )}
+              </div>
+              <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                {quickGoals.length > 0 && (
+                  <select
+                    value=""
+                    onChange={(e) => {
+                      const idx = Number(e.target.value);
+                      if (!isNaN(idx) && quickGoals[idx]) {
+                        const q = quickGoals[idx];
+                        setGoalH(q.h);
+                        setGoalM(q.m);
+                        setGoalS(q.s);
+                      }
+                    }}
+                    style={{ fontSize: 11, padding: "2px 6px", borderRadius: 5, maxWidth: 125, height: 23, cursor: "pointer" }}
+                    title="从经典目标档位中快速选择"
+                  >
+                    <option value="">快捷档位 ▾</option>
+                    {quickGoals.map((q, idx) => (
+                      <option key={q.label} value={idx}>
+                        {q.label}
+                      </option>
+                    ))}
+                  </select>
                 )}
                 {(goalH !== "" || goalM !== "" || goalS !== 0) && (
                   <button
@@ -639,51 +664,87 @@ export default function RaceSetup({
               </div>
             </div>
 
+            {/* 时、分、秒 直接数字输入框（告别 60 项超长下拉） */}
             <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
-              <select
-                value={goalH}
-                onChange={(e) => {
-                  const val = e.target.value === "" ? "" : Number(e.target.value);
-                  setGoalH(val);
-                  if (val !== "" && goalM === "") setGoalM(0);
-                }}
-                style={{ flex: 1, minWidth: 0 }}
-              >
-                <option value="">-- 时</option>
-                {Array.from({ length: 25 }, (_, i) => (
-                  <option key={i} value={i}>{i} 小时</option>
-                ))}
-              </select>
+              <div style={{ flex: 1, position: "relative", display: "flex", alignItems: "center" }}>
+                <input
+                  type="number"
+                  min="0"
+                  max="24"
+                  value={goalH}
+                  onChange={(e) => {
+                    const raw = e.target.value.trim();
+                    if (raw === "") {
+                      setGoalH("");
+                    } else {
+                      const val = Math.min(24, Math.max(0, parseInt(raw, 10) || 0));
+                      setGoalH(val);
+                      if (goalM === "") setGoalM(0);
+                    }
+                  }}
+                  placeholder="时"
+                  style={{ textAlign: "center", paddingRight: 24 }}
+                />
+                <span style={{ position: "absolute", right: 8, fontSize: 11, color: "var(--muted)", pointerEvents: "none" }}>
+                  时
+                </span>
+              </div>
+
               <span style={{ color: "var(--text-faint)", fontWeight: "bold" }}>:</span>
-              <select
-                value={goalM}
-                onChange={(e) => {
-                  const val = e.target.value === "" ? "" : Number(e.target.value);
-                  setGoalM(val);
-                  if (val !== "" && goalH === "") setGoalH(0);
-                }}
-                style={{ flex: 1, minWidth: 0 }}
-              >
-                <option value="">-- 分</option>
-                {Array.from({ length: 60 }, (_, i) => (
-                  <option key={i} value={i}>{String(i).padStart(2, "0")} 分</option>
-                ))}
-              </select>
+
+              <div style={{ flex: 1, position: "relative", display: "flex", alignItems: "center" }}>
+                <input
+                  type="number"
+                  min="0"
+                  max="59"
+                  value={goalM}
+                  onChange={(e) => {
+                    const raw = e.target.value.trim();
+                    if (raw === "") {
+                      setGoalM("");
+                    } else {
+                      const val = Math.min(59, Math.max(0, parseInt(raw, 10) || 0));
+                      setGoalM(val);
+                      if (goalH === "") setGoalH(0);
+                    }
+                  }}
+                  placeholder="分"
+                  style={{ textAlign: "center", paddingRight: 24 }}
+                />
+                <span style={{ position: "absolute", right: 8, fontSize: 11, color: "var(--muted)", pointerEvents: "none" }}>
+                  分
+                </span>
+              </div>
+
               <span style={{ color: "var(--text-faint)", fontWeight: "bold" }}>:</span>
-              <select
-                value={goalS}
-                onChange={(e) => setGoalS(Number(e.target.value))}
-                style={{ flex: 1, minWidth: 0 }}
-              >
-                {Array.from({ length: 60 }, (_, i) => (
-                  <option key={i} value={i}>{String(i).padStart(2, "0")} 秒</option>
-                ))}
-              </select>
+
+              <div style={{ flex: 1, position: "relative", display: "flex", alignItems: "center" }}>
+                <input
+                  type="number"
+                  min="0"
+                  max="59"
+                  value={goalH === "" && goalM === "" && goalS === 0 ? "" : goalS}
+                  onChange={(e) => {
+                    const raw = e.target.value.trim();
+                    if (raw === "") {
+                      setGoalS(0);
+                    } else {
+                      const val = Math.min(59, Math.max(0, parseInt(raw, 10) || 0));
+                      setGoalS(val);
+                    }
+                  }}
+                  placeholder="秒"
+                  style={{ textAlign: "center", paddingRight: 24 }}
+                />
+                <span style={{ position: "absolute", right: 8, fontSize: 11, color: "var(--muted)", pointerEvents: "none" }}>
+                  秒
+                </span>
+              </div>
             </div>
 
             {quickGoals.length > 0 ? (
               <div style={{ display: "flex", flexWrap: "wrap", gap: 5, marginTop: 6, alignItems: "center", minHeight: 22 }}>
-                <span style={{ fontSize: 11, color: "var(--text-faint)", marginRight: 2 }}>快捷选择:</span>
+                <span style={{ fontSize: 11, color: "var(--text-faint)", marginRight: 2 }}>常用成绩:</span>
                 {quickGoals.map((q) => {
                   const isMatch = goalH === q.h && goalM === q.m && goalS === q.s;
                   return (
@@ -706,7 +767,7 @@ export default function RaceSetup({
               </div>
             ) : (
               <span className="hint" style={{ margin: 0, marginTop: 6, minHeight: 22, display: "flex", alignItems: "center" }}>
-                按时、分、秒选择目标完赛时间（留空表示不设目标）
+                可直接输入时、分、秒，留空表示不设目标
               </span>
             )}
           </div>

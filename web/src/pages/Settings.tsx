@@ -3,22 +3,360 @@ import { api, type SyncSportsPayload } from "../api";
 import { IconDatabase, IconGear, IconHeart, IconSync } from "../icons";
 import WorkflowPanel from "./WorkflowPanel";
 
-const PROVIDERS = [
-  { id: "deepseek", name: "DeepSeek (推荐 · 深度思考与高性价比)", provider: "openai", baseUrl: "https://api.deepseek.com/v1", defaultModel: "deepseek-chat" },
-  { id: "qwen", name: "通义千问 (阿里云 Qwen)", provider: "openai", baseUrl: "https://dashscope.aliyuncs.com/compatible-mode/v1", defaultModel: "qwen-plus" },
-  { id: "kimi", name: "Kimi (月之暗面 Moonshot)", provider: "openai", baseUrl: "https://api.moonshot.cn/v1", defaultModel: "moonshot-v1-8k" },
-  { id: "openai", name: "OpenAI (官方 / 第三方中转)", provider: "openai", baseUrl: "https://api.openai.com/v1", defaultModel: "gpt-4o-mini" },
-  { id: "anthropic", name: "Anthropic (Claude)", provider: "anthropic", baseUrl: "https://api.anthropic.com", defaultModel: "claude-sonnet-4-5" },
-  { id: "custom", name: "自定义平台 / 本地 Ollama / OneAPI", provider: "openai", baseUrl: "", defaultModel: "" },
+export type PopularModel = {
+  model: string;
+  label: string;
+  desc?: string;
+  tag?: string;
+};
+
+export type ProviderPreset = {
+  id: string;
+  name: string;
+  group: "featured" | "domestic" | "global" | "local";
+  provider: "openai" | "anthropic";
+  baseUrl: string;
+  defaultModel: string;
+  popularModels: PopularModel[];
+  docUrl?: string;
+  docLabel?: string;
+  apiKeyHint?: string;
+  defaultApiKey?: string;
+};
+
+const PROVIDER_GROUPS = [
+  { key: "featured", label: "🌟 推荐热门平台" },
+  { key: "domestic", label: "🇨🇳 国内主流大模型平台" },
+  { key: "global", label: "🌐 国际主流大模型平台" },
+  { key: "local", label: "💻 本地与自定义部署" },
+] as const;
+
+const PROVIDERS: ProviderPreset[] = [
+  // --- 推荐热门 ---
+  {
+    id: "deepseek",
+    name: "DeepSeek (深度求索 · 官方)",
+    group: "featured",
+    provider: "openai",
+    baseUrl: "https://api.deepseek.com/v1",
+    defaultModel: "deepseek-chat",
+    popularModels: [
+      { model: "deepseek-chat", label: "DeepSeek-V3", desc: "高性价比首选 · 综合能力卓越", tag: "推荐" },
+      { model: "deepseek-reasoner", label: "DeepSeek-R1", desc: "深度长链推理与反思", tag: "深度思考" },
+    ],
+    docUrl: "https://platform.deepseek.com",
+    docLabel: "DeepSeek 开放平台",
+  },
+  {
+    id: "siliconflow",
+    name: "硅基流动 (SiliconFlow · 极速聚合)",
+    group: "featured",
+    provider: "openai",
+    baseUrl: "https://api.siliconflow.cn/v1",
+    defaultModel: "deepseek-ai/DeepSeek-V3",
+    popularModels: [
+      { model: "deepseek-ai/DeepSeek-V3", label: "DeepSeek-V3", desc: "极速稳定 · 极高性价比", tag: "高性价" },
+      { model: "deepseek-ai/DeepSeek-R1", label: "DeepSeek-R1", desc: "深度思考推理", tag: "深度思考" },
+      { model: "Pro/deepseek-ai/DeepSeek-V3", label: "DeepSeek-V3 Pro", desc: "企业高可用专线" },
+      { model: "Pro/deepseek-ai/DeepSeek-R1", label: "DeepSeek-R1 Pro", desc: "企业推理专线" },
+      { model: "Qwen/Qwen2.5-72B-Instruct", label: "Qwen2.5 72B", desc: "通义千问开源旗舰" },
+    ],
+    docUrl: "https://cloud.siliconflow.cn",
+    docLabel: "硅基流动控制台",
+    apiKeyHint: "国内热门大模型托管平台，新用户常有赠送 Token",
+  },
+  {
+    id: "qwen",
+    name: "阿里云百炼 (通义千问 Qwen)",
+    group: "featured",
+    provider: "openai",
+    baseUrl: "https://dashscope.aliyuncs.com/compatible-mode/v1",
+    defaultModel: "qwen-plus",
+    popularModels: [
+      { model: "qwen-plus", label: "Qwen Plus", desc: "能力均衡全面 · 主力推荐", tag: "推荐" },
+      { model: "qwen-max", label: "Qwen Max", desc: "千问旗舰大模型 · 复杂推理", tag: "旗舰" },
+      { model: "qwen-turbo", label: "Qwen Turbo", desc: "响应极速 · 超低成本" },
+      { model: "deepseek-r1", label: "百炼 DeepSeek-R1", desc: "阿里云官方托管 R1" },
+      { model: "deepseek-v3", label: "百炼 DeepSeek-V3", desc: "阿里云官方托管 V3" },
+      { model: "qwen2.5-72b-instruct", label: "Qwen2.5 72B", desc: "开源旗舰底座" },
+    ],
+    docUrl: "https://bailian.console.aliyun.com",
+    docLabel: "阿里云百炼平台",
+  },
+  {
+    id: "zhipu",
+    name: "智谱 AI (GLM-4 / 智谱清言)",
+    group: "featured",
+    provider: "openai",
+    baseUrl: "https://open.bigmodel.cn/api/paas/v4",
+    defaultModel: "glm-4-flash",
+    popularModels: [
+      { model: "glm-4-flash", label: "GLM-4 Flash", desc: "官方免费调用 · 响应极快", tag: "免费" },
+      { model: "glm-4-plus", label: "GLM-4 Plus", desc: "智谱旗舰大模型 · 综合逻辑强", tag: "旗舰" },
+      { model: "glm-4-air", label: "GLM-4 Air", desc: "高性价比极速版" },
+      { model: "glm-4-long", label: "GLM-4 Long", desc: "100万长上下文支持" },
+    ],
+    docUrl: "https://open.bigmodel.cn",
+    docLabel: "智谱大模型开放平台",
+    apiKeyHint: "GLM-4-Flash 永久免费，零门槛轻松体验",
+  },
+
+  // --- 国内主流平台 ---
+  {
+    id: "kimi",
+    name: "月之暗面 (Kimi / Moonshot)",
+    group: "domestic",
+    provider: "openai",
+    baseUrl: "https://api.moonshot.cn/v1",
+    defaultModel: "moonshot-v1-8k",
+    popularModels: [
+      { model: "moonshot-v1-8k", label: "Moonshot 8K", desc: "标准长上下文", tag: "推荐" },
+      { model: "moonshot-v1-32k", label: "Moonshot 32K", desc: "中长上下文" },
+      { model: "kimi-k1.5-preview", label: "Kimi k1.5", desc: "多模态思考推理预览版", tag: "思考" },
+    ],
+    docUrl: "https://platform.moonshot.cn",
+    docLabel: "Moonshot 开放平台",
+  },
+  {
+    id: "doubao",
+    name: "字节火山引擎 (豆包 Doubao)",
+    group: "domestic",
+    provider: "openai",
+    baseUrl: "https://ark.cn-beijing.volces.com/api/v3",
+    defaultModel: "doubao-1.5-pro-32k",
+    popularModels: [
+      { model: "doubao-1.5-pro-32k", label: "Doubao 1.5 Pro", desc: "豆包旗舰主力模型", tag: "推荐" },
+      { model: "doubao-1.5-lite-32k", label: "Doubao 1.5 Lite", desc: "轻量极速模型" },
+      { model: "doubao-pro-32k", label: "Doubao Pro 32K", desc: "经典专业版" },
+    ],
+    docUrl: "https://console.volcengine.com/ark",
+    docLabel: "火山引擎方舟控制台",
+    apiKeyHint: "模型名称可填官方模型名或控制台接入点 Endpoint ID (ep-xxxx)",
+  },
+  {
+    id: "minimax",
+    name: "MiniMax (海螺 AI 开放平台)",
+    group: "domestic",
+    provider: "openai",
+    baseUrl: "https://api.minimax.chat/v1",
+    defaultModel: "MiniMax-Text-01",
+    popularModels: [
+      { model: "MiniMax-Text-01", label: "MiniMax-Text-01", desc: "400万超长文本新一代旗舰", tag: "旗舰" },
+      { model: "abab6.5s-chat", label: "abab 6.5s", desc: "轻量高性价比" },
+    ],
+    docUrl: "https://platform.minimaxi.com",
+    docLabel: "MiniMax 开放平台",
+  },
+  {
+    id: "lingyi",
+    name: "零一万物 (01.AI / Yi)",
+    group: "domestic",
+    provider: "openai",
+    baseUrl: "https://api.lingyiwanwu.com/v1",
+    defaultModel: "yi-lightning",
+    popularModels: [
+      { model: "yi-lightning", label: "Yi Lightning", desc: "千亿参数超快推理旗舰", tag: "推荐" },
+      { model: "yi-large", label: "Yi Large", desc: "通用能力大模型" },
+      { model: "yi-medium", label: "Yi Medium", desc: "经济快速版" },
+    ],
+    docUrl: "https://platform.lingyiwanwu.com",
+    docLabel: "零一万物开放平台",
+  },
+  {
+    id: "qianfan",
+    name: "百度千帆 (文心大模型 ERNIE)",
+    group: "domestic",
+    provider: "openai",
+    baseUrl: "https://qianfan.baidubce.com/v2",
+    defaultModel: "ernie-4.0-turbo-8k",
+    popularModels: [
+      { model: "ernie-4.0-turbo-8k", label: "ERNIE 4.0 Turbo", desc: "百度文心旗舰", tag: "旗舰" },
+      { model: "ernie-3.5-8k", label: "ERNIE 3.5", desc: "经典高性价比" },
+      { model: "deepseek-r1", label: "千帆 DeepSeek-R1", desc: "千帆托管 R1" },
+      { model: "deepseek-v3", label: "千帆 DeepSeek-V3", desc: "千帆托管 V3" },
+    ],
+    docUrl: "https://console.bce.baidu.com/qianfan",
+    docLabel: "百度千帆控制台",
+  },
+  {
+    id: "hunyuan",
+    name: "腾讯混元 (Tencent Hunyuan)",
+    group: "domestic",
+    provider: "openai",
+    baseUrl: "https://api.hunyuan.cloud.tencent.com/v1",
+    defaultModel: "hunyuan-standard",
+    popularModels: [
+      { model: "hunyuan-standard", label: "混元 Standard", desc: "通用标准版", tag: "推荐" },
+      { model: "hunyuan-pro", label: "混元 Pro", desc: "混元旗舰版", tag: "旗舰" },
+      { model: "hunyuan-turbo", label: "混元 Turbo", desc: "极速低延迟" },
+    ],
+    docUrl: "https://cloud.tencent.com/product/hunyuan",
+    docLabel: "腾讯云混元控制台",
+  },
+
+  // --- 国际主流平台 ---
+  {
+    id: "openai",
+    name: "OpenAI (官方 / ChatGPT)",
+    group: "global",
+    provider: "openai",
+    baseUrl: "https://api.openai.com/v1",
+    defaultModel: "gpt-4o-mini",
+    popularModels: [
+      { model: "gpt-4o-mini", label: "GPT-4o mini", desc: "轻快高性价比 · 跑友首选", tag: "推荐" },
+      { model: "gpt-4o", label: "GPT-4o", desc: "全能多模态旗舰", tag: "旗舰" },
+      { model: "o3-mini", label: "o3-mini", desc: "最新高性价比强推理", tag: "深度推理" },
+      { model: "o1", label: "o1", desc: "前沿通用慢思考推理" },
+    ],
+    docUrl: "https://platform.openai.com",
+    docLabel: "OpenAI Platform",
+  },
+  {
+    id: "anthropic",
+    name: "Anthropic (Claude 官方)",
+    group: "global",
+    provider: "anthropic",
+    baseUrl: "https://api.anthropic.com",
+    defaultModel: "claude-3-7-sonnet-latest",
+    popularModels: [
+      { model: "claude-3-7-sonnet-latest", label: "Claude 3.7 Sonnet", desc: "混合推理与深度思考最新旗舰", tag: "最新旗舰" },
+      { model: "claude-3-5-sonnet-latest", label: "Claude 3.5 Sonnet", desc: "业界标杆旗舰大模型" },
+      { model: "claude-3-5-haiku-latest", label: "Claude 3.5 Haiku", desc: "轻量快速高性价比" },
+    ],
+    docUrl: "https://console.anthropic.com",
+    docLabel: "Anthropic Console",
+  },
+  {
+    id: "gemini",
+    name: "Google Gemini (Google AI Studio)",
+    group: "global",
+    provider: "openai",
+    baseUrl: "https://generativelanguage.googleapis.com/v1beta/openai",
+    defaultModel: "gemini-2.5-flash",
+    popularModels: [
+      { model: "gemini-2.5-flash", label: "Gemini 2.5 Flash", desc: "兼顾深度思考与极速响应", tag: "推荐" },
+      { model: "gemini-2.5-pro", label: "Gemini 2.5 Pro", desc: "顶级复杂分析推理旗舰", tag: "旗舰" },
+      { model: "gemini-2.0-flash", label: "Gemini 2.0 Flash", desc: "低延迟极速生成" },
+      { model: "gemini-1.5-pro", label: "Gemini 1.5 Pro", desc: "百万长上下文" },
+    ],
+    docUrl: "https://aistudio.google.com",
+    docLabel: "Google AI Studio",
+    apiKeyHint: "Google AI Studio 提供充沛的免费调用额度，通过兼容接口直连",
+  },
+  {
+    id: "openrouter",
+    name: "OpenRouter (全球模型聚合路由)",
+    group: "global",
+    provider: "openai",
+    baseUrl: "https://openrouter.ai/api/v1",
+    defaultModel: "deepseek/deepseek-chat",
+    popularModels: [
+      { model: "deepseek/deepseek-chat", label: "DeepSeek V3", desc: "OpenRouter 托管路由", tag: "推荐" },
+      { model: "deepseek/deepseek-r1", label: "DeepSeek R1", desc: "OpenRouter R1 深度推理" },
+      { model: "anthropic/claude-3.7-sonnet", label: "Claude 3.7", desc: "聚合充值免海外绑卡" },
+      { model: "openai/gpt-4o-mini", label: "GPT-4o mini", desc: "高性价比" },
+      { model: "google/gemini-2.0-flash-001", label: "Gemini 2.0 Flash", desc: "超低单价" },
+      { model: "meta-llama/llama-3.3-70b-instruct", label: "Llama 3.3 70B", desc: "开源旗舰" },
+    ],
+    docUrl: "https://openrouter.ai",
+    docLabel: "OpenRouter 平台",
+    apiKeyHint: "单 API Key 自由调用全球数百款大模型",
+  },
+  {
+    id: "groq",
+    name: "Groq (全球极速 LPU 推理)",
+    group: "global",
+    provider: "openai",
+    baseUrl: "https://api.groq.com/openai/v1",
+    defaultModel: "llama-3.3-70b-versatile",
+    popularModels: [
+      { model: "llama-3.3-70b-versatile", label: "Llama 3.3 70B", desc: "每秒近 300 token 闪电回复", tag: "极速" },
+      { model: "deepseek-r1-distill-llama-70b", label: "DeepSeek R1 70B", desc: "R1 蒸馏极速推理" },
+      { model: "llama-3.1-8b-instant", label: "Llama 3.1 8B", desc: "瞬时超低延迟" },
+    ],
+    docUrl: "https://console.groq.com",
+    docLabel: "Groq Console",
+  },
+  {
+    id: "xai",
+    name: "xAI (Grok)",
+    group: "global",
+    provider: "openai",
+    baseUrl: "https://api.x.ai/v1",
+    defaultModel: "grok-2-latest",
+    popularModels: [
+      { model: "grok-2-latest", label: "Grok 2", desc: "xAI 旗舰主力模型", tag: "旗舰" },
+      { model: "grok-beta", label: "Grok Beta", desc: "测试体验版" },
+    ],
+    docUrl: "https://console.x.ai",
+    docLabel: "xAI 控制台",
+  },
+  {
+    id: "mistral",
+    name: "Mistral AI (欧洲顶尖旗舰)",
+    group: "global",
+    provider: "openai",
+    baseUrl: "https://api.mistral.ai/v1",
+    defaultModel: "mistral-large-latest",
+    popularModels: [
+      { model: "mistral-large-latest", label: "Mistral Large", desc: "Mistral 旗舰全能大模型", tag: "旗舰" },
+      { model: "mistral-small-latest", label: "Mistral Small", desc: "轻量高性价比" },
+      { model: "codestral-latest", label: "Codestral", desc: "结构化数据与代码逻辑特化" },
+    ],
+    docUrl: "https://console.mistral.ai",
+    docLabel: "Mistral Platform",
+  },
+
+  // --- 本地与自建 ---
+  {
+    id: "ollama",
+    name: "Ollama (本地私有大模型 · 离线)",
+    group: "local",
+    provider: "openai",
+    baseUrl: "http://localhost:11434/v1",
+    defaultModel: "deepseek-r1:latest",
+    popularModels: [
+      { model: "deepseek-r1:latest", label: "deepseek-r1", desc: "本地运行 DeepSeek R1", tag: "离线推理" },
+      { model: "qwen2.5:latest", label: "qwen2.5", desc: "本地通义千问 2.5", tag: "离线" },
+      { model: "llama3.3:latest", label: "llama3.3", desc: "本地 Llama 3.3", tag: "离线" },
+    ],
+    docUrl: "https://ollama.com",
+    docLabel: "Ollama 官网",
+    apiKeyHint: "本地运行保护隐私无需联网。默认无需密钥，API Key 可填任意字符（如 ollama）",
+    defaultApiKey: "ollama",
+  },
+  {
+    id: "custom",
+    name: "自定义平台 / OneAPI / NewAPI / 其它中转",
+    group: "local",
+    provider: "openai",
+    baseUrl: "",
+    defaultModel: "",
+    popularModels: [],
+  },
 ];
 
 function detectProviderId(baseUrl: string, provider: string): string {
   if (!baseUrl) return "custom";
-  if (baseUrl.includes("deepseek.com")) return "deepseek";
-  if (baseUrl.includes("aliyuncs.com") || baseUrl.includes("dashscope")) return "qwen";
-  if (baseUrl.includes("moonshot.cn")) return "kimi";
-  if (provider === "anthropic" || baseUrl.includes("anthropic.com")) return "anthropic";
-  if (baseUrl.includes("openai.com")) return "openai";
+  const b = baseUrl.toLowerCase();
+  if (b.includes("deepseek.com")) return "deepseek";
+  if (b.includes("siliconflow.cn")) return "siliconflow";
+  if (b.includes("aliyuncs.com") || b.includes("dashscope")) return "qwen";
+  if (b.includes("bigmodel.cn")) return "zhipu";
+  if (b.includes("moonshot.cn")) return "kimi";
+  if (b.includes("volces.com") || b.includes("volcengine")) return "doubao";
+  if (b.includes("minimax.chat") || b.includes("minimaxi")) return "minimax";
+  if (b.includes("lingyiwanwu.com")) return "lingyi";
+  if (b.includes("baidubce.com") || b.includes("qianfan")) return "qianfan";
+  if (b.includes("hunyuan.cloud.tencent.com") || b.includes("tencent.com")) return "hunyuan";
+  if (provider === "anthropic" || b.includes("anthropic.com")) return "anthropic";
+  if (b.includes("generativelanguage.googleapis.com")) return "gemini";
+  if (b.includes("openrouter.ai")) return "openrouter";
+  if (b.includes("groq.com")) return "groq";
+  if (b.includes("api.x.ai")) return "xai";
+  if (b.includes("mistral.ai")) return "mistral";
+  if (b.includes("localhost:11434") || b.includes("127.0.0.1:11434") || b.includes(":11434")) return "ollama";
+  if (b.includes("openai.com")) return "openai";
   return "custom";
 }
 
@@ -28,6 +366,8 @@ export default function Settings({ onStatus }: { onStatus: () => void }) {
     model: "gpt-4o-mini", temperature: 0.7, maxTokens: 8000,
   });
   const [showAdvanced, setShowAdvanced] = useState(false);
+  const [providerTab, setProviderTab] = useState<"featured" | "domestic" | "global" | "local">("featured");
+  const [selectedProviderId, setSelectedProviderId] = useState<string>("deepseek");
   const [status, setStatus] = useState<any>(null);
   const [msg, setMsg] = useState<{ kind: "ok" | "error"; text: string } | null>(null);
   const [aiMsg, setAiMsg] = useState<{ kind: "ok" | "error"; text: string } | null>(null);
@@ -177,7 +517,13 @@ export default function Settings({ onStatus }: { onStatus: () => void }) {
   useEffect(() => {
     api.status().then(setStatus).catch(() => {});
     api.aiSettings().then((s) => {
-      if (s.configured) setCfg((c: any) => ({ ...c, ...s }));
+      if (s.configured) {
+        setCfg((c: any) => ({ ...c, ...s }));
+        const pid = detectProviderId(s.baseUrl, s.provider);
+        setSelectedProviderId(pid);
+        const p = PROVIDERS.find((item) => item.id === pid);
+        if (p?.group) setProviderTab(p.group);
+      }
     }).catch(() => {});
     api.syncSports().then((s) => {
       setSports(s);
@@ -256,10 +602,17 @@ export default function Settings({ onStatus }: { onStatus: () => void }) {
   };
 
   const onSelectProvider = (pid: string) => {
+    setSelectedProviderId(pid);
     const found = PROVIDERS.find((p) => p.id === pid);
     if (!found) return;
+    setProviderTab(found.group);
     if (found.id === "custom") {
       setShowAdvanced(true);
+      setCfg((c: any) => ({
+        ...c,
+        provider: c.provider || "openai",
+        baseUrl: detectProviderId(c.baseUrl, c.provider) !== "custom" ? "" : c.baseUrl,
+      }));
       return;
     }
     setCfg((c: any) => ({
@@ -267,8 +620,14 @@ export default function Settings({ onStatus }: { onStatus: () => void }) {
       provider: found.provider,
       baseUrl: found.baseUrl,
       model: found.defaultModel || c.model,
+      apiKey: (found.id === "ollama" && !c.apiKey) ? "ollama" : c.apiKey,
     }));
   };
+
+  const currentProviderId = selectedProviderId;
+  const currentProvider = PROVIDERS.find((p) => p.id === currentProviderId) || PROVIDERS[PROVIDERS.length - 1];
+  const isLocalEndpoint = /localhost|127\.0\.0\.1|11434/.test(cfg.baseUrl || "");
+  const canSubmit = !saving && !testing && (cfg.apiKey || status?.aiConfigured || isLocalEndpoint) && !!cfg.baseUrl && !!cfg.model;
 
   return (
     <>
@@ -289,23 +648,224 @@ export default function Settings({ onStatus }: { onStatus: () => void }) {
               )}
             </div>
             <p className="card-sub" style={{ margin: "2px 0 12px" }}>
-              配置 AI 模型用于训练场次深度复盘、周报评析与赛事备战推演。
+              配置 AI 模型用于训练场次深度复盘、周报评析与赛事备战推演。已预置主流国内外模型平台与高频配置。
             </p>
 
-            {/* 1. 服务商选择（自动带出 Base URL 与推荐模型） */}
-            <label className="field">
-              <span>服务商平台</span>
-              <select
-                value={detectProviderId(cfg.baseUrl, cfg.provider)}
-                onChange={(e) => onSelectProvider(e.target.value)}
+            {/* 1. 服务商平台选择（分类卡片 + 快捷网格，避免长下拉框） */}
+            <div style={{ marginBottom: 12 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+                <span style={{ fontSize: 12.5, fontWeight: 500, color: "var(--fg)" }}>服务商平台</span>
+                {/* 紧凑下拉备选：方便快速直接切换 */}
+                <select
+                  value={currentProviderId}
+                  onChange={(e) => onSelectProvider(e.target.value)}
+                  style={{
+                    fontSize: 11,
+                    padding: "2px 6px",
+                    borderRadius: 5,
+                    border: "1px solid var(--border)",
+                    background: "var(--surface-2)",
+                    color: "var(--muted)",
+                    maxWidth: 160,
+                    cursor: "pointer",
+                  }}
+                  title="也可以从下拉列表中直接切换"
+                >
+                  {PROVIDER_GROUPS.map((grp) => (
+                    <optgroup key={grp.key} label={grp.label}>
+                      {PROVIDERS.filter((p) => p.group === grp.key).map((p) => (
+                        <option key={p.id} value={p.id}>
+                          {p.name}
+                        </option>
+                      ))}
+                    </optgroup>
+                  ))}
+                </select>
+              </div>
+
+              {/* 分类选项卡 */}
+              <div style={{ display: "flex", gap: 5, marginBottom: 8, overflowX: "auto", paddingBottom: 2 }}>
+                {PROVIDER_GROUPS.map((grp) => {
+                  const isTabActive = providerTab === grp.key;
+                  const hasSelectedHere = currentProvider?.group === grp.key;
+                  return (
+                    <button
+                      key={grp.key}
+                      type="button"
+                      onClick={() => setProviderTab(grp.key)}
+                      style={{
+                        cursor: "pointer",
+                        padding: "4px 10px",
+                        borderRadius: 6,
+                        fontSize: 12,
+                        fontWeight: isTabActive ? 600 : 400,
+                        border: isTabActive ? "1px solid var(--accent)" : "1px solid var(--border)",
+                        background: isTabActive ? "rgba(14, 165, 233, 0.12)" : "var(--surface-2)",
+                        color: isTabActive ? "var(--accent)" : "var(--muted)",
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: 5,
+                        whiteSpace: "nowrap",
+                        transition: "all 0.15s ease",
+                      }}
+                    >
+                      <span>{grp.label}</span>
+                      {hasSelectedHere && (
+                        <span
+                          style={{
+                            width: 6,
+                            height: 6,
+                            borderRadius: "50%",
+                            background: "var(--accent)",
+                            display: "inline-block",
+                          }}
+                          title="当前选中的平台在此分类"
+                        />
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* 当前分类下的服务商按钮网格 */}
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "repeat(auto-fill, minmax(138px, 1fr))",
+                  gap: 6,
+                }}
               >
-                {PROVIDERS.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.name}
-                  </option>
-                ))}
-              </select>
-            </label>
+                {PROVIDERS.filter((p) => p.group === providerTab).map((p) => {
+                  const isSelected = currentProviderId === p.id;
+                  const shortName = p.name.split(" (")[0];
+                  const subText = p.name.includes(" (") ? p.name.slice(p.name.indexOf(" (") + 2, -1) : "";
+                  return (
+                    <button
+                      key={p.id}
+                      type="button"
+                      onClick={() => onSelectProvider(p.id)}
+                      style={{
+                        cursor: "pointer",
+                        textAlign: "left",
+                        padding: "7px 9px",
+                        borderRadius: 7,
+                        border: isSelected ? "1.5px solid var(--accent)" : "1px solid var(--border)",
+                        background: isSelected ? "rgba(14, 165, 233, 0.12)" : "var(--surface-2)",
+                        display: "flex",
+                        flexDirection: "column",
+                        gap: 2,
+                        position: "relative",
+                        transition: "all 0.15s ease",
+                      }}
+                    >
+                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 4 }}>
+                        <span
+                          style={{
+                            fontSize: 12,
+                            fontWeight: isSelected ? 600 : 500,
+                            color: isSelected ? "var(--accent)" : "var(--fg)",
+                            lineHeight: 1.2,
+                          }}
+                        >
+                          {shortName}
+                        </span>
+                        {isSelected && (
+                          <span style={{ color: "var(--accent)", fontSize: 12, fontWeight: 700 }}>✓</span>
+                        )}
+                      </div>
+                      {subText && (
+                        <span
+                          style={{
+                            fontSize: 10.5,
+                            color: isSelected ? "var(--accent)" : "var(--muted)",
+                            opacity: 0.85,
+                            lineHeight: 1.15,
+                            whiteSpace: "nowrap",
+                            overflow: "hidden",
+                            textOverflow: "ellipsis",
+                          }}
+                        >
+                          {subText}
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* 若选中自定义平台，直接在此展开清晰的 Base URL 与协议设置 */}
+            {currentProviderId === "custom" && (
+              <div
+                style={{
+                  marginTop: -2,
+                  marginBottom: 12,
+                  padding: "12px",
+                  background: "var(--surface-2)",
+                  borderRadius: 8,
+                  border: "1.5px solid var(--accent)",
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: 10,
+                }}
+              >
+                <div style={{ fontSize: 12, fontWeight: 600, color: "var(--accent)", display: "flex", alignItems: "center", gap: 5 }}>
+                  <span>⚙️</span> 自定义平台 / OneAPI / NewAPI / 其它中转接口配置
+                </div>
+                <label className="field" style={{ margin: 0 }}>
+                  <span>接口协议</span>
+                  <select value={cfg.provider} onChange={(e) => setCfg({ ...cfg, provider: e.target.value })}>
+                    <option value="openai">OpenAI 兼容（/chat/completions）</option>
+                    <option value="anthropic">Anthropic（/v1/messages）</option>
+                  </select>
+                </label>
+                <label className="field" style={{ margin: 0 }}>
+                  <span>Base URL（必填）</span>
+                  <input
+                    value={cfg.baseUrl}
+                    onChange={(e) => setCfg({ ...cfg, baseUrl: e.target.value })}
+                    placeholder="例如 https://api.your-proxy.com/v1"
+                    autoFocus
+                  />
+                  <div className="hint" style={{ marginTop: 3 }}>
+                    {cfg.provider === "openai"
+                      ? "需包含到 /v1 这一层（如 https://api.your-proxy.com/v1），程序会自动拼 /chat/completions"
+                      : "填到域名即可，程序会自动拼 /v1/messages"}
+                  </div>
+                </label>
+              </div>
+            )}
+
+            {/* 服务商快捷指引 */}
+            {currentProvider && (currentProvider.docUrl || currentProvider.apiKeyHint) && (
+              <div
+                style={{
+                  marginTop: -2,
+                  marginBottom: 10,
+                  fontSize: 11.5,
+                  color: "var(--muted)",
+                  display: "flex",
+                  flexWrap: "wrap",
+                  alignItems: "center",
+                  gap: 6,
+                  lineHeight: 1.4,
+                }}
+              >
+                {currentProvider.docUrl && (
+                  <a
+                    href={currentProvider.docUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    style={{ color: "var(--accent)", textDecoration: "none", fontWeight: 500 }}
+                  >
+                    🔗 获取 API Key（{currentProvider.docLabel || "平台控制台"}）↗
+                  </a>
+                )}
+                {currentProvider.apiKeyHint && (
+                  <span>· {currentProvider.apiKeyHint}</span>
+                )}
+              </div>
+            )}
 
             {/* 2. API Key */}
             <label className="field">
@@ -315,22 +875,89 @@ export default function Settings({ onStatus }: { onStatus: () => void }) {
                 value={cfg.apiKey}
                 autoComplete="off"
                 onChange={(e) => setCfg({ ...cfg, apiKey: e.target.value })}
-                placeholder={status?.aiConfigured ? "已保存（留空则保持不变）" : "请输入 API Key"}
+                placeholder={
+                  currentProvider?.id === "ollama"
+                    ? "本地 Ollama 无需鉴权（可留空或填 ollama）"
+                    : status?.aiConfigured
+                    ? "已保存（留空则保持不变）"
+                    : "请输入 API Key"
+                }
               />
             </label>
 
-            {/* 3. 模型名 */}
-            <label className="field">
+            {/* 3. 模型名 + 热门快捷选择 */}
+            <label className="field" style={{ marginBottom: 4 }}>
               <span>模型名称</span>
               <input
+                list="ai-model-datalist"
                 value={cfg.model}
                 onChange={(e) => setCfg({ ...cfg, model: e.target.value })}
-                placeholder="例如 deepseek-chat 或 gpt-4o-mini"
+                placeholder="例如 deepseek-chat、qwen-plus 或 gpt-4o-mini"
               />
+              <datalist id="ai-model-datalist">
+                {currentProvider?.popularModels?.map((pm) => (
+                  <option key={pm.model} value={pm.model}>
+                    {pm.label} {pm.desc ? `(${pm.desc})` : ""}
+                  </option>
+                ))}
+              </datalist>
             </label>
 
-            {/* 高级选项折叠器：仅供自定义代理或特殊中转修改 Base URL 与协议 */}
-            <div style={{ marginTop: 2, marginBottom: 12 }}>
+            {/* 热门预置模型一键填入 */}
+            {currentProvider?.popularModels && currentProvider.popularModels.length > 0 && (
+              <div style={{ marginTop: 6, marginBottom: 12 }}>
+                <div style={{ fontSize: 11.5, color: "var(--muted)", marginBottom: 6 }}>
+                  热门推荐模型（点击一键选择）：
+                </div>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                  {currentProvider.popularModels.map((pm) => {
+                    const active = cfg.model === pm.model;
+                    return (
+                      <button
+                        key={pm.model}
+                        type="button"
+                        onClick={() => setCfg({ ...cfg, model: pm.model })}
+                        style={{
+                          cursor: "pointer",
+                          fontSize: 12,
+                          padding: "4px 9px",
+                          borderRadius: 6,
+                          border: active ? "1px solid var(--accent)" : "1px solid var(--border)",
+                          background: active ? "rgba(14, 165, 233, 0.14)" : "var(--surface-2)",
+                          color: active ? "var(--accent)" : "var(--fg)",
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: 5,
+                          fontWeight: active ? 600 : 400,
+                          transition: "all 0.15s ease",
+                        }}
+                        title={pm.desc ? `${pm.model} · ${pm.desc}` : pm.model}
+                      >
+                        <span>{pm.label}</span>
+                        {pm.tag && (
+                          <span
+                            style={{
+                              fontSize: 10,
+                              padding: "1px 4px",
+                              borderRadius: 3,
+                              background: active ? "var(--accent)" : "var(--border)",
+                              color: active ? "#fff" : "var(--muted)",
+                              fontWeight: 500,
+                              lineHeight: 1.1,
+                            }}
+                          >
+                            {pm.tag}
+                          </span>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* 高级选项折叠器：供修改 Base URL、协议、温度与最大 Token */}
+            <div style={{ marginTop: 4, marginBottom: 14 }}>
               <button
                 type="button"
                 className="pill"
@@ -347,32 +974,64 @@ export default function Settings({ onStatus }: { onStatus: () => void }) {
                 }}
                 onClick={() => setShowAdvanced(!showAdvanced)}
               >
-                <span>{showAdvanced ? "▾ 收起自定义接口（Base URL / 协议）" : "▸ 展开自定义接口（Base URL / 协议）"}</span>
+                <span>{showAdvanced ? "▾ 收起自定义接口与高级参数（Base URL / 协议 / Token 预算）" : "▸ 展开自定义接口与高级参数（Base URL / 协议 / Token 预算）"}</span>
               </button>
 
               {showAdvanced && (
                 <div style={{ marginTop: 8, padding: "12px", background: "var(--surface-2)", borderRadius: 8, display: "flex", flexDirection: "column", gap: 10, border: "1px solid var(--border)" }}>
-                  <label className="field" style={{ margin: 0 }}>
-                    <span>接口协议</span>
-                    <select value={cfg.provider} onChange={(e) => setCfg({ ...cfg, provider: e.target.value })}>
-                      <option value="openai">OpenAI 兼容（/chat/completions）</option>
-                      <option value="anthropic">Anthropic（/v1/messages）</option>
-                    </select>
-                  </label>
+                  {currentProviderId !== "custom" && (
+                    <>
+                      <label className="field" style={{ margin: 0 }}>
+                        <span>接口协议</span>
+                        <select value={cfg.provider} onChange={(e) => setCfg({ ...cfg, provider: e.target.value })}>
+                          <option value="openai">OpenAI 兼容（/chat/completions）</option>
+                          <option value="anthropic">Anthropic（/v1/messages）</option>
+                        </select>
+                      </label>
 
-                  <label className="field" style={{ margin: 0 }}>
-                    <span>Base URL</span>
-                    <input
-                      value={cfg.baseUrl}
-                      onChange={(e) => setCfg({ ...cfg, baseUrl: e.target.value })}
-                      placeholder="https://api.openai.com/v1"
-                    />
-                    <div className="hint" style={{ marginTop: 3 }}>
-                      {cfg.provider === "openai"
-                        ? "需包含到 /v1 这一层，程序会自动拼 /chat/completions"
-                        : "填到域名即可，程序会自动拼 /v1/messages"}
-                    </div>
-                  </label>
+                      <label className="field" style={{ margin: 0 }}>
+                        <span>Base URL</span>
+                        <input
+                          value={cfg.baseUrl}
+                          onChange={(e) => setCfg({ ...cfg, baseUrl: e.target.value })}
+                          placeholder="https://api.openai.com/v1"
+                        />
+                        <div className="hint" style={{ marginTop: 3 }}>
+                          {cfg.provider === "openai"
+                            ? "需包含到 /v1 这一层，程序会自动拼 /chat/completions"
+                            : "填到域名即可，程序会自动拼 /v1/messages"}
+                        </div>
+                      </label>
+                    </>
+                  )}
+
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                    <label className="field" style={{ margin: 0 }}>
+                      <span>温度 (Temperature)</span>
+                      <input
+                        type="number"
+                        step="0.1"
+                        min="0"
+                        max="2"
+                        value={cfg.temperature ?? 0.7}
+                        onChange={(e) => setCfg({ ...cfg, temperature: parseFloat(e.target.value) || 0.7 })}
+                      />
+                    </label>
+                    <label className="field" style={{ margin: 0 }}>
+                      <span>最大输出 Token</span>
+                      <input
+                        type="number"
+                        step="1000"
+                        min="1000"
+                        max="64000"
+                        value={cfg.maxTokens ?? 8000}
+                        onChange={(e) => setCfg({ ...cfg, maxTokens: parseInt(e.target.value, 10) || 8000 })}
+                      />
+                    </label>
+                  </div>
+                  <div className="hint">
+                    提示：像 DeepSeek-R1、OpenAI o1/o3-mini 等推理模型，内置思考过程与正文共用 Token 预算，建议保留 ≥8000。
+                  </div>
                 </div>
               )}
             </div>
@@ -382,14 +1041,14 @@ export default function Settings({ onStatus }: { onStatus: () => void }) {
               <button
                 className="btn primary"
                 onClick={save}
-                disabled={saving || testing || (!cfg.apiKey && !status?.aiConfigured) || !cfg.baseUrl || !cfg.model}
+                disabled={!canSubmit}
               >
                 {saving ? "保存中…" : "保存配置"}
               </button>
               <button
                 className="btn"
                 onClick={testAi}
-                disabled={saving || testing || (!cfg.apiKey && !status?.aiConfigured) || !cfg.baseUrl || !cfg.model}
+                disabled={!canSubmit}
               >
                 {testing ? <><span className="spin" /> 测试连接中…</> : "测试连接"}
               </button>
