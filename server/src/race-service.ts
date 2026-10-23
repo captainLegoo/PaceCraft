@@ -13,18 +13,13 @@
  *  - 没有就让用户填路点，或直接从内置库里选
  *  - 宁可告诉用户"缺路线数据"，也不要给一个看起来很专业的错数字
  */
-import { readFileSync, writeFileSync } from "node:fs";
 import { and, asc, desc, eq } from "drizzle-orm";
 import { db } from "./db/client.ts";
 import { races } from "./db/schema.ts";
 import { usableForProfile, type GpxTrack } from "./gpx.ts";
 import { parseRouteFile, routeSourceNote, type RouteFileHint } from "./route-file.ts";
-import { buildGpxProfile, pacePlan, type GpxProfile } from "./route-profile.ts";
+import { buildGpxProfile, climbPaceCost, type GpxProfile } from "./route-profile.ts";
 import { fmtDuration } from "./format.ts";
-import { densifyWaypoints, findKnownRace, knownRacesInCity, KNOWN_RACES } from "./race-routes.ts";
-import { CITY_ALTITUDE } from "./race-briefing.ts";
-import { buildRouteProfile, climbPaceCost, type RouteProfile } from "./route-profile.ts";
-import { altitudeAdjustPace } from "./altitude.ts";
 
 export type RaceRow = typeof races.$inferSelect;
 
@@ -38,9 +33,10 @@ export type RaceProfile = {
     goalSec: number | null;
     routeSource: string;
     sourceNote: string | null;
+    labelId?: string | null;
+    notes?: string | null;
   };
-  /** gpx → 实测；waypoints → DEM 估算 */
-  profile: (GpxProfile | RouteProfile) | null;
+  profile: GpxProfile | null;
   /** 缺路线数据时给出的说明 */
   missingRoute?: string;
   /** 建议：按目标成绩拆成前半/后半 */
@@ -188,47 +184,6 @@ export function createRace(input: CreateRaceInput): RaceRow {
     routeSource = "gpx";
     routeData = route.routeData;
     sourceNote = route.sourceNote;
-  } else if (input.useLibraryRoute !== false) {
-    // 路线必须与「赛事全名 + 日期」绑定，不能只按城市找 ——
-    // 同城的不同赛事（如主赛事和山地赛）按城市匹配必然选错。
-    //
-    // 优先用赛事名去查（而不是让前端传 key）：
-    // 前端传的 key 可能和赛事对不上，用赛事名查才谈得上"绑定"。
-    const known =
-      (input.routeKey ? KNOWN_RACES[input.routeKey] : undefined) ??
-      findKnownRace(input.name, input.date) ??
-      findKnownRace(input.name);
-
-    if (!known) {
-      const sameCity = city ? knownRacesInCity(city) : [];
-      const hint = sameCity.length > 0
-        ? `（${city}已收录：${sameCity.map((r) => r.name).join("、")}）`
-        : city ? `（${city}暂无收录路线）` : "";
-      throw new Error(
-        `内置路书库里没有「${input.name}」这场比赛${hint}。` +
-          `\n（该库默认为空 —— 本项目刻意不预置任何赛事路线，避免塞进没核实过的坐标。）\n\n` +
-          `两条路：\n` +
-          `① 上传轨迹文件：在两步路 / Strava / Garmin 里导出时选「GPX格式」` +
-          `（一条轨迹一个文件，自带实测海拔，爬升最准），` +
-          `回到本页用「上传/粘贴轨迹文件」提交；\n` +
-          `② 自己补录路书：在 server/src/race-routes.ts 里按文件头注释的格式加一条，` +
-          `再用 \`bun run src/cli/race-route.ts <key>\` 核对算出来的爬升。\n\n` +
-          `不会拿同城其它赛事的路线顶替 —— 猜错起点会让整条剖面失真，比没有更糟。\n` +
-          `（如果只是想先把这场赛事登记下来、之后有空再补轨迹，` +
-          `把「路线来源」选成「先不填路线」保存即可，现在不用决定。）`,
-      );
-    }
-    // 名称能匹配上但日期对不上，要提醒：不同年份的路线可能已经改过
-    if (known.date !== input.date) {
-      sourceNote =
-        `⚠ 内置路书来自 ${known.date}，与目标日期 ${input.date} 不符，` +
-        `路线可能有调整（${known.routeSourceNote}）`;
-    } else {
-      sourceNote = `路书路点 + DEM 估算（30m 分辨率，误差可达 ±50%）｜来源：${known.routeSourceNote}`;
-    }
-    routeSource = "waypoints";
-    routeData = JSON.stringify(known.waypoints);
-    if (!city) city = known.city;
   }
 
   const now = Math.floor(Date.now() / 1000);
@@ -306,11 +261,6 @@ export function updateRace(
     next.routeSource = "gpx";
     next.routeData = route.routeData;
     next.sourceNote = route.sourceNote;
-  } else if (patch.routeKey && KNOWN_RACES[patch.routeKey]) {
-    const known = KNOWN_RACES[patch.routeKey];
-    next.routeSource = "waypoints";
-    next.routeData = JSON.stringify(known.waypoints);
-    next.sourceNote = "路书路点 + DEM 估算（30m 分辨率，误差可达 ±50%）";
   } else if (patch.clearRoute) {
     next.routeSource = "none";
     next.routeData = null;
@@ -358,102 +308,6 @@ export function deleteRace(id: number): boolean {
  * DEM 高程缓存。key 用路点的量化坐标，避免每次重拉。
  * 只对 waypoints 路线需要 —— GPX 自带海拔，不用查 DEM。
  */
-/**
- * DEM 高程缓存（进程内）。
- *
- * 为什么还要落盘：服务重启后进程内缓存就没了，
- * 而每次查 DEM 要 40+ 点的网络请求（5-6 秒）。
- * 用户每开一次页面就白屏一次是不可接受的。
- */
-const demCache = new Map<string, number>();
-const DEM_CACHE_PATH = process.env.COROS_DEM_CACHE ?? "/tmp/coros-dem-cache.json";
-
-/** 启动时把落盘缓存读进内存 */
-function loadDemCache(): void {
-  try {
-    const raw = JSON.parse(readFileSync(DEM_CACHE_PATH, "utf8")) as Record<string, number>;
-    for (const [k, v] of Object.entries(raw)) demCache.set(k, v);
-  } catch {
-    // 缓存文件不存在是正常情况
-  }
-}
-loadDemCache();
-
-/** 把新增的高程写回磁盘 */
-function persistDemCache(): void {
-  try {
-    writeFileSync(DEM_CACHE_PATH, JSON.stringify(Object.fromEntries(demCache)));
-  } catch {
-    // 落盘失败不影响功能，只是下次还是要重新查
-  }
-}
-const DEM_URL = "https://api.open-elevation.com/api/v1/lookup";
-/** 单批点数。接口对批量有限制，且超量会整批失败 —— 取 5 留余量 */
-const DEM_BATCH = 5;
-
-async function fetchDemBatch(
-  pts: { lat: number; lon: number }[],
-): Promise<{ altitudes: number[]; error: string | null }> {
-  const need: { lat: number; lon: number; key: string }[] = [];
-  const out: (number | null)[] = new Array(pts.length).fill(null);
-
-  for (let i = 0; i < pts.length; i++) {
-    const key = `${pts[i].lat.toFixed(4)},${pts[i].lon.toFixed(4)}`;
-    const cached = demCache.get(key);
-    if (cached !== undefined) out[i] = cached;
-    else need.push({ lat: pts[i].lat, lon: pts[i].lon, key });
-  }
-  if (need.length === 0) return { altitudes: out as number[], error: null };
-
-  // 记录第一个明确的失败原因 —— 静默返回空数组会让上层误判成"数据不完整"，
-  // 而真实原因（额度用尽 / 网络故障）必须让用户看到。
-  let firstError: string | null = null;
-
-  for (let i = 0; i < need.length; i += DEM_BATCH) {
-    const batch = need.slice(i, i + DEM_BATCH);
-    const locs = batch.map((p) => `${p.lat.toFixed(4)},${p.lon.toFixed(4)}`).join("|");
-    try {
-      const res = await fetch(`${DEM_URL}?locations=${locs}`);
-      const json = (await res.json()) as any;
-
-      // Open-Elevation 用错误码而不是 HTTP 状态码表示问题，必须显式识别。
-      // 注意 code 才是稳定标识（quota_exceeded），error 是给人看的英文文案，
-      // 可能随版本变化 —— 判断要用 code，不要匹配文案。
-      if (json.code || json.error) {
-        const code = String(json.code ?? "");
-        const detail = String(json.error ?? "");
-        if (/quota/i.test(code) || /allowance|quota/i.test(detail)) {
-          firstError ??=
-            "路线爬升依赖的 Open-Elevation 免费高程接口，匿名月度额度已用完" +
-            "（每月 1000 个坐标点）。因此现在算不出这条赛道的高程与爬升。" +
-            "恢复方式：① 等下月额度重置 ② 上传 GPX（自带实测海拔，不依赖该接口）。";
-        } else {
-          firstError ??= `高程接口异常${code ? `（${code}）` : ""}：${detail.slice(0, 60)}`;
-        }
-        break; // 额度问题是全局的，继续打只会浪费时间
-      }
-      if (!json.results) {
-        firstError ??= "高程接口无返回";
-        break;
-      }
-
-      for (let j = 0; j < batch.length; j++) {
-        const e = json.results[j]?.elevation;
-        if (Number.isFinite(e)) {
-          out[i + j] = e;
-          demCache.set(batch[j].key, e);
-        }
-      }
-      persistDemCache();
-    } catch (e) {
-      firstError ??= `高程接口请求失败：${(e as Error).message.slice(0, 60)}`;
-    }
-    // 官方建议不要打太快
-    await new Promise((r) => setTimeout(r, 1100));
-  }
-  return { altitudes: out as number[], error: firstError };
-}
-
 /** 读取已存的 GPX（抽稀后的 JSON） */
 function readGpxTrack(routeData: string | null): GpxTrack | null {
   if (!routeData) return null;
@@ -464,88 +318,6 @@ function readGpxTrack(routeData: string | null): GpxTrack | null {
   } catch {
     return null;
   }
-}
-
-/** 读取已存的路书路点，并在缺失时向 DEM 补高程 */
-async function resolveWaypoints(
-  routeData: string | null,
-  distanceKm: number,
-  cityAltitude?: number,
-): Promise<{
-  points: { name: string; lat: number; lon: number }[];
-  altitudes: number[];
-  /** 基准海拔来源：dem=实测高程 / city=城市基准（DEM 不可用时的降级） */
-  altitudeBasis: "dem" | "city";
-} | { error: string } | null> {
-  if (!routeData) return null;
-
-  let raw: { name: string; lat: number; lon: number }[];
-  try {
-    raw = JSON.parse(routeData);
-  } catch {
-    return null;
-  }
-  if (!Array.isArray(raw) || raw.length < 2) return null;
-
-  const key = KNOWN_RACES[
-    Object.keys(KNOWN_RACES).find((k) =>
-      JSON.stringify(KNOWN_RACES[k].waypoints) === JSON.stringify(raw),
-    ) ?? ""
-  ];
-  // 命中内置库就复用它的插值逻辑，保证与 CLI 结果一致
-  const fake: typeof KNOWN_RACES[string] = key ?? {
-    name: "", date: "", city: null, altitude: 0, distanceKm, waypoints: raw,
-  };
-  const pts = densifyWaypoints(fake, 3);
-  const { altitudes, error } = await fetchDemBatch(pts);
-
-  if (!error && !altitudes.some((a) => a == null)) {
-    return { points: pts, altitudes, altitudeBasis: "dem" };
-  }
-
-  /*
-   * DEM 拿不到时的降级：平原城市用「城市基准海拔 + 微起伏」。
-   *
-   * 为什么这个降级是诚实的而不是编数字：
-   *  - 路书的每个路点名称**本身就隐含了地形信息**
-   *    （"某某路""大桥"= 平，"山""岭""坡"= 起伏）
-   *  - 对平原城市，整条赛道的高差通常 <30m，
-   *    而爬升代价系数下 20m 爬升 ≈ 1.2 s/km —— 完全可以忽略
-   *  - 标注成 cityBasis 并在 UI 上写清楚"未实测高程"，不冒充 DEM 结果
-   *
-   * 但如果城市本身是起伏地形（高原/丘陵），这个降级会严重低估，
-   * 所以只对低海拔城市启用。
-   */
-  const canApproximate =
-    cityAltitude != null && cityAltitude < 200;
-
-  if (!canApproximate) {
-    return {
-      error:
-        error ??
-        "部分路点高程查不到，无法生成剖面。" +
-        "若该赛事在山地，请上传 GPX 以获得实测海拔。",
-    };
-  }
-
-  // 按路点名里的地形关键词给一点起伏，让剖面不至于是一条直线
-  const bumpy = (name: string) => /山|岭|坡|丘|坎|坳/.test(name);
-  const flatAlt = (i: number) => {
-    const nm = pts[i]?.name ?? "";
-    // 大桥/下穿通常低于地面
-    let base = cityAltitude!;
-    if (/大桥|下穿|隧道/.test(nm)) base -= 4;
-    else if (bumpy(nm)) base += 8;
-    // 给一点点确定性的变化，避免完全水平线
-    base += Math.sin(i * 0.7) * 1.5;
-    return Math.round(base * 10) / 10;
-  };
-
-  return {
-    points: pts,
-    altitudes: pts.map((_, i) => flatAlt(i)),
-    altitudeBasis: "city",
-  };
 }
 
 /**
@@ -564,60 +336,23 @@ export async function buildRaceProfile(row: RaceRow): Promise<RaceProfile> {
       sourceNote: row.sourceNote,
       /*
        * labelId / notes 必须一并返回。
-       *
-       * 以前这里漏了这两个字段，而前端类型里是有的 —— 结果编辑表单打开时
-       * `r.notes ?? ""` 恒为空串，保存时又把 `notes: null` 提交回去，
-       * **每次点「修改」都会静默清掉已有的备注和训练关联**。
-       * 类型声明不会报错，运行也不会报错，只有数据悄悄没了 —— 最坏的一类 bug。
+       * 以前这里漏了这两个字段，编辑表单保存时会被冲掉。
        */
       labelId: row.labelId,
       notes: row.notes,
     },
   };
 
-  let profile: (GpxProfile | RouteProfile) | null = null;
+  let profile: GpxProfile | null = null;
   let missingRoute: string | undefined;
 
   if (row.routeSource === "gpx") {
     const track = readGpxTrack(row.routeData);
-    // usableForProfile 而不是直接信任 track 非空：
-    // 库里可能躺着没有高程的旧数据（早期解析器会把这类文件当空文件处理，
-    // 但更常见的是手工导入过没带 <ele> 的文件）。那种数据画出来的剖面
-    // 会是一条贴地的直线 —— 比"缺路线"更像真的，却更没用。
     if (usableForProfile(track)) profile = buildGpxProfile(row.name, track);
     else missingRoute = "已存的轨迹数据里没有可用的高程，无法计算爬升。请重新上传带海拔的 GPX。";
-  } else if (row.routeSource === "waypoints") {
-    // 城市基准海拔：优先用内置路书里登记的值
-    const known = Object.values(KNOWN_RACES).find(
-      (k) => findKnownRace(row.name) && k.date === row.date,
-    );
-    const cityAlt = known?.altitude ?? CITY_ALTITUDE[row.city ?? ""] ?? null;
-
-    const resolved = await resolveWaypoints(row.routeData, row.distanceKm, cityAlt);
-    if (resolved && "points" in resolved) {
-      profile = buildRouteProfile(row.name, resolved.points, resolved.altitudes, row.distanceKm);
-      // 把高程来源带出去，UI 才能正确标注（否则顶部写"DEM 估算"、
-      // 底部写"城市基准估算"，自相矛盾）
-      (profile as { altitudeBasis?: string }).altitudeBasis = resolved.altitudeBasis;
-      if (resolved.altitudeBasis === "city") {
-        // 明确标注这是降级估算，不能和 DEM 实测混淆
-        profile = {
-          ...profile,
-          caveat:
-            `⚠ 高程为**城市基准估算**，不是实测：` +
-            `在线高程接口当前不可用，按 ${row.city ?? "该城市"} 基准海拔 ${cityAlt}m 加路名地形词推断。` +
-            `爬升数字仅供参考，配速决策请以上传 GPX 或实测为准。`,
-        };
-      }
-    } else if (resolved && "error" in resolved) {
-      // 把真实原因透出到UI，而不是笼统说"数据不完整"
-      missingRoute = resolved.error;
-    } else {
-      missingRoute = "路书数据无法解析，请重新设置路线。";
-    }
   } else {
     missingRoute =
-      "尚未设置路线。可以先用「修改」里的「导入 .gpx 文件」补上 —— " +
+      "尚未设置路线。可以先用「修改」里的「导入轨迹文件」补上 —— " +
       "在两步路 / Strava / Garmin 导出时选「GPX格式」即可。";
   }
 

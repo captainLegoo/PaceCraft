@@ -115,7 +115,7 @@ export async function fetchAltitudeFor(labelId: string, sportType: number): Prom
 
     mkdirSync(FIT_DIR, { recursive: true });
     const path = `${FIT_DIR}/${labelId}.fit`;
-    execFileSync("curl", ["-s", "-o", path, url]);
+    execFileSync("curl", ["-s", "--max-time", "15", "-o", path, url], { timeout: 16000 });
     recordFitDownload();
 
     const s = decodeFit(path);

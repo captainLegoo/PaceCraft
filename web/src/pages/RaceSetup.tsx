@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
-import { api, type Activity, type RaceDetail, type RouteFilePreview, type Race } from "../api";
+import { useEffect, useState } from "react";
+import { api, type RaceDetail, type RouteFilePreview, type Race } from "../api";
 import RouteProfileCard from "./RaceRouteProfile";
 import RaceBriefingCard, { type RaceBriefing } from "./RaceBriefing";
 import { fmtPace } from "../charts";
@@ -19,8 +19,61 @@ const DIST_PRESETS = [
   { key: "full", label: "全程马拉松 42.195", km: "42.195" },
 ] as const;
 
-/** 路线来源的三种选择。默认是"先不填" */
-type RouteMode = "none" | "file" | "lib";
+/** 目标成绩快捷预设（数字选择，避免中英文冒号混淆） */
+const QUICK_GOALS: Record<string, Array<{ label: string; h: number; m: number; s: number }>> = {
+  full: [
+    { label: "破3", h: 2, m: 59, s: 59 },
+    { label: "3:15", h: 3, m: 15, s: 0 },
+    { label: "3:30", h: 3, m: 30, s: 0 },
+    { label: "3:45", h: 3, m: 45, s: 0 },
+    { label: "破4", h: 3, m: 59, s: 59 },
+    { label: "4:15", h: 4, m: 15, s: 0 },
+    { label: "4:30", h: 4, m: 30, s: 0 },
+    { label: "5:00", h: 5, m: 0, s: 0 },
+    { label: "5:30", h: 5, m: 30, s: 0 },
+    { label: "6:00(关门)", h: 6, m: 0, s: 0 },
+  ],
+  half: [
+    { label: "破130", h: 1, m: 29, s: 59 },
+    { label: "1:35", h: 1, m: 35, s: 0 },
+    { label: "1:40", h: 1, m: 40, s: 0 },
+    { label: "1:45", h: 1, m: 45, s: 0 },
+    { label: "1:50", h: 1, m: 50, s: 0 },
+    { label: "破2", h: 1, m: 59, s: 59 },
+    { label: "2:15", h: 2, m: 15, s: 0 },
+    { label: "2:30", h: 2, m: 30, s: 0 },
+    { label: "3:00(关门)", h: 3, m: 0, s: 0 },
+  ],
+  "10": [
+    { label: "破40", h: 0, m: 39, s: 59 },
+    { label: "45分", h: 0, m: 45, s: 0 },
+    { label: "50分", h: 0, m: 50, s: 0 },
+    { label: "55分", h: 0, m: 55, s: 0 },
+    { label: "破1", h: 0, m: 59, s: 59 },
+  ],
+  "5": [
+    { label: "破20", h: 0, m: 19, s: 59 },
+    { label: "22分", h: 0, m: 22, s: 0 },
+    { label: "25分", h: 0, m: 25, s: 0 },
+    { label: "28分", h: 0, m: 28, s: 0 },
+    { label: "30分", h: 0, m: 30, s: 0 },
+  ],
+};
+
+const getQuickGoals = (presetKey: string, kmStr: string) => {
+  if (QUICK_GOALS[presetKey]) return QUICK_GOALS[presetKey];
+  const km = parseFloat(kmStr);
+  if (!isNaN(km)) {
+    if (km >= 35) return QUICK_GOALS.full;
+    if (km >= 18) return QUICK_GOALS.half;
+    if (km >= 8) return QUICK_GOALS["10"];
+    if (km >= 4) return QUICK_GOALS["5"];
+  }
+  return [];
+};
+
+/** 路线来源选择：导入轨迹文件 或 先不填路线 */
+type RouteMode = "none" | "file";
 
 /**
  * 北京时间今天（yyyy-mm-dd）。
@@ -130,7 +183,10 @@ export default function RaceSetup({
   const [dist, setDist] = useState("42.195");
   /** 当前选中的距离预设；选「其他」或从训练里带出非预设距离时置为 "other" */
   const [distPreset, setDistPreset] = useState<string>("full");
-  const [goal, setGoal] = useState("");
+  // 目标成绩：时、分、秒分离选择，避免全角/半角冒号与歧义输入
+  const [goalH, setGoalH] = useState<number | "">("");
+  const [goalM, setGoalM] = useState<number | "">("");
+  const [goalS, setGoalS] = useState<number>(0);
   /** 路线来源。默认"先不填" —— 先登记赛事是正当需求，不该逼人先有轨迹 */
   const [routeMode, setRouteMode] = useState<RouteMode>("none");
   /** 轨迹文件全文（文件框与粘贴框写同一份，谁先填谁生效） */
@@ -140,40 +196,15 @@ export default function RaceSetup({
   /** 预检结果：让用户在保存前就看到"这份文件解析出来是什么样" */
   const [preview, setPreview] = useState<RouteFilePreview | null>(null);
   const [previewing, setPreviewing] = useState(false);
-  // 关联的那次训练
+  // 拖拽上传高亮状态
+  const [dragOver, setDragOver] = useState(false);
+  // 关联的那次训练（若有）
   const [labelId, setLabelId] = useState<string | null>(null);
-  // 选比赛用：历史训练候选
-  const [acts, setActs] = useState<Activity[]>([]);
 
-  // 历史训练候选移至顶层，保证无条件调用 hooks 且不会因局部组件重新声明导致重新挂载失焦
-  const candidates = useMemo(
-    () => acts.filter((a) => !a.dateLabel || !date || a.dateLabel <= date).slice(0, 60),
-    [acts, date],
-  );
-
-  /** 按月调整比赛日期（+1 或 -1 个月），自动处理跨年和不同月份天数限制 */
-  const adjustMonth = (delta: number) => {
-    const cur = date || todayBeijing();
-    const parts = cur.split("-").map(Number);
-    if (parts.length !== 3 || parts.some(isNaN)) return;
-    let [y, m, d] = parts;
-    m += delta;
-    while (m > 12) {
-      m -= 12;
-      y += 1;
-    }
-    while (m < 1) {
-      m += 12;
-      y -= 1;
-    }
-    const maxDays = new Date(y, m, 0).getDate();
-    const safeDay = Math.min(d, maxDays);
-    setDate(`${y}-${String(m).padStart(2, "0")}-${String(safeDay).padStart(2, "0")}`);
-  };
 
   const loadBriefing = (id: number) =>
-    fetch(`/api/races/${id}/briefing`)
-      .then((r) => (r.ok ? r.json() : null))
+    api
+      .raceBriefing(id)
       .then(setBriefing)
       .catch(() => setBriefing(null));
 
@@ -190,9 +221,17 @@ export default function RaceSetup({
         setCity(r.city ?? "");
         setDist(String(r.distanceKm));
         setDistPreset(presetKeyFor(r.distanceKm));
-        setGoal(r.goalSec ? fmtDurInput(r.goalSec) : "");
+        if (r.goalSec) {
+          setGoalH(Math.floor(r.goalSec / 3600));
+          setGoalM(Math.floor((r.goalSec % 3600) / 60));
+          setGoalS(Math.round(r.goalSec % 60));
+        } else {
+          setGoalH("");
+          setGoalM("");
+          setGoalS(0);
+        }
         setLabelId(r.labelId ?? null);
-        setRouteMode(r.routeSource === "gpx" ? "file" : r.routeSource === "waypoints" ? "lib" : "none");
+        setRouteMode(r.routeSource === "gpx" ? "file" : "none");
       }
     } catch (e) {
       setErr((e as Error).message);
@@ -236,8 +275,6 @@ export default function RaceSetup({
 
   useEffect(() => {
     load();
-    api.activities({ limit: "120" }).then(setActs).catch(() => {});
-    // 只在挂载时拉一次
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -248,9 +285,11 @@ export default function RaceSetup({
     setCity("");
     setDist("42.195");
     setDistPreset("full");
-    setGoal("");
+    setGoalH("");
+    setGoalM("");
+    setGoalS(0);
     setLabelId(null);
-    setRouteMode("none");
+    setRouteMode("file");
     setGpxText("");
     setRouteFileName(null);
     setPreview(null);
@@ -271,11 +310,19 @@ export default function RaceSetup({
     setCity(r.city ?? "");
     setDist(String(r.distanceKm));
     setDistPreset(presetKeyFor(r.distanceKm));
-    setGoal(r.goalSec ? fmtDurInput(r.goalSec) : "");
+    if (r.goalSec) {
+      setGoalH(Math.floor(r.goalSec / 3600));
+      setGoalM(Math.floor((r.goalSec % 3600) / 60));
+      setGoalS(Math.round(r.goalSec % 60));
+    } else {
+      setGoalH("");
+      setGoalM("");
+      setGoalS(0);
+    }
     setLabelId(r.labelId ?? null);
     // 路线来源要跟着库里已有的值回填，否则打开「修改」会看到"先不填"，
     // 用户随手一存就以为把已上传的轨迹弄丢了
-    setRouteMode(r.routeSource === "gpx" ? "file" : r.routeSource === "waypoints" ? "lib" : "none");
+    setRouteMode(r.routeSource === "gpx" ? "file" : "none");
     // 文件内容不进 state 回填（库里存的是抽稀后的剖面，不是原始文件）：
     // 编辑时不重新导入就保持原样，显式选新文件才算替换
     setGpxText("");
@@ -297,10 +344,18 @@ export default function RaceSetup({
     setBusy(true);
     setErr(null);
     try {
-      const goalSec = parseDur(goal, Number(dist));
-      if (goal.trim() && goalSec === null) {
-        setErr(`无法识别目标成绩「${goal}」。请用 3:00（时:分）、3:05:37（时:分:秒）或直接填秒数`);
-        return;
+      const goalSec =
+        goalH !== "" || goalM !== ""
+          ? Number(goalH || 0) * 3600 + Number(goalM || 0) * 60 + Number(goalS || 0)
+          : null;
+
+      const kmNum = Number(dist);
+      if (goalSec !== null && !isNaN(kmNum) && kmNum > 0) {
+        if (goalSec < kmNum * 100 || goalSec > kmNum * 900) {
+          setErr("目标成绩计算出的配速超出常规范围（1:40/km ~ 15:00/km），请核对时、分、秒");
+          setBusy(false);
+          return;
+        }
       }
 
       // 同一天只能参加一场 —— 保存前先提示，别让用户白填一遍
@@ -333,7 +388,7 @@ export default function RaceSetup({
         gpxText.trim().length === 0;
       if (clearingRoute) {
         const ok = confirm(
-          `这场比赛已经有一份路线（${detail.race.routeSource === "gpx" ? "轨迹文件" : "路书"}）。\n\n` +
+          `这场比赛已经有一份轨迹文件。\n\n` +
             `选「先不填路线」会把它清掉，之后只能重新导入才能恢复。\n` +
             `确定要清掉吗？`,
         );
@@ -345,8 +400,8 @@ export default function RaceSetup({
         formMode === "edit" && !!detail && detail.race.routeSource === "gpx" && gpxText.trim().length === 0;
       if (routeMode === "file" && gpxText.trim().length === 0 && !keepingExistingRoute) {
         setErr(
-          "你选了「上传/粘贴轨迹文件」，但还没有选文件。\n" +
-            "点上面的框选一个 .gpx（或 .kml）文件，或者把内容直接粘进下面的文本框。\n" +
+          "你选了「导入轨迹文件」，但还没有选文件。\n" +
+            "点框选一个 .gpx（或 .kml）文件拖入，或者把内容直接粘进下方的文本框。\n" +
             "如果只是想先登记这场比赛、把路线留到之后补，把「路线来源」改成「先不填路线」就行。",
         );
         setBusy(false);
@@ -366,7 +421,6 @@ export default function RaceSetup({
         // 编辑时才能显示"来源文件：xxx.gpx"，确认自己没导错那一条
         routeFileName: routeFileName,
         gpx: null,
-        useLibraryRoute: routeMode === "lib",
         clearRoute: clearingRoute,
         labelId,
       };
@@ -484,7 +538,16 @@ export default function RaceSetup({
   };
 
   function renderForm() {
-    const picked = candidates.find((a) => a.labelId === labelId);
+    const quickGoals = getQuickGoals(distPreset, dist);
+    const currentGoalSec =
+      goalH !== "" || goalM !== ""
+        ? Number(goalH || 0) * 3600 + Number(goalM || 0) * 60 + Number(goalS || 0)
+        : null;
+    const kmNum = parseFloat(dist);
+    const pacePreview =
+      currentGoalSec && !isNaN(kmNum) && kmNum > 0
+        ? `≈ 配速 ${fmtPace(currentGoalSec / kmNum)}/km`
+        : null;
 
     return (
       <div style={{ marginTop: 14, padding: 14, border: "1px solid var(--border)", borderRadius: 8 }}>
@@ -501,80 +564,13 @@ export default function RaceSetup({
             ✕
           </button>
         </div>
-        <div style={{ marginBottom: 12 }}>
-          <div className="label" style={{ marginBottom: 6 }}>从已同步的训练里选比赛</div>
-          {candidates.length === 0 ? (
-            <div className="hint">还没有可选择的训练记录。请先在「设置」页同步数据，或直接在下方手填日期。</div>
-          ) : (
-            <select
-              value={labelId ?? ""}
-              onChange={(e) => {
-                const v = e.target.value;
-                if (!v) { setLabelId(null); return; }
-                const a = candidates.find((x) => x.labelId === v);
-                setLabelId(v);
-                if (a) {
-                  // 自动带出当天的距离与日期，省得手填
-                  setDate(a.dateLabel);
-                  if (a.distanceKm) setDist(String(a.distanceKm));
-                  if (!name) setName(`${a.dateLabel} 比赛`);
-                }
-              }}
-              style={{ width: "100%" }}
-            >
-              <option value="">— 不关联，手填日期（适用于未来的比赛）—</option>
-              {candidates.map((a) => (
-                <option key={a.labelId} value={a.labelId}>
-                  {a.dateLabel} · {(a.distanceKm ?? 0).toFixed(2)} km · {fmtPace(a.avgPaceSec)}/km · 均心率 {a.avgHr ?? "—"}
-                </option>
-              ))}
-            </select>
-          )}
-          {picked && (
-            <div className="hint" style={{ marginTop: 6 }}>
-              已关联 {picked.dateLabel} 的训练（{(picked.distanceKm ?? 0).toFixed(2)} km，均配速 {fmtPace(picked.avgPaceSec)}/km）。
-              关联后这场比赛就能用那天的真实分段数据做复盘，而不是只有赛前填的目标成绩。
-            </div>
-          )}
-        </div>
 
         <div className="grid g4" style={{ marginBottom: 10 }}>
           <label className="stat">
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 4 }}>
-              <span className="label" style={{ margin: 0 }}>比赛日期</span>
-              <div style={{ display: "flex", gap: 4 }}>
-                <button
-                  type="button"
-                  className="pill"
-                  onClick={(e) => { e.preventDefault(); adjustMonth(-1); }}
-                  title="上一个月（快捷键：在输入框内按键盘向下箭头）"
-                  style={{ cursor: "pointer", padding: "1px 6px", fontSize: 11 }}
-                >
-                  ◀ 上月
-                </button>
-                <button
-                  type="button"
-                  className="pill"
-                  onClick={(e) => { e.preventDefault(); adjustMonth(1); }}
-                  title="下一个月（快捷键：在输入框内按键盘向上箭头）"
-                  style={{ cursor: "pointer", padding: "1px 6px", fontSize: 11 }}
-                >
-                  下月 ▶
-                </button>
-              </div>
-            </div>
+            <span className="label">比赛日期</span>
             <input
               value={date}
               onChange={(e) => setDate(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "ArrowUp") {
-                  e.preventDefault();
-                  adjustMonth(1);
-                } else if (e.key === "ArrowDown") {
-                  e.preventDefault();
-                  adjustMonth(-1);
-                }
-              }}
               type="date"
               style={{ width: "100%" }}
             />
@@ -585,7 +581,7 @@ export default function RaceSetup({
           </label>
           <label className="stat">
             <span className="label">城市</span>
-            <input value={city} onChange={(e) => setCity(e.target.value)} placeholder="城市，如 上海" />
+            <input value={city} onChange={(e) => setCity(e.target.value)} placeholder="城市，如 深圳" />
           </label>
           <label className="stat">
             <span className="label">距离</span>
@@ -614,74 +610,192 @@ export default function RaceSetup({
             )}
           </label>
         </div>
-        <div className="grid g4" style={{ marginBottom: 10 }}>
-          <label className="stat">
-            <span className="label">目标成绩</span>
-            <input value={goal} onChange={(e) => setGoal(e.target.value)} placeholder="3:00 或 3:05:37" />
-            <span className="hint">格式：3:00 = 3 小时；185:37 = 3:05:37</span>
-          </label>
-          <label className="stat">
-            <span className="label">路线来源</span>
+        <div className="grid g4" style={{ marginBottom: 10, alignItems: "start" }}>
+          <div className="stat" style={{ gridColumn: "span 2" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", minHeight: 22 }}>
+              <span className="label" style={{ margin: 0 }}>目标成绩（选填）</span>
+              <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                {pacePreview && (
+                  <span className="pill info" style={{ fontSize: 11, fontWeight: 600 }}>
+                    {pacePreview}
+                  </span>
+                )}
+                {(goalH !== "" || goalM !== "" || goalS !== 0) && (
+                  <button
+                    type="button"
+                    className="pill"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      setGoalH("");
+                      setGoalM("");
+                      setGoalS(0);
+                    }}
+                    title="清空目标成绩"
+                    style={{ cursor: "pointer", padding: "1px 6px", fontSize: 11 }}
+                  >
+                    清空
+                  </button>
+                )}
+              </div>
+            </div>
+
+            <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+              <select
+                value={goalH}
+                onChange={(e) => {
+                  const val = e.target.value === "" ? "" : Number(e.target.value);
+                  setGoalH(val);
+                  if (val !== "" && goalM === "") setGoalM(0);
+                }}
+                style={{ flex: 1, minWidth: 0 }}
+              >
+                <option value="">-- 时</option>
+                {Array.from({ length: 25 }, (_, i) => (
+                  <option key={i} value={i}>{i} 小时</option>
+                ))}
+              </select>
+              <span style={{ color: "var(--text-faint)", fontWeight: "bold" }}>:</span>
+              <select
+                value={goalM}
+                onChange={(e) => {
+                  const val = e.target.value === "" ? "" : Number(e.target.value);
+                  setGoalM(val);
+                  if (val !== "" && goalH === "") setGoalH(0);
+                }}
+                style={{ flex: 1, minWidth: 0 }}
+              >
+                <option value="">-- 分</option>
+                {Array.from({ length: 60 }, (_, i) => (
+                  <option key={i} value={i}>{String(i).padStart(2, "0")} 分</option>
+                ))}
+              </select>
+              <span style={{ color: "var(--text-faint)", fontWeight: "bold" }}>:</span>
+              <select
+                value={goalS}
+                onChange={(e) => setGoalS(Number(e.target.value))}
+                style={{ flex: 1, minWidth: 0 }}
+              >
+                {Array.from({ length: 60 }, (_, i) => (
+                  <option key={i} value={i}>{String(i).padStart(2, "0")} 秒</option>
+                ))}
+              </select>
+            </div>
+
+            {quickGoals.length > 0 ? (
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 5, marginTop: 6, alignItems: "center", minHeight: 22 }}>
+                <span style={{ fontSize: 11, color: "var(--text-faint)", marginRight: 2 }}>快捷选择:</span>
+                {quickGoals.map((q) => {
+                  const isMatch = goalH === q.h && goalM === q.m && goalS === q.s;
+                  return (
+                    <button
+                      key={q.label}
+                      type="button"
+                      className={`pill ${isMatch ? "accent" : ""}`}
+                      onClick={(e) => {
+                        e.preventDefault();
+                        setGoalH(q.h);
+                        setGoalM(q.m);
+                        setGoalS(q.s);
+                      }}
+                      style={{ cursor: "pointer", fontSize: 11, padding: "2px 7px" }}
+                    >
+                      {q.label}
+                    </button>
+                  );
+                })}
+              </div>
+            ) : (
+              <span className="hint" style={{ margin: 0, marginTop: 6, minHeight: 22, display: "flex", alignItems: "center" }}>
+                按时、分、秒选择目标完赛时间（留空表示不设目标）
+              </span>
+            )}
+          </div>
+
+          <label className="stat" style={{ gridColumn: "span 2" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", minHeight: 22 }}>
+              <span className="label" style={{ margin: 0 }}>路线来源</span>
+            </div>
             <select value={routeMode} onChange={(e) => setRouteMode(e.target.value as RouteMode)}>
+              <option value="file">导入轨迹文件（GPX / KML，推荐）</option>
               <option value="none">先不填路线（之后可补）</option>
-              <option value="file">上传 / 粘贴轨迹文件（实测海拔）</option>
-              <option value="lib">内置路书库（DEM 估算）</option>
             </select>
+            <span className="hint" style={{ margin: 0, marginTop: 6, minHeight: 22, display: "flex", alignItems: "center" }}>
+              {routeMode === "file" ? "导入轨迹自动生成海拔剖面与分段配速" : "先登记赛事信息，之后随时可在详情中补传轨迹"}
+            </span>
           </label>
         </div>
 
         {routeMode === "file" && (
           <div className="stat" style={{ display: "block", marginBottom: 10 }}>
             {formMode === "edit" && detail && detail.race.routeSource === "gpx" && (
-              <div className="banner info" style={{ marginBottom: 10, lineHeight: 1.7 }}>
-                <strong>这场比赛已经有一份轨迹文件。</strong>
+              <div className="banner info" style={{ marginBottom: 10, lineHeight: 1.6 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 6 }}>
+                  <strong>
+                    ✓ 已绑定轨迹{fileNameFromNote(detail.race.sourceNote) ? `：${fileNameFromNote(detail.race.sourceNote)}` : ""}
+                  </strong>
+                  <span style={{ fontSize: 11, color: "var(--text-faint)" }}>
+                    不重新上传将保留原轨迹；选新文件或粘新内容将自动覆盖
+                  </span>
+                </div>
                 {detail.profile && (
-                  <>
-                    {" "}当前这份：
-                    {detail.profile.distanceKm != null ? `${detail.profile.distanceKm} km ／ ` : ""}
-                    {detail.profile.gainM} m 爬升 ／ {detail.profile.profile?.length ?? 0} 个剖面点
-                    {detail.profile.eleMin != null
-                      ? ` ／ 海拔 ${detail.profile.eleMin}–${detail.profile.eleMax} m`
-                      : ""}
-                    。
-                  </>
+                  <div style={{ fontSize: 11.5, color: "var(--text-dim)", marginTop: 4 }}>
+                    {detail.profile.distanceKm != null ? `${detail.profile.distanceKm} km` : ""}
+                    {detail.profile.gainM != null ? ` · 爬升 ${detail.profile.gainM} m` : ""}
+                    {detail.profile.eleMin != null ? ` · 海拔 ${detail.profile.eleMin}–${detail.profile.eleMax} m` : ""}
+                    {detail.profile.profile?.length ? ` · ${detail.profile.profile.length} 个剖面采样点` : ""}
+                  </div>
                 )}
-                {fileNameFromNote(detail.race.sourceNote) && (
-                  <>来源文件：{fileNameFromNote(detail.race.sourceNote)}。</>
-                )}
-                {/KML/.test(detail.race.sourceNote ?? "") ? "格式：KML 轨迹。" : "格式：GPX。"}
-                <br />
-                <span style={{ color: "var(--text-dim)" }}>
-                  库里只存了抽稀后的剖面（最多 900 个点），原始文件没有入库，所以这里回显不了全文。
-                  <strong>什么都不选直接保存 = 保留现在这份</strong>；
-                  选了新文件或粘了新内容 = 用它覆盖。
-                </span>
               </div>
             )}
             <span className="label">导入轨迹文件</span>
-            <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-              <label className="pill" style={{ cursor: "pointer" }}>
-                选择文件…
-                <input
-                  type="file"
-                  accept=".gpx,.kml"
-                  style={{ display: "none" }}
-                  onChange={(e) => {
-                    const f = e.target.files?.[0];
-                    if (f) void readRouteFile(f);
-                    e.target.value = "";
-                  }}
-                />
-              </label>
+            <div
+              className={`dropzone ${dragOver ? "drag-over" : ""}`}
+              onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+              onDragLeave={() => setDragOver(false)}
+              onDrop={(e) => {
+                e.preventDefault();
+                setDragOver(false);
+                const f = e.dataTransfer.files?.[0];
+                if (f) void readRouteFile(f);
+              }}
+              style={{
+                border: `2px dashed ${dragOver ? "var(--accent)" : "var(--border)"}`,
+                borderRadius: 8,
+                padding: "16px 12px",
+                textAlign: "center",
+                background: dragOver ? "color-mix(in srgb, var(--accent) 8%, transparent)" : "var(--bg-subtle, rgba(0,0,0,0.02))",
+                transition: "all .15s ease",
+                cursor: "pointer",
+                marginBottom: 8,
+              }}
+              onClick={() => {
+                const el = document.getElementById("race-route-file-input");
+                el?.click();
+              }}
+            >
+              <input
+                id="race-route-file-input"
+                type="file"
+                accept=".gpx,.kml"
+                style={{ display: "none" }}
+                onChange={(e) => {
+                  const f = e.target.files?.[0];
+                  if (f) void readRouteFile(f);
+                  e.target.value = "";
+                }}
+              />
+              <div style={{ fontSize: 13, fontWeight: 500, color: "var(--text)" }}>
+                {dragOver ? "松开鼠标即可导入轨迹文件" : "点击选择文件，或将 .gpx / .kml 拖拽至此处"}
+              </div>
+              <div style={{ fontSize: 11.5, color: "var(--text-faint)", marginTop: 4 }}>
+                支持两步路 / Strava / Garmin 导出的 GPX 或 KML 轨迹（自带实测海拔）
+              </div>
               {routeFileName && (
-                <span style={{ fontSize: 12.5 }}>已选：<strong>{routeFileName}</strong></span>
+                <div style={{ fontSize: 12, marginTop: 8, color: "var(--good)" }}>
+                  已选文件：<strong>{routeFileName}</strong>
+                </div>
               )}
-              {previewing && <span className="hint">正在核对文件…</span>}
-            </div>
-            <div className="hint" style={{ marginTop: 6, lineHeight: 1.7 }}>
-              <strong>两步路里怎么导：</strong>打开那条轨迹 → 导出 → 格式选「<strong>GPX格式</strong>」→
-              得到一个 .gpx 文件（一条轨迹一个文件）→ 回到这里选中它。
-              GPX 每个点都带实测海拔，是算爬升最准的一种。
+              {previewing && <div className="hint" style={{ marginTop: 6 }}>正在核对文件…</div>}
             </div>
 
             {preview && preview.ok && (
@@ -715,13 +829,12 @@ export default function RaceSetup({
                       <>
                         <br />
                         <span style={{ color: "var(--warn)" }}>
-                          ⚠ 文件距离与官方距离差 {(drift * 100).toFixed(1)}%。
+                          ⚠ 文件距离与目标项目距离差 {(drift * 100).toFixed(1)}%。
                           {big
                             ? `这已经「不是」 GPS 漂移能解释的范围（通常 ±0.5% 以内）——` +
-                              `多半是选错了轨迹，比如导了另一天的记录，或只导了其中一段。` +
-                              `请确认这个文件对应当天那一场再保存。`
+                              `请确认这个文件是否对应当前距离项目。`
                             : `属于 GPS 漂移的常见范围。`}
-                          这里填的仍按官方距离 {dist} km 计算，剖面图的横轴用文件自己的距离。
+                          这里填的仍按设定距离 {dist} km 计算，剖面图横轴用文件自身的距离。
                         </span>
                       </>
                     );
@@ -744,7 +857,7 @@ export default function RaceSetup({
                     ? "粘贴新的轨迹内容会覆盖现在这份。不粘贴就是保留。"
                     : "手机上只有文本、或者要排查解析问题时，可以直接把文件内容粘到这里"
                 }
-                style={{ minHeight: 90, fontFamily: "ui-monospace, monospace", fontSize: 11 }}
+                style={{ minHeight: 80, fontFamily: "ui-monospace, monospace", fontSize: 11 }}
               />
               <span className="hint">
                 文件框与粘贴框写的是同一份内容，谁先填谁生效。
@@ -760,19 +873,6 @@ export default function RaceSetup({
             先把赛事登记下来就好，路线之后随时能补 ——
             到时候在卡片右上角点「上传轨迹文件」，或点「修改」回到这里导入。
             现在不填路线不影响其它功能，只是不会有赛道剖面与爬升。
-          </div>
-        )}
-
-        {routeMode === "lib" && (
-          <div className="stat" style={{ display: "block", marginBottom: 10 }}>
-            <span className="label">路线来源</span>
-            <div className="hint" style={{ marginTop: 5, lineHeight: 1.6 }}>
-              保存时按<strong>赛事全名 + 日期</strong>去内置路线库查找，不会按城市匹配 ——
-              同一城市可能有多场不同赛事（主赛事 / 另一场同名系列赛），按城市找必然选错。<br />
-              本项目的内置库<strong>默认为空</strong>（刻意不预置任何赛事路线），
-              所以这一项通常会报错，并给出「自己导入轨迹文件」的指引。<br />
-              找不到就明确报错，不会拿同城其它赛事的路线顶替。
-            </div>
           </div>
         )}
 

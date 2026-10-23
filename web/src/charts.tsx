@@ -965,12 +965,20 @@ export type DecouplingResult = {
 };
 
 export function calculateAerobicDecoupling(
-  laps: { distanceM: number; timeSec: number; avgPaceSec?: number; avgHr?: number; elevGain?: number }[],
-  options?: { distanceKm?: number; durationSec?: number; isInterval?: boolean },
+  laps: { distanceM: number; timeSec: number; avgPaceSec?: number | null; avgHr?: number | null; elevGain?: number | null }[],
+  options?: { distanceKm?: number; durationSec?: number; isInterval?: boolean; isCombo?: boolean },
 ): DecouplingResult {
   const isInterval = options?.isInterval ?? false;
   if (isInterval) {
     return { eligible: false, reason: "间歇训练快慢交替，心率与配速剧烈波动，不适用稳态有氧脱钩分析" };
+  }
+
+  const isCombo = options?.isCombo ?? false;
+  if (isCombo) {
+    return {
+      eligible: false,
+      reason: "组合训练可能由多组间歇或力量训练等混合项目构成，配速与心率非持续稳态，脱钩率判定不准确，不进行计算",
+    };
   }
 
   const validLaps = (laps ?? []).filter((l) => l.avgHr && l.avgHr > 40 && l.timeSec > 0 && l.distanceM > 0);
@@ -1106,8 +1114,8 @@ export function AerobicDecouplingCard({
   laps,
   options,
 }: {
-  laps: { distanceM: number; timeSec: number; avgPaceSec?: number; avgHr?: number; elevGain?: number }[];
-  options?: { distanceKm?: number; durationSec?: number; isInterval?: boolean };
+  laps: { distanceM: number; timeSec: number; avgPaceSec?: number | null; avgHr?: number | null; elevGain?: number | null }[];
+  options?: { distanceKm?: number; durationSec?: number; isInterval?: boolean; isCombo?: boolean };
 }) {
   const result = calculateAerobicDecoupling(laps, options);
 

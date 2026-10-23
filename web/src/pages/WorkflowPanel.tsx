@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { apiUrl } from "../api";
 import { IconLayers } from "../icons";
 
 type StepMeta = {
@@ -17,7 +18,7 @@ export default function WorkflowPanel() {
   const [err, setErr] = useState<string | null>(null);
 
   useEffect(() => {
-    fetch("/api/workflow/steps")
+    fetch(apiUrl("/api/workflow/steps"))
       .then((r) => r.json())
       .then((d) => setSteps(d.steps ?? []))
       .catch((e) => setErr(String(e)));

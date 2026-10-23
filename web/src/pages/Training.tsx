@@ -494,7 +494,7 @@ export default function Training({
                     <td className="num">{s.totals.avgHr ?? "—"}</td>
                     <td className="num">{s.totals.trainingLoad || "—"}</td>
                     <td>
-                      {s.decoupling ? (
+                      {s.decoupling && s.classification !== "组合训练" && s.classification !== "多次短距离" && s.classification !== "间歇训练" ? (
                         <span
                           className={`pill ${s.decoupling.level}`}
                           style={{ fontSize: 11, fontWeight: 600 }}
@@ -604,6 +604,9 @@ function ratioStatus(r: number | null | undefined) {
 function decouplingReason(s: Session): string {
   if (s.classification === "间歇训练") {
     return "不适用：间歇训练快慢交替、心率剧烈起伏，不符合稳态跑评估前提";
+  }
+  if (s.classification === "组合训练" || s.classification === "多次短距离") {
+    return "不适用：组合训练可能由多组间歇或力量训练等混合项目构成，配速与心率非持续稳态，脱钩率判定不准确";
   }
   if (s.totals.durationSec < 1500 || s.totals.distanceKm < 4.0) {
     return `保护性过滤：当前单次 ${s.totals.distanceKm}km / ${fmtDur(s.totals.durationSec)}，时长或距离较短，处于前程心率爬坡升温期，不满足稳态门槛（需 ≥4km 且 ≥25min）`;

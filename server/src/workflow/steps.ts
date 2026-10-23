@@ -201,12 +201,22 @@ registerStep({
 
     const { distanceKm, durationSec } = targetSession.totals;
     const isInterval = targetSession.classification === "间歇训练";
+    const isCombo =
+      targetSession.classification === "组合训练" ||
+      targetSession.classification === "多次短距离";
 
     // 校验前置条件：稳态、足够长（>= 30min 或 >= 5km）
     if (isInterval) {
       return {
         status: "skipped",
         message: `最近训练（${targetSession.date}，间歇跑）快慢交替，心率剧烈波动，不适用有氧脱钩评估`,
+      };
+    }
+
+    if (isCombo) {
+      return {
+        status: "skipped",
+        message: `最近训练（${targetSession.date}，组合训练）可能包含多组间歇或力量训练等混合项目，配速与心率非持续稳态，不适用有氧脱钩评估`,
       };
     }
 

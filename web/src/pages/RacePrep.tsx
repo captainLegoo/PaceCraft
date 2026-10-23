@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { apiUrl } from "../api";
 import { fmtP, fmtT, useWidth } from "../charts";
 import { IconFlag, IconPulse, IconTrophy } from "../icons";
 
@@ -44,7 +45,7 @@ export default function RacePrep({ aiConfigured, dataVersion = 0 }: { aiConfigur
 
   useEffect(() => {
     setReport(null);
-    fetch("/api/race-prep?" + qs)
+    fetch(apiUrl("/api/race-prep?" + qs))
       .then((r) => r.json())
       .then((j) => (j.error ? setErr(j.error) : (setD(j), setErr(null))))
       .catch((e) => setErr(String(e)));
@@ -53,7 +54,7 @@ export default function RacePrep({ aiConfigured, dataVersion = 0 }: { aiConfigur
   const runAnalyze = async () => {
     setBusy(true); setAiErr(null);
     try {
-      const r = await fetch("/api/ai/race-prep", {
+      const r = await fetch(apiUrl("/api/ai/race-prep"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ weeks, raceDate: raceDate || null, focus: focus.trim() || null }),

@@ -558,9 +558,19 @@ function computeSessionDecoupling(
   rawLaps: any[],
   distanceKm: number,
   durationSec: number,
-  classification: string
+  classification: string,
+  hasNonRunOrMixed = false
 ): SessionDecoupling | null {
-  if (classification === "间歇训练" || durationSec < 1500 || distanceKm < 4.0) {
+  // 间歇训练快慢交替，组合训练/多次短距离可能由多组间歇或跑步+力量训练混合构成，
+  // 配速与心率非持续稳态，脱钩率判定不准确，不进行计算
+  if (
+    classification === "间歇训练" ||
+    classification === "组合训练" ||
+    classification === "多次短距离" ||
+    hasNonRunOrMixed ||
+    durationSec < 1500 ||
+    distanceKm < 4.0
+  ) {
     return null;
   }
   const validLaps = rawLaps.filter((l) => l.avgHr && l.avgHr > 40 && l.timeSec > 0 && l.distanceM > 0);
@@ -656,6 +666,10 @@ function makeSession(
   const sets = detectSets(withDetails);
   const { classification, reason } = classify(acts, sets, distanceKm);
 
+  const hasNonRun = acts.some((a) => a.sportType != null && ![100, 102, 103, 104].includes(a.sportType));
+  const sportTypes = new Set(acts.map((a) => a.sportType).filter((t) => t != null));
+  const hasNonRunOrMixed = hasNonRun || sportTypes.size > 1;
+
   return {
     // 用下划线而不是 #：# 在 URL 里是片段分隔符，会把路径截断
     key: `${date}_${acts[0].labelId}`,
@@ -678,7 +692,7 @@ function makeSession(
     kind: acts.length === 1 ? "single" : "multi",
     classification,
     classificationReason: reason,
-    decoupling: computeSessionDecoupling(sessionLaps, distanceKm, durationSec, classification),
+    decoupling: computeSessionDecoupling(sessionLaps, distanceKm, durationSec, classification, hasNonRunOrMixed),
   };
 }
 

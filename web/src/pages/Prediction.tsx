@@ -1,4 +1,5 @@
 import { Fragment, useEffect, useState } from "react";
+import { apiUrl } from "../api";
 import { fmtP, fmtT } from "../charts";
 import { IconGauge, IconLayers, IconStopwatch, IconTrend } from "../icons";
 
@@ -67,7 +68,7 @@ export default function Prediction() {
   const [openModels, setOpenModels] = useState<string | null>(null);
 
   useEffect(() => {
-    fetch("/api/prediction")
+    fetch(apiUrl("/api/prediction"))
       .then((r) => r.json())
       .then((j) => (j.error ? setErr(j.error) : setD(j)))
       .catch((e) => setErr(String(e)));

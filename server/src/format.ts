@@ -62,7 +62,7 @@ export function fmtDurationShort(sec: number | null | undefined): string {
  * @param expectedKm 赛段距离（km），用于把结果限制在合理区间
  */
 export function parseDuration(input: string, expectedKm?: number): number | null {
-  const v = input.trim();
+  const v = input.trim().replace(/：/g, ":");
   if (!v) return null;
 
   if (/^\d+$/.test(v)) {

@@ -183,6 +183,10 @@ export default function SessionView({
               distanceKm: s.totals.distanceKm,
               durationSec: s.totals.durationSec,
               isInterval: s.classification === "间歇训练" || s.sets.length > 0,
+              isCombo:
+                s.classification === "组合训练" ||
+                s.classification === "多次短距离" ||
+                activities.some((a) => a.sportType != null && ![100, 102, 103, 104].includes(a.sportType)),
             }}
           />
 

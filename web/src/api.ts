@@ -105,8 +105,19 @@ export type Fitness = {
   predHalfSec: number | null; predMarathonSec: number | null;
 };
 
+export const API_BASE =
+  typeof window !== "undefined" && (import.meta as unknown as { env?: { DEV?: boolean } }).env?.DEV
+    ? `http://${window.location.hostname}:43124`
+    : "";
+
+export function apiUrl(path: string): string {
+  if (path.startsWith("http://") || path.startsWith("https://")) return path;
+  return `${API_BASE}${path}`;
+}
+
 async function req<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(path, {
+  const url = apiUrl(path);
+  const res = await fetch(url, {
     ...init,
     headers: { "Content-Type": "application/json", ...(init?.headers ?? {}) },
   });
@@ -227,6 +238,7 @@ export type RouteFilePreview = {
 export const api = {
   races: () => req<Race[]>("/api/races"),
   race: (id: number) => req<RaceDetail>(`/api/races/${id}`),
+  raceBriefing: (id: number) => req<any>(`/api/races/${id}/briefing`),
   /**
    * 人工指定某场是否计入能力基准。
    *   excluded=true  → 强制排除；false → 强制纳入；null → 撤销设定、交回自动判定

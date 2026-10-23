@@ -107,8 +107,9 @@ export default function ActivityDetailView({
           <AerobicDecouplingCard
             laps={fullLaps}
             options={{
-              distanceKm: a.distanceKm,
-              durationSec: a.durationSec,
+              distanceKm: a.distanceKm ?? undefined,
+              durationSec: a.durationSec ?? undefined,
+              isCombo: a.sportType != null && ![100, 102, 103, 104].includes(a.sportType),
             }}
           />
 

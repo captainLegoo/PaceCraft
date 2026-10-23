@@ -47,6 +47,27 @@ const one = <T>(rows: T[]) => rows[0] ?? null;
 let syncInFlight = false;
 
 const app = new Elysia()
+  .onError(({ code, error, path }) => {
+    console.error(`[Elysia Error] ${code} on ${path}:`, error);
+  })
+  .onRequest(({ request, set }) => {
+    const origin = request.headers.get("origin");
+    if (origin) {
+      set.headers["Access-Control-Allow-Origin"] = origin;
+      set.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS";
+      set.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization";
+    }
+    if (request.method === "OPTIONS") {
+      return new Response(null, {
+        status: 204,
+        headers: {
+          "Access-Control-Allow-Origin": origin ?? "*",
+          "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+          "Access-Control-Allow-Headers": "Content-Type, Authorization",
+        },
+      });
+    }
+  })
   .get("/api/status", () => ({
     counts: {
       activities: db.select().from(activities).all().length,
@@ -121,13 +142,16 @@ const app = new Elysia()
       if (autoRun) {
         try {
           // 把本次新增的活动 id 传下去，让各 step 只处理增量
-          const fresh = db
-            .select({ labelId: activities.labelId })
-            .from(activities)
-            .orderBy(activities.dateLabel)
-            .all()
-            .slice(after - before || 1)
-            .map((x) => x.labelId);
+          const newCount = after - before;
+          const fresh = newCount > 0
+            ? db
+                .select({ labelId: activities.labelId })
+                .from(activities)
+                .orderBy(activities.dateLabel)
+                .all()
+                .slice(-newCount)
+                .map((x) => x.labelId)
+            : [];
           workflow = await runWorkflow({ labelIds: fresh });
         } catch (e) {
           // 工作流失败不该让同步失败 —— 数据已经进来了
@@ -215,14 +239,10 @@ const app = new Elysia()
         city: b.city ?? null,
         distanceKm: Number(b.distanceKm),
         goalSec: b.goalSec ? Number(b.goalSec) : null,
-        // useLibraryRoute 必须透传：前端「先不填路线」就靠它。
-        // 以前这里漏了它，服务端永远拿到 undefined → 永远去查内置库 → 空库必报错
-        useLibraryRoute: b.useLibraryRoute,
         routeText: b.routeText ?? null,
         routeKind: b.routeKind ?? "auto",
         routeFileName: b.routeFileName ?? null,
         gpx: b.gpx ?? null,
-        routeKey: b.routeKey ?? null,
         labelId: b.labelId ?? null,
         notes: b.notes ?? null,
       });
@@ -323,7 +343,6 @@ const app = new Elysia()
         routeKind: b.routeKind ?? "auto",
         routeFileName: b.routeFileName ?? null,
         gpx: b.gpx ?? null,
-        routeKey: b.routeKey ?? null,
         clearRoute: b.clearRoute === true,
         name: b.name,
         date: b.date,
