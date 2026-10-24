@@ -65,13 +65,12 @@ export default function ProfileSwitcher({
     const name = newName.trim();
     if (!name) return;
     try {
-      const res = await api.createProfile(name);
+      await api.createProfile(name);
       setNewName("");
       setCreating(false);
       setOpen(false);
       await loadProfiles();
       onProfileChanged();
-      // 新建跑友后提示或唤起授权
       onRequireAuth?.();
     } catch (e) {
       alert(`创建失败: ${(e as Error).message}`);
@@ -116,20 +115,6 @@ export default function ProfileSwitcher({
         className="profile-switcher-btn"
         onClick={() => setOpen((v) => !v)}
         title="点击切换跑友档案"
-        style={{
-          width: "100%",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          padding: "8px 10px",
-          background: "var(--bg-subtle, rgba(255, 255, 255, 0.04))",
-          border: "1px solid var(--border)",
-          borderRadius: 10,
-          cursor: "pointer",
-          color: "inherit",
-          textAlign: "left",
-          transition: "all 0.15s ease",
-        }}
       >
         <div style={{ display: "flex", alignItems: "center", gap: 9, minWidth: 0, flex: 1 }}>
           <div
@@ -137,15 +122,15 @@ export default function ProfileSwitcher({
               width: 28,
               height: 28,
               borderRadius: "50%",
-              background: "linear-gradient(135deg, #3b82f6 0%, #10b981 100%)",
-              color: "#fff",
+              background: "linear-gradient(135deg, #2563eb 0%, #10b981 100%)",
+              color: "#ffffff",
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
               fontSize: 13,
               fontWeight: 700,
               flexShrink: 0,
-              boxShadow: "0 2px 5px rgba(0,0,0,0.2)",
+              boxShadow: "0 2px 4px rgba(0,0,0,0.15)",
             }}
           >
             {avatarLetter}
@@ -155,6 +140,7 @@ export default function ProfileSwitcher({
               style={{
                 fontSize: 12.5,
                 fontWeight: 600,
+                color: "var(--text)",
                 overflow: "hidden",
                 textOverflow: "ellipsis",
                 whiteSpace: "nowrap",
@@ -165,7 +151,7 @@ export default function ProfileSwitcher({
             <div style={{ fontSize: 10.5, color: "var(--text-dim)", display: "flex", alignItems: "center", gap: 4 }}>
               <span>跑友档案</span>
               <span style={{ opacity: 0.5 }}>·</span>
-              <span style={{ color: "#10b981" }}>切换 ▾</span>
+              <span style={{ color: "var(--accent)" }}>切换 ▾</span>
             </div>
           </div>
         </div>
@@ -173,21 +159,7 @@ export default function ProfileSwitcher({
 
       {/* 下拉浮层 */}
       {open && (
-        <div
-          style={{
-            position: "absolute",
-            top: "calc(100% + 6px)",
-            left: 0,
-            right: 0,
-            background: "var(--card-bg, #1a1f2c)",
-            border: "1px solid var(--border)",
-            borderRadius: 12,
-            boxShadow: "0 14px 30px rgba(0, 0, 0, 0.45)",
-            zIndex: 999,
-            padding: 10,
-            backdropFilter: "blur(16px)",
-          }}
-        >
+        <div className="profile-dropdown-panel">
           <div
             style={{
               fontSize: 11,
@@ -201,10 +173,10 @@ export default function ProfileSwitcher({
             }}
           >
             <span>跑友档案库（独立隔离）</span>
-            <span style={{ fontSize: 10, color: "#94a3b8" }}>{data?.profiles.length} 个账号</span>
+            <span style={{ fontSize: 10.5, color: "var(--text-faint)" }}>{data?.profiles.length} 个账号</span>
           </div>
 
-          <div style={{ maxHeight: 240, overflowY: "auto", margin: "6px 0", display: "flex", flexDirection: "column", gap: 4 }}>
+          <div style={{ maxHeight: 240, overflowY: "auto", margin: "6px 0", display: "flex", flexDirection: "column", gap: 3 }}>
             {data?.profiles.map((p) => {
               const isActive = p.id === data.activeId;
               const isEditing = editingId === p.id;
@@ -214,18 +186,8 @@ export default function ProfileSwitcher({
               return (
                 <div
                   key={p.id}
+                  className={`profile-item-row ${isActive ? "active" : ""}`}
                   onClick={() => !isEditing && handleSwitch(p.id)}
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "space-between",
-                    padding: "7px 9px",
-                    borderRadius: 8,
-                    background: isActive ? "var(--bg-active, rgba(59, 130, 246, 0.14))" : "transparent",
-                    border: isActive ? "1px solid rgba(59, 130, 246, 0.3)" : "1px solid transparent",
-                    cursor: isEditing ? "default" : "pointer",
-                    transition: "background 0.12s ease",
-                  }}
                 >
                   <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0, flex: 1 }}>
                     <div
@@ -233,8 +195,9 @@ export default function ProfileSwitcher({
                         width: 24,
                         height: 24,
                         borderRadius: "50%",
-                        background: isActive ? "#2563eb" : "var(--border)",
-                        color: "#fff",
+                        background: isActive ? "#2563eb" : "var(--surface-3)",
+                        color: isActive ? "#ffffff" : "var(--text)",
+                        border: "1px solid var(--border)",
                         display: "flex",
                         alignItems: "center",
                         justifyContent: "center",
@@ -258,19 +221,34 @@ export default function ProfileSwitcher({
                         autoFocus
                         style={{
                           fontSize: 12,
-                          background: "var(--input-bg, #0f172a)",
-                          color: "inherit",
-                          border: "1px solid #3b82f6",
+                          background: "var(--input-bg)",
+                          color: "var(--text)",
+                          border: "1px solid var(--accent)",
                           borderRadius: 4,
                           padding: "2px 6px",
                           width: "100%",
+                          outline: "none",
                         }}
                       />
                     ) : (
                       <div style={{ minWidth: 0 }}>
-                        <div style={{ fontSize: 12, fontWeight: isActive ? 600 : 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                          {nameText}
-                          {isActive && <span style={{ marginLeft: 6, fontSize: 10, color: "#10b981", background: "rgba(16,185,129,0.12)", padding: "1px 5px", borderRadius: 4 }}>当前</span>}
+                        <div className="profile-name-text">
+                          <span>{nameText}</span>
+                          {isActive && (
+                            <span
+                              style={{
+                                marginLeft: 6,
+                                fontSize: 10,
+                                color: "var(--good)",
+                                background: "var(--good-bg)",
+                                border: "1px solid var(--good-border)",
+                                padding: "1px 5px",
+                                borderRadius: 4,
+                              }}
+                            >
+                              当前
+                            </span>
+                          )}
                         </div>
                         {p.nickname && p.name !== p.nickname && (
                           <div style={{ fontSize: 10, color: "var(--text-dim)" }}>备注: {p.name}</div>
@@ -285,7 +263,15 @@ export default function ProfileSwitcher({
                       <button
                         type="button"
                         onClick={() => handleSaveName(p.id)}
-                        style={{ border: "none", background: "#2563eb", color: "#fff", borderRadius: 4, fontSize: 10.5, padding: "2px 6px", cursor: "pointer" }}
+                        style={{
+                          border: "none",
+                          background: "#2563eb",
+                          color: "#fff",
+                          borderRadius: 4,
+                          fontSize: 10.5,
+                          padding: "2px 6px",
+                          cursor: "pointer",
+                        }}
                       >
                         保存
                       </button>
@@ -298,7 +284,14 @@ export default function ProfileSwitcher({
                             setEditName(p.name);
                           }}
                           title="修改备注"
-                          style={{ border: "none", background: "transparent", color: "var(--text-dim)", cursor: "pointer", fontSize: 11, padding: "2px 4px" }}
+                          style={{
+                            border: "none",
+                            background: "transparent",
+                            color: "var(--text-dim)",
+                            cursor: "pointer",
+                            fontSize: 11,
+                            padding: "2px 4px",
+                          }}
                         >
                           ✎
                         </button>
@@ -307,7 +300,15 @@ export default function ProfileSwitcher({
                             type="button"
                             onClick={(e) => handleDelete(e, p.id, nameText)}
                             title="删除该档案"
-                            style={{ border: "none", background: "transparent", color: "var(--text-dim)", cursor: "pointer", fontSize: 12, padding: "2px 4px" }}
+                            style={{
+                              border: "none",
+                              background: "transparent",
+                              color: "var(--text-dim)",
+                              cursor: "pointer",
+                              fontSize: 13,
+                              padding: "2px 4px",
+                              lineHeight: 1,
+                            }}
                           >
                             ×
                           </button>
@@ -334,11 +335,12 @@ export default function ProfileSwitcher({
                   style={{
                     flex: 1,
                     fontSize: 12,
-                    background: "var(--input-bg, #0f172a)",
-                    color: "inherit",
+                    background: "var(--input-bg)",
+                    color: "var(--text)",
                     border: "1px solid var(--border)",
                     borderRadius: 6,
                     padding: "5px 8px",
+                    outline: "none",
                   }}
                 />
                 <button
@@ -382,14 +384,15 @@ export default function ProfileSwitcher({
                   alignItems: "center",
                   justifyContent: "center",
                   gap: 6,
-                  padding: "6px 0",
-                  background: "transparent",
-                  border: "1px dashed var(--border)",
+                  padding: "7px 0",
+                  background: "var(--surface-2)",
+                  border: "1px dashed var(--border-strong)",
                   borderRadius: 6,
-                  color: "#3b82f6",
+                  color: "var(--accent)",
                   fontSize: 12,
-                  fontWeight: 500,
+                  fontWeight: 600,
                   cursor: "pointer",
+                  transition: "background 0.15s ease",
                 }}
               >
                 <span>➕</span>

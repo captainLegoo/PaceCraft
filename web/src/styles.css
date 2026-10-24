@@ -1603,3 +1603,75 @@ tbody tr.expanded-detail-row:hover > td {
 @media (min-width: 1600px) {
   .main > * { max-width: 1500px; }
 }
+
+/* ============================================================
+   跑友档案切换器（白天/黑夜主题自适应）
+   ============================================================ */
+.profile-switcher-btn {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 10px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  cursor: pointer;
+  color: var(--text);
+  text-align: left;
+  transition: all 0.15s ease;
+}
+
+.profile-switcher-btn:hover {
+  background: var(--surface-2);
+  border-color: var(--border-strong);
+}
+
+.profile-dropdown-panel {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: 0 10px 25px var(--tooltip-shadow);
+  z-index: 999;
+  padding: 10px;
+}
+
+.profile-item-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 7px 9px;
+  border-radius: 8px;
+  color: var(--text);
+  background: transparent;
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: background 0.12s ease;
+}
+
+.profile-item-row:hover {
+  background: var(--surface-2);
+}
+
+.profile-item-row.active {
+  background: var(--surface-2);
+  border-color: var(--border-strong);
+}
+
+.profile-name-text {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.profile-item-row.active .profile-name-text {
+  font-weight: 600;
+}
