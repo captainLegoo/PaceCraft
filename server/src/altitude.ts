@@ -137,21 +137,30 @@ export function describeAltitude(r: AltitudeRecord | null | undefined): string {
 // ---------------- FIT 海拔的读写 ----------------
 
 import { mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
+import { getDataDir } from "./config.ts";
 
-/** altitude CLI 的输出目录；与 cli/altitude.ts 保持一致 */
-export const FIT_DIR = process.env.COROS_FIT_DIR ?? "/tmp/coros-fit";
+/** altitude CLI 的输出目录；跟随当前跑友 Profile 隔离 */
+export const getFitDir = () => process.env.COROS_FIT_DIR ?? join(getDataDir(), "fit");
+export const FIT_DIR = {
+  toString: () => getFitDir(),
+  [Symbol.toPrimitive]: () => getFitDir(),
+} as unknown as string;
 
 let cache: Map<string, AltitudeRecord> | null = null;
 let cacheMtime = 0;
+let cachedFitDir = "";
 
 export function getAltitude(labelId: string): AltitudeRecord | null {
-  const path = `${FIT_DIR}/altitude.json`;
+  const dir = getFitDir();
+  const path = `${dir}/altitude.json`;
   try {
     const mtime = statSync(path).mtimeMs;
-    if (!cache || cacheMtime !== mtime) {
+    if (!cache || cacheMtime !== mtime || cachedFitDir !== dir) {
       const rows = JSON.parse(readFileSync(path, "utf8")) as AltitudeRecord[];
       cache = new Map(rows.map((r) => [r.labelId, r]));
       cacheMtime = mtime;
+      cachedFitDir = dir;
     }
     return cache.get(labelId) ?? null;
   } catch {
@@ -162,8 +171,9 @@ export function getAltitude(labelId: string): AltitudeRecord | null {
 /** 把新的海拔记录并入缓存文件（CLI 与同步共用） */
 export function appendAltitudeRecords(records: AltitudeRecord[]): number {
   if (records.length === 0) return 0;
-  mkdirSync(FIT_DIR, { recursive: true });
-  const path = `${FIT_DIR}/altitude.json`;
+  const dir = getFitDir();
+  mkdirSync(dir, { recursive: true });
+  const path = `${dir}/altitude.json`;
 
   const existing: AltitudeRecord[] = (() => {
     try {
@@ -188,7 +198,7 @@ export function appendAltitudeRecords(records: AltitudeRecord[]): number {
 
 /** 已经拉过 FIT 的活动 id */
 export function haveAltitudeFit(labelIds: string[]): Set<string> {
-  const path = `${FIT_DIR}/altitude.json`;
+  const path = `${getFitDir()}/altitude.json`;
   try {
     const rows = JSON.parse(readFileSync(path, "utf8")) as AltitudeRecord[];
     return new Set(rows.map((r) => r.labelId));

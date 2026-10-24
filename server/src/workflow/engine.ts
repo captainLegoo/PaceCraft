@@ -142,23 +142,27 @@ export const DEFAULT_CONFIG: WorkflowConfig = {
 // ---------------- 配置存储 ----------------
 
 import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
-import { dirname } from "node:path";
+import { dirname, join } from "node:path";
+import { getDataDir } from "../config.ts";
 
-const CONFIG_PATH = process.env.COROS_WORKFLOW_CONFIG ?? "/tmp/coros-workflow.json";
+const getConfigPath = () => process.env.COROS_WORKFLOW_CONFIG ?? join(getDataDir(), "workflow-config.json");
 let cached: WorkflowConfig | null = null;
 let cachedMtime = 0;
+let cachedPath = "";
 
 export function loadConfig(): WorkflowConfig {
   try {
-    const mtime = existsSync(CONFIG_PATH) ? statSync(CONFIG_PATH).mtimeMs : 0;
-    if (cached && cachedMtime === mtime) return cached;
-    const raw = JSON.parse(readFileSync(CONFIG_PATH, "utf8")) as WorkflowConfig;
+    const configPath = getConfigPath();
+    const mtime = existsSync(configPath) ? statSync(configPath).mtimeMs : 0;
+    if (cached && cachedMtime === mtime && cachedPath === configPath) return cached;
+    const raw = JSON.parse(readFileSync(configPath, "utf8")) as WorkflowConfig;
     // 与默认配置合并，保证新增 step 时旧配置文件也能拿到默认开关
     cached = {
       steps: { ...DEFAULT_CONFIG.steps, ...(raw.steps ?? {}) },
       options: { ...DEFAULT_CONFIG.options, ...(raw.options ?? {}) },
     };
     cachedMtime = mtime;
+    cachedPath = configPath;
     return cached;
   } catch {
     return structuredClone(DEFAULT_CONFIG);
@@ -166,27 +170,30 @@ export function loadConfig(): WorkflowConfig {
 }
 
 export function saveConfig(cfg: WorkflowConfig): WorkflowConfig {
-  const dir = dirname(CONFIG_PATH);
+  const configPath = getConfigPath();
+  const dir = dirname(configPath);
   if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
-  writeFileSync(CONFIG_PATH, JSON.stringify(cfg, null, 2));
+  writeFileSync(configPath, JSON.stringify(cfg, null, 2));
   cached = null;
   cachedMtime = 0;
+  cachedPath = "";
   return loadConfig();
 }
 
 // ---------------- 运行结果持久化 ----------------
 
-const LAST_RUN_PATH = process.env.COROS_WORKFLOW_LAST ?? "/tmp/coros-workflow-last.json";
+const getLastRunPath = () => process.env.COROS_WORKFLOW_LAST ?? join(getDataDir(), "workflow-last.json");
 
 export function saveLastRun(run: WorkflowRun | null): void {
   try {
-    const dir = dirname(LAST_RUN_PATH);
+    const lastRunPath = getLastRunPath();
+    const dir = dirname(lastRunPath);
     if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
     if (run === null) {
       // 记录"尚无运行"，避免读到上次的陈旧结果
-      writeFileSync(LAST_RUN_PATH, JSON.stringify({ empty: true, at: Math.floor(Date.now() / 1000) }));
+      writeFileSync(lastRunPath, JSON.stringify({ empty: true, at: Math.floor(Date.now() / 1000) }));
     } else {
-      writeFileSync(LAST_RUN_PATH, JSON.stringify(run));
+      writeFileSync(lastRunPath, JSON.stringify(run));
     }
   } catch {
     /* 落盘失败不该影响工作流本身 */
@@ -195,7 +202,9 @@ export function saveLastRun(run: WorkflowRun | null): void {
 
 export function loadLastRun(): WorkflowRun | null {
   try {
-    const d = JSON.parse(readFileSync(LAST_RUN_PATH, "utf8"));
+    const lastRunPath = getLastRunPath();
+    if (!existsSync(lastRunPath)) return null;
+    const d = JSON.parse(readFileSync(lastRunPath, "utf8"));
     if (d?.empty) return null;
     return d?.steps ? (d as WorkflowRun) : null;
   } catch {

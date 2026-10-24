@@ -115,14 +115,22 @@ const app = new Elysia()
     };
   })
   .post("/api/profiles/switch", ({ body }) => {
+    if (syncInFlight) {
+      return new Response(JSON.stringify({ error: "当前档案正在同步数据中，请稍候同步完成后再切换跑友" }), { status: 409 });
+    }
     const id = (body as any)?.id;
     if (!id) return new Response(JSON.stringify({ error: "缺少档案 ID" }), { status: 400 });
+    stopFollow();
     setActiveProfileId(id);
     switchProfileDatabase(getProfileDbPath(id));
     return { ok: true, activeId: id };
   })
   .post("/api/profiles/create", ({ body }) => {
+    if (syncInFlight) {
+      return new Response(JSON.stringify({ error: "当前档案正在同步数据中，请稍候同步完成后再新建跑友" }), { status: 409 });
+    }
     const name = (body as any)?.name;
+    stopFollow();
     const newProfile = createNewProfile(name);
     setActiveProfileId(newProfile.id);
     switchProfileDatabase(getProfileDbPath(newProfile.id));
@@ -135,6 +143,7 @@ const app = new Elysia()
   })
   .delete("/api/profiles/:id", ({ params }) => {
     try {
+      stopFollow();
       deleteProfile(params.id);
       switchProfileDatabase(getProfileDbPath(getActiveProfileId()));
       return { ok: true, activeId: getActiveProfileId() };
