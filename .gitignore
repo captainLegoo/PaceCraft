@@ -2,6 +2,8 @@
 node_modules/
 dist/
 *.tsbuildinfo
+src-tauri/target/
+src-tauri/binaries/
 
 # 运行时产物
 .logs/

@@ -11,6 +11,7 @@ import SessionView from "./pages/Session";
 import Week from "./pages/Week";
 import RaceHub, { type RaceTab } from "./pages/RaceHub";
 import Readiness, { type ReadinessTab } from "./pages/Readiness";
+import { useCorosAuth } from "./use-coros-auth";
 
 type Route = {
   page:
@@ -82,6 +83,14 @@ export default function App() {
 
   const refresh = () => api.status().then(setStatus).catch(() => {});
   const loadQuota = () => api.fitQuota().then(setQuota).catch(() => {});
+
+  const {
+    connecting: authConnecting,
+    connect: connectCoros,
+  } = useCorosAuth(() => {
+    refresh();
+    void doSyncRef.current?.();
+  });
   useEffect(() => {
     refresh();
     api.followStatus().then(setFollow).catch(() => {});
@@ -247,7 +256,10 @@ export default function App() {
               <div style={{ marginTop: 3 }}>
                 {status.counts.activities} 次活动 · {status.counts.laps} 行分圈
               </div>
-              <div style={{ marginTop: 6 }}>
+              <div style={{ marginTop: 6, display: "flex", gap: 6, flexWrap: "wrap" }}>
+                {status.auth?.connected
+                  ? <span className="pill good">COROS 已连接</span>
+                  : <span className="pill warn" style={{ cursor: "pointer" }} onClick={connectCoros} title="点击连接高驰账号">COROS 未连接</span>}
                 {status.aiConfigured
                   ? <span className="pill good">AI 已配置</span>
                   : <span className="pill warn">AI 未配置</span>}
@@ -281,6 +293,47 @@ export default function App() {
         {/* 同步结果提示。桌面版它在侧边栏底部，窄屏侧边栏收着看不见，
             所以在正文里再挂一份 —— 宽屏 display:none，不会重复显示。 */}
         {syncMsg && <div className={`sync-msg mobile-sync-msg ${syncMsg.kind}`}>{syncMsg.text}</div>}
+
+        {status?.auth && !status.auth.connected && (
+          <div style={{
+            background: "linear-gradient(135deg, rgba(37, 99, 235, 0.15) 0%, rgba(59, 130, 246, 0.08) 100%)",
+            border: "1px solid rgba(59, 130, 246, 0.3)",
+            borderRadius: 12,
+            padding: "16px 20px",
+            marginBottom: 20,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            flexWrap: "wrap",
+            gap: 12,
+          }}>
+            <div>
+              <div style={{ fontWeight: 600, fontSize: 14, color: "#60a5fa", display: "flex", alignItems: "center", gap: 6, marginBottom: 4 }}>
+                👋 欢迎使用 COROS 训练看板！
+              </div>
+              <div style={{ fontSize: 13, color: "var(--text-dim)", lineHeight: 1.5 }}>
+                当前尚未绑定 COROS 高驰账号。一键授权后即可自动拉取你的跑步记录、心率与体能负荷数据。
+              </div>
+            </div>
+            <button
+              onClick={connectCoros}
+              disabled={authConnecting}
+              style={{
+                background: "#2563eb",
+                color: "#fff",
+                border: "none",
+                borderRadius: 8,
+                padding: "8px 18px",
+                fontSize: 13,
+                fontWeight: 600,
+                cursor: "pointer",
+                boxShadow: "0 2px 8px rgba(37, 99, 235, 0.35)",
+              }}
+            >
+              {authConnecting ? "正在打开授权页面…" : "🔗 一键连接 COROS 账号"}
+            </button>
+          </div>
+        )}
 
         {route.page === "training" && (
           <>

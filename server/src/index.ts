@@ -37,6 +37,7 @@ import { analyzeActivity, analyzeSession, callModel, getAiConfig, saveAiConfig }
 import { analyzeWeek, normalizeWeekStart } from "./ai/week.ts";
 import { buildReport } from "./prediction/pipeline.ts";
 import { analyzeRacePrep, marathonPrep } from "./prediction/prep.ts";
+import { disconnectAuth, getAuthStatus, startAuthFlow } from "./coros/auth-service.ts";
 
 const one = <T>(rows: T[]) => rows[0] ?? null;
 
@@ -79,7 +80,19 @@ const app = new Elysia()
     lastSync: one(db.select().from(syncLog).orderBy(desc(syncLog.startedAt)).limit(1).all()),
     latestActivityDate: one(db.select({ d: activities.dateLabel }).from(activities).orderBy(desc(activities.date)).limit(1).all())?.d ?? null,
     aiConfigured: getAiConfig() !== null,
+    auth: getAuthStatus(),
   }))
+
+  /** COROS 授权与账号连接 */
+  .get("/api/auth/status", () => getAuthStatus())
+  .post("/api/auth/start", async () => {
+    try {
+      return await startAuthFlow();
+    } catch (e) {
+      return new Response(JSON.stringify({ error: (e as Error).message }), { status: 500 });
+    }
+  })
+  .post("/api/auth/disconnect", () => disconnectAuth())
 
   .post("/api/sync", async ({ query }) => {
     const days = Number((query as any).days ?? 120);

@@ -1,0 +1,86 @@
+name: Release Desktop Apps (macOS & Windows)
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "发布版本号 (如 v1.0.0)"
+        required: false
+        default: "v1.0.0"
+
+jobs:
+  release:
+    permissions:
+      contents: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: "macos-arm64"
+            os: "macos-latest"
+            target: "aarch64-apple-darwin"
+            bun_target: "bun-darwin-arm64"
+            sidecar_name: "server-aarch64-apple-darwin"
+
+          - platform: "windows-x64"
+            os: "windows-latest"
+            target: "x86_64-pc-windows-msvc"
+            bun_target: "bun-windows-x64"
+            sidecar_name: "server-x86_64-pc-windows-msvc.exe"
+
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Install dependencies
+        run: bun install
+
+      - name: Build web frontend
+        run: bun run build:web
+
+      - name: Build backend sidecar binary
+        shell: bash
+        run: |
+          mkdir -p src-tauri/binaries
+          echo "Compiling backend to ${{ matrix.sidecar_name }}..."
+          bun build --compile --minify --target=${{ matrix.bun_target }} ./server/src/index.ts --outfile src-tauri/binaries/${{ matrix.sidecar_name }}
+          ls -lh src-tauri/binaries/
+
+      - name: Build Tauri Desktop App
+        uses: tauri-apps/action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tagName: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || inputs.version || 'v1.0.0' }}
+          releaseName: "COROS Dashboard ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || inputs.version || 'v1.0.0' }}"
+          releaseBody: |
+            ## COROS 训练看板桌面客户端
+
+            - **Windows**: 下载 `*.exe` 安装包运行
+            - **macOS**: 下载 `*.dmg` 拖入 Applications 运行
+
+            ### 特性说明
+            - 开箱即用，无需配置终端与命令行环境
+            - 数据全量加密且仅持久化存储在个人电脑本地 (`~/.coros-dashboard`)
+          releaseDraft: false
+          prerelease: false
+          args: --target ${{ matrix.target }}

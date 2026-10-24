@@ -12,10 +12,14 @@
     "dev:server": "bun run --cwd server dev",
     "dev:web": "bun run --cwd web dev",
     "build": "bun run --cwd web build",
+    "build:web": "bun run --cwd web build",
+    "build:sidecar": "bun run scripts/build-sidecar.ts",
+    "build:all": "bun run build:web && bun run build:sidecar",
     "sync": "bun run --cwd server sync",
     "probe": "bun run --cwd server probe",
     "shoot": "bun run .shots/shoot.ts",
-    "shoot:mobile": "bun run .shots/mobile-check.ts"
+    "shoot:mobile": "bun run .shots/mobile-check.ts",
+    "tauri": "tauri"
   },
   "devDependencies": {
     "playwright-core": "^1.63.0"

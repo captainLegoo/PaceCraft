@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { api, type SyncSportsPayload } from "../api";
 import { IconDatabase, IconGear, IconHeart, IconSync } from "../icons";
 import WorkflowPanel from "./WorkflowPanel";
+import { useCorosAuth } from "../use-coros-auth";
 
 export type PopularModel = {
   model: string;
@@ -361,6 +362,18 @@ function detectProviderId(baseUrl: string, provider: string): string {
 }
 
 export default function Settings({ onStatus }: { onStatus: () => void }) {
+  const {
+    auth,
+    loading: authLoading,
+    connecting: authConnecting,
+    msg: authMsg,
+    connect: connectCoros,
+    disconnect: disconnectCoros,
+  } = useCorosAuth(() => {
+    onStatus();
+    api.status().then(setStatus).catch(() => {});
+  });
+
   const [cfg, setCfg] = useState<any>({
     provider: "openai", baseUrl: "https://api.openai.com/v1", apiKey: "",
     model: "gpt-4o-mini", temperature: 0.7, maxTokens: 8000,
@@ -1261,6 +1274,70 @@ export default function Settings({ onStatus }: { onStatus: () => void }) {
 
         {/* 右列：COROS 数据同步 + 当前数据状态 */}
         <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+          {/* COROS 账号绑定卡片 */}
+          <div className="card">
+            <h3 className="card-title">
+              <span style={{ display: "inline-block", width: 8, height: 8, borderRadius: "50%", background: auth?.connected ? "#10b981" : "#f59e0b", marginRight: 6 }} />
+              COROS 账号连接
+            </h3>
+            <p className="card-sub">
+              通过高驰官方 OAuth 2.0 PKCE 协议连接。授权凭证只保存在你本地电脑，不经过任何第三方服务器。
+            </p>
+            {authMsg && (
+              <div className={`sync-msg ${authMsg.kind}`} style={{ marginBottom: 10 }}>
+                {authMsg.text}
+              </div>
+            )}
+            {auth?.connected ? (
+              <div style={{ background: "var(--bg-subtle, rgba(255,255,255,0.03))", padding: "12px 14px", borderRadius: 8, border: "1px solid var(--border)", marginBottom: 8 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+                  <span style={{ fontSize: 13, fontWeight: 600 }}>高驰昵称：{auth.nickname || "已绑定（未拉取昵称）"}</span>
+                  <span style={{ fontSize: 11, color: "#10b981", background: "rgba(16,185,129,0.1)", padding: "2px 8px", borderRadius: 12 }}>● 正常连接</span>
+                </div>
+                <div style={{ fontSize: 12, color: "var(--text-dim)" }}>
+                  Token 有效期至：{auth.expiresAt ? new Date(auth.expiresAt * 1000).toLocaleString("zh-CN") : "长期有效（自动续期）"}
+                </div>
+                <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
+                  <button className="btn-secondary" onClick={connectCoros} disabled={authConnecting} style={{ fontSize: 12, padding: "5px 12px" }}>
+                    {authConnecting ? "正在打开授权页面…" : "重新授权"}
+                  </button>
+                  <button className="btn-danger" onClick={disconnectCoros} disabled={authLoading} style={{ fontSize: 12, padding: "5px 12px", background: "rgba(239,68,68,0.1)", color: "#ef4444", border: "1px solid rgba(239,68,68,0.2)", borderRadius: 6, cursor: "pointer" }}>
+                    解除绑定
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div style={{ background: "rgba(245,158,11,0.06)", padding: "14px", borderRadius: 8, border: "1px dashed #f59e0b", marginBottom: 8 }}>
+                <div style={{ fontSize: 13, fontWeight: 600, color: "#f59e0b", marginBottom: 4 }}>
+                  当前尚未连接 COROS 账号
+                </div>
+                <p style={{ fontSize: 12, color: "var(--text-dim)", margin: "0 0 12px 0", lineHeight: 1.5 }}>
+                  连接后可直接拉取历史跑步数据、心率、分圈及体能负荷指标。
+                </p>
+                <button
+                  type="button"
+                  onClick={connectCoros}
+                  disabled={authConnecting}
+                  style={{
+                    background: "#2563eb",
+                    color: "#fff",
+                    border: "none",
+                    borderRadius: 6,
+                    padding: "8px 16px",
+                    fontSize: 13,
+                    fontWeight: 600,
+                    cursor: "pointer",
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 6,
+                  }}
+                >
+                  {authConnecting ? "正在等待浏览器授权…" : "🔗 一键连接 COROS 账号"}
+                </button>
+              </div>
+            )}
+          </div>
+
           <div className="card">
             <h3 className="card-title"><IconSync size={14} />数据同步</h3>
             <p className="card-sub">

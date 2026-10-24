@@ -151,6 +151,13 @@ export type FollowState = {
   fitUsed: number;
 };
 
+export type AuthStatus = {
+  connected: boolean;
+  nickname: string | null;
+  expiresAt: number | null;
+  expired: boolean;
+};
+
 /** 同步运动类型配置：编码表由服务端下发，前端不自己维护一份 */
 export type SyncSportsPayload = {
   groups: { key: string; label: string; types: { code: number; label: string }[] }[];
@@ -329,4 +336,8 @@ export const api = {
   analyze: (labelId: string, focus: string | null) =>
     req<{ report: string; provider: string; model: string }>(
       `/api/ai/analyze/${labelId}`, { method: "POST", body: JSON.stringify({ focus }) }),
+
+  authStatus: () => req<AuthStatus>("/api/auth/status"),
+  startAuth: () => req<{ authorizeUrl: string }>("/api/auth/start", { method: "POST" }),
+  disconnectAuth: () => req<{ ok: boolean }>("/api/auth/disconnect", { method: "POST" }),
 };
