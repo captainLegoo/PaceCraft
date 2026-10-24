@@ -1279,6 +1279,11 @@ export default function Settings({ onStatus }: { onStatus: () => void }) {
             <h3 className="card-title">
               <span style={{ display: "inline-block", width: 8, height: 8, borderRadius: "50%", background: auth?.connected ? "#10b981" : "#f59e0b", marginRight: 6 }} />
               COROS 账号连接
+              {status?.profile?.name && (
+                <span style={{ fontSize: 11, fontWeight: "normal", color: "var(--text-dim)", marginLeft: 8 }}>
+                  (档案: {status.profile.name})
+                </span>
+              )}
             </h3>
             <p className="card-sub">
               通过高驰官方 OAuth 2.0 PKCE 协议连接。授权凭证只保存在你本地电脑，不经过任何第三方服务器。

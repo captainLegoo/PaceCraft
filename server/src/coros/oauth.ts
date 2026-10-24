@@ -3,12 +3,12 @@ import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "n
 import { dirname } from "node:path";
 import {
   CLIENT_NAME,
-  DATA_DIR,
+  getDataDir,
+  getTokenPath,
   ISSUER,
   REDIRECT_PORT,
   REDIRECT_URI,
   SCOPES,
-  TOKEN_PATH,
   TOKEN_REFRESH_MARGIN_SEC,
 } from "../config.ts";
 
@@ -49,26 +49,30 @@ export async function discover(force = false): Promise<Discovery> {
 // ---------- token persistence ----------
 
 function ensureDir() {
-  if (!existsSync(DATA_DIR)) mkdirSync(DATA_DIR, { recursive: true, mode: 0o700 });
+  const dir = getDataDir();
+  if (!existsSync(dir)) mkdirSync(dir, { recursive: true, mode: 0o700 });
 }
 
 export function saveTokens(tokens: TokenSet) {
   ensureDir();
-  writeFileSync(TOKEN_PATH, JSON.stringify(tokens, null, 2), { mode: 0o600 });
-  chmodSync(TOKEN_PATH, 0o600);
+  const tokenPath = getTokenPath();
+  writeFileSync(tokenPath, JSON.stringify(tokens, null, 2), { mode: 0o600 });
+  chmodSync(tokenPath, 0o600);
 }
 
 export function loadTokens(): TokenSet | null {
-  if (!existsSync(TOKEN_PATH)) return null;
+  const tokenPath = getTokenPath();
+  if (!existsSync(tokenPath)) return null;
   try {
-    return JSON.parse(readFileSync(TOKEN_PATH, "utf8")) as TokenSet;
+    return JSON.parse(readFileSync(tokenPath, "utf8")) as TokenSet;
   } catch {
     return null;
   }
 }
 
 export function clearTokens() {
-  if (existsSync(TOKEN_PATH)) writeFileSync(TOKEN_PATH, "{}", { mode: 0o600 });
+  const tokenPath = getTokenPath();
+  if (existsSync(tokenPath)) writeFileSync(tokenPath, "{}", { mode: 0o600 });
 }
 
 // ---------- PKCE ----------

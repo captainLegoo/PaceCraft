@@ -38,6 +38,16 @@ import { analyzeWeek, normalizeWeekStart } from "./ai/week.ts";
 import { buildReport } from "./prediction/pipeline.ts";
 import { analyzeRacePrep, marathonPrep } from "./prediction/prep.ts";
 import { disconnectAuth, getAuthStatus, startAuthFlow } from "./coros/auth-service.ts";
+import { switchProfileDatabase } from "./db/client.ts";
+import {
+  createNewProfile,
+  deleteProfile,
+  getActiveProfileId,
+  getProfileDbPath,
+  listProfileMetas,
+  setActiveProfileId,
+  updateProfileMeta,
+} from "./profile-manager.ts";
 
 const one = <T>(rows: T[]) => rows[0] ?? null;
 
@@ -69,19 +79,69 @@ const app = new Elysia()
       });
     }
   })
-  .get("/api/status", () => ({
-    counts: {
-      activities: db.select().from(activities).all().length,
-      laps: db.select().from(laps).all().length,
-      loadDays: db.select().from(trainingLoad).all().length,
-      healthDays: db.select().from(dailyHealth).all().length,
-      sleepDays: db.select().from(sleep).all().length,
-    },
-    lastSync: one(db.select().from(syncLog).orderBy(desc(syncLog.startedAt)).limit(1).all()),
-    latestActivityDate: one(db.select({ d: activities.dateLabel }).from(activities).orderBy(desc(activities.date)).limit(1).all())?.d ?? null,
-    aiConfigured: getAiConfig() !== null,
-    auth: getAuthStatus(),
-  }))
+  .get("/api/status", () => {
+    const activeId = getActiveProfileId();
+    const currentMeta = listProfileMetas().find((m) => m.id === activeId);
+    return {
+      profile: {
+        id: activeId,
+        name: currentMeta?.name ?? "默认跑友",
+        nickname: currentMeta?.nickname ?? null,
+      },
+      counts: {
+        activities: db.select().from(activities).all().length,
+        laps: db.select().from(laps).all().length,
+        loadDays: db.select().from(trainingLoad).all().length,
+        healthDays: db.select().from(dailyHealth).all().length,
+        sleepDays: db.select().from(sleep).all().length,
+      },
+      lastSync: one(db.select().from(syncLog).orderBy(desc(syncLog.startedAt)).limit(1).all()),
+      latestActivityDate: one(db.select({ d: activities.dateLabel }).from(activities).orderBy(desc(activities.date)).limit(1).all())?.d ?? null,
+      aiConfigured: getAiConfig() !== null,
+      auth: getAuthStatus(),
+    };
+  })
+
+  /** 跑友档案（Profile）管理 */
+  .get("/api/profiles", () => {
+    const activeId = getActiveProfileId();
+    const metas = listProfileMetas();
+    return {
+      activeId,
+      profiles: metas.map((m) => ({
+        ...m,
+        active: m.id === activeId,
+      })),
+    };
+  })
+  .post("/api/profiles/switch", ({ body }) => {
+    const id = (body as any)?.id;
+    if (!id) return new Response(JSON.stringify({ error: "缺少档案 ID" }), { status: 400 });
+    setActiveProfileId(id);
+    switchProfileDatabase(getProfileDbPath(id));
+    return { ok: true, activeId: id };
+  })
+  .post("/api/profiles/create", ({ body }) => {
+    const name = (body as any)?.name;
+    const newProfile = createNewProfile(name);
+    setActiveProfileId(newProfile.id);
+    switchProfileDatabase(getProfileDbPath(newProfile.id));
+    return { ok: true, profile: newProfile };
+  })
+  .put("/api/profiles/:id", ({ params, body }) => {
+    const name = (body as any)?.name;
+    const updated = updateProfileMeta(params.id, { name });
+    return { ok: true, profile: updated };
+  })
+  .delete("/api/profiles/:id", ({ params }) => {
+    try {
+      deleteProfile(params.id);
+      switchProfileDatabase(getProfileDbPath(getActiveProfileId()));
+      return { ok: true, activeId: getActiveProfileId() };
+    } catch (e) {
+      return new Response(JSON.stringify({ error: (e as Error).message }), { status: 400 });
+    }
+  })
 
   /** COROS 授权与账号连接 */
   .get("/api/auth/status", () => getAuthStatus())
@@ -144,8 +204,22 @@ const app = new Elysia()
         .from(activities)
         .all().length;
 
-      // 3 天窗口足够覆盖「今天跑完立刻点」，同时避免触发过多接口调用
-      const result = await syncAll({ days: 3, withLaps: true });
+      // 智能自适应同步窗口：
+      // 1. 如果本地没有任何活动记录（新跑友档案），默认完整拉取 120 天历史数据；
+      // 2. 如果已有活动，找出最新一条活动日期（如 2026-10-20），计算距今缺失天数 + 1 天余量；
+      // 3. 至少回溯 3 天（确保覆盖今天），上限 180 天。
+      let syncDays = 3;
+      const latest = one(db.select({ d: activities.dateLabel }).from(activities).orderBy(desc(activities.date)).limit(1).all())?.d;
+      if (!latest) {
+        syncDays = 120;
+      } else {
+        const lastDate = new Date(latest);
+        if (!isNaN(lastDate.getTime())) {
+          const diffDays = Math.ceil((Date.now() - lastDate.getTime()) / (1000 * 60 * 60 * 24));
+          syncDays = Math.max(3, Math.min(180, diffDays + 1));
+        }
+      }
+      const result = await syncAll({ days: syncDays, withLaps: true });
       const after = db.select().from(activities).all().length;
 
       // 同步完成后自动跑一遍工作流：把新数据变成可用的结论

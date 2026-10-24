@@ -1,5 +1,6 @@
 import { homedir } from "node:os";
 import { join } from "node:path";
+import { getProfileDbPath, getProfileDir, getProfileTokenPath, ROOT_DATA_DIR } from "./profile-manager.ts";
 
 /**
  * 显式锁定中国区 issuer。
@@ -16,9 +17,28 @@ export const CLIENT_NAME = "COROS Local Dashboard";
 export const REDIRECT_PORT = Number(process.env.COROS_REDIRECT_PORT ?? 43123);
 export const REDIRECT_URI = `http://127.0.0.1:${REDIRECT_PORT}/callback`;
 
-export const DATA_DIR = process.env.COROS_DATA_DIR ?? join(homedir(), ".coros-dashboard");
-export const DB_PATH = join(DATA_DIR, "coros.db");
-export const TOKEN_PATH = join(DATA_DIR, "tokens.json");
+export const BASE_DATA_DIR = ROOT_DATA_DIR;
+
+/** 动态获取当前跑友档案的目录与文件路径 */
+export const getDataDir = () => getProfileDir();
+export const getDbPath = () => getProfileDbPath();
+export const getTokenPath = () => getProfileTokenPath();
+
+/** 兼容旧代码引用常量：每次访问自动动态获取当前档案路径 */
+export const DATA_DIR = {
+  toString: () => getProfileDir(),
+  [Symbol.toPrimitive]: () => getProfileDir(),
+} as unknown as string;
+
+export const DB_PATH = {
+  toString: () => getProfileDbPath(),
+  [Symbol.toPrimitive]: () => getProfileDbPath(),
+} as unknown as string;
+
+export const TOKEN_PATH = {
+  toString: () => getProfileTokenPath(),
+  [Symbol.toPrimitive]: () => getProfileTokenPath(),
+} as unknown as string;
 
 export const SERVER_PORT = Number(process.env.PORT ?? 43124);
 /**

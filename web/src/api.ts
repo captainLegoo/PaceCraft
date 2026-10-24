@@ -151,6 +151,15 @@ export type FollowState = {
   fitUsed: number;
 };
 
+export type ProfileItem = {
+  id: string;
+  name: string;
+  nickname?: string | null;
+  createdAt: number;
+  lastActiveAt: number;
+  active: boolean;
+};
+
 export type AuthStatus = {
   connected: boolean;
   nickname: string | null;
@@ -340,4 +349,14 @@ export const api = {
   authStatus: () => req<AuthStatus>("/api/auth/status"),
   startAuth: () => req<{ authorizeUrl: string }>("/api/auth/start", { method: "POST" }),
   disconnectAuth: () => req<{ ok: boolean }>("/api/auth/disconnect", { method: "POST" }),
+
+  profiles: () => req<{ activeId: string; profiles: ProfileItem[] }>("/api/profiles"),
+  switchProfile: (id: string) =>
+    req<{ ok: boolean; activeId: string }>("/api/profiles/switch", { method: "POST", body: JSON.stringify({ id }) }),
+  createProfile: (name?: string) =>
+    req<{ ok: boolean; profile: ProfileItem }>("/api/profiles/create", { method: "POST", body: JSON.stringify({ name }) }),
+  updateProfile: (id: string, name: string) =>
+    req<{ ok: boolean; profile: ProfileItem }>(`/api/profiles/${id}`, { method: "PUT", body: JSON.stringify({ name }) }),
+  deleteProfile: (id: string) =>
+    req<{ ok: boolean; activeId: string }>(`/api/profiles/${id}`, { method: "DELETE" }),
 };

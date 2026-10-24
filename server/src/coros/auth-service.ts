@@ -13,6 +13,7 @@ import {
 import { callTool } from "./mcp.ts";
 import { sqlite } from "../db/client.ts";
 import { users } from "../db/schema.ts";
+import { getActiveProfileId, updateProfileMeta } from "../profile-manager.ts";
 
 let activeServer: Server | null = null;
 let activeTimer: Timer | null = null;
@@ -217,6 +218,13 @@ export async function startAuthFlow(): Promise<{ authorizeUrl: string }> {
           (raw.match(/Nickname:\s*(.+)/)?.[1] ?? "").replace(/["'\s]+"?\s*$/, "") || null,
           raw,
         );
+
+        const nick = (raw.match(/Nickname:\s*(.+)/)?.[1] ?? "").replace(/["'\s]+"?\s*$/, "") || null;
+        if (nick) {
+          try {
+            updateProfileMeta(getActiveProfileId(), { nickname: nick, name: nick });
+          } catch {}
+        }
       } catch (profileErr) {
         console.warn("拉取用户昵称失败（不影响主授权）:", profileErr);
       }

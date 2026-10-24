@@ -12,6 +12,7 @@ import Week from "./pages/Week";
 import RaceHub, { type RaceTab } from "./pages/RaceHub";
 import Readiness, { type ReadinessTab } from "./pages/Readiness";
 import { useCorosAuth } from "./use-coros-auth";
+import ProfileSwitcher from "./components/ProfileSwitcher";
 
 type Route = {
   page:
@@ -198,6 +199,13 @@ export default function App() {
           <h1>COROS 训练看板</h1>
           <p>自建 · 数据仅存本机</p>
         </div>
+        <ProfileSwitcher
+          onProfileChanged={() => {
+            setDataVersion((v) => v + 1);
+            refresh();
+          }}
+          onRequireAuth={connectCoros}
+        />
         <ThemeToggle theme={theme} onToggle={toggle} />
         {NAV.map((n) => {
           const Icon = n.icon;
