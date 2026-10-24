@@ -19,6 +19,7 @@
     "probe": "bun run --cwd server probe",
     "shoot": "bun run .shots/shoot.ts",
     "shoot:mobile": "bun run .shots/mobile-check.ts",
+    "pack": "./scripts/deploy/pack.sh",
     "tauri": "tauri"
   },
   "devDependencies": {

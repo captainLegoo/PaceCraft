@@ -9,10 +9,10 @@
 # 之所以分成两个：数据里有明文 OAuth token 和全部训练记录，
 # 不该跟着代码一起进版本库，也不该随便丢在共享目录里。
 #
-# 用法：./pack.sh  →  两个包都放在项目根目录
+# 用法：./scripts/deploy/pack.sh  →  两个包都放在项目根目录
 
 set -euo pipefail
-ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 DATA_DIR="${COROS_DATA_DIR:-$HOME/.coros-dashboard}"
 STAMP="$(date +%Y%m%d)"
 
