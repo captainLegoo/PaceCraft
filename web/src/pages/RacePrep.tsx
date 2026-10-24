@@ -52,12 +52,14 @@ export default function RacePrep({ aiConfigured, dataVersion = 0 }: { aiConfigur
   }, [weeks, raceDate, dataVersion]);
 
   const runAnalyze = async () => {
+    const currentFocus = focus.trim() || null;
     setBusy(true); setAiErr(null);
+    setFocus("");
     try {
       const r = await fetch(apiUrl("/api/ai/race-prep"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ weeks, raceDate: raceDate || null, focus: focus.trim() || null }),
+        body: JSON.stringify({ weeks, raceDate: raceDate || null, focus: currentFocus }),
       });
       const j = await r.json();
       if (j.error) throw new Error(j.error);

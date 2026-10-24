@@ -48,9 +48,11 @@ export default function SessionView({
   });
 
   const runAnalyze = async () => {
+    const currentFocus = focus.trim() || null;
     setBusy(true); setAiErr(null);
+    setFocus("");
     try {
-      await api.analyzeSession(sessionKey, focus.trim() || null);
+      await api.analyzeSession(sessionKey, currentFocus);
       await load();
     } catch (e) {
       setAiErr((e as Error).message);
