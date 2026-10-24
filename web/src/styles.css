@@ -1604,6 +1604,12 @@ tbody tr.expanded-detail-row:hover > td {
   .main > * { max-width: 1500px; }
 }
 
+.table-wrap {
+  width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
 /* ============================================================
    跑友档案切换器（白天/黑夜主题自适应）
    ============================================================ */

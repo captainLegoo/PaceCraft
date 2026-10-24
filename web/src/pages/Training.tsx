@@ -436,7 +436,7 @@ export default function Training({
         </div>
 
         {view === "session" ? (
-          <>
+          <div className="table-wrap" key="session-table-wrap">
             {multiSessions.length > 0 && (
               <div className="banner info" style={{ marginBottom: 12 }}>
                 有 <strong>{multiSessions.length}</strong> 场训练包含多条记录
@@ -481,7 +481,7 @@ export default function Training({
                 )}
                 {sessionsInRange.map((s) => (
                   <tr key={s.key} className="clickable" onClick={() => onOpenSession(s.key)}>
-                    <td>{s.date.slice(5)}</td>
+                    <td>{s.date ? s.date.slice(5) : "—"}</td>
                     <td style={{ textAlign: "left" }}>
                       <span className={`pill ${s.kind === "multi" ? "accent" : ""}`}>{s.classification}</span>
                     </td>
@@ -520,31 +520,46 @@ export default function Training({
                 ))}
               </tbody>
             </table>
-          </>
+          </div>
         ) : (
-        <table>
-          <thead>
-            <tr>
-              <th>日期</th><th>项目</th><th>距离</th><th>用时</th>
-              <th>配速</th><th>心率</th><th>步频</th><th>负荷</th><th>重点</th>
-            </tr>
-          </thead>
-          <tbody>
-            {actsInRange.map((a) => (
-              <tr key={a.labelId} className="clickable" onClick={() => onOpen(a.labelId)}>
-                <td>{a.dateLabel.slice(5)}</td>
-                <td style={{ textAlign: "left", color: "var(--text-dim)" }}>{a.sportName}</td>
-                <td className="num">{a.distanceKm ?? "—"}</td>
-                <td className="num">{fmtDur(a.durationSec)}</td>
-                <td className="num">{fmtPace(a.avgPaceSec)}</td>
-                <td className="num">{a.avgHr ?? "—"}</td>
-                <td className="num">{a.detail?.avgCadence ?? "—"}</td>
-                <td className="num">{a.detail?.trainingLoad ?? "—"}</td>
-                <td><span className="pill">{a.detail?.trainingFocus ?? "—"}</span></td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+          <div className="table-wrap" key="record-table-wrap">
+            <div className="range-bar">
+              <div className="seg">
+                {([["2w", "近 2 周"], ["1m", "近 1 月"], ["3m", "近 3 月"], ["all", "全部"]] as const).map(([k, lbl]) => (
+                  <button key={k} className={range === k ? "active" : ""} onClick={() => setRange(k)}>{lbl}</button>
+                ))}
+              </div>
+              <span className="range-info">
+                共 <strong>{acts.length}</strong> 条，当前显示 <strong>{actsInRange.length}</strong> 条
+              </span>
+            </div>
+            <table>
+              <thead>
+                <tr>
+                  <th>日期</th><th>项目</th><th>距离</th><th>用时</th>
+                  <th>配速</th><th>心率</th><th>步频</th><th>负荷</th><th>重点</th>
+                </tr>
+              </thead>
+              <tbody>
+                {actsInRange.length === 0 && (
+                  <tr><td colSpan={9}><div className="empty-run"><IconCalendar size={40} /><span>该时间范围内没有训练记录</span></div></td></tr>
+                )}
+                {actsInRange.map((a) => (
+                  <tr key={a.labelId} className="clickable" onClick={() => onOpen(a.labelId)}>
+                    <td>{a.dateLabel ? a.dateLabel.slice(5) : "—"}</td>
+                    <td style={{ textAlign: "left", color: "var(--text-dim)" }}>{a.sportName}</td>
+                    <td className="num">{a.distanceKm ?? "—"}</td>
+                    <td className="num">{fmtDur(a.durationSec)}</td>
+                    <td className="num">{fmtPace(a.avgPaceSec)}</td>
+                    <td className="num">{a.avgHr ?? "—"}</td>
+                    <td className="num">{a.detail?.avgCadence ?? "—"}</td>
+                    <td className="num">{a.detail?.trainingLoad ?? "—"}</td>
+                    <td><span className="pill">{a.detail?.trainingFocus ?? "—"}</span></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
       </div>
     </>
