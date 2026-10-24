@@ -30,6 +30,8 @@ docs/
 # 正常情况下这些文件在 ~/.coros-dashboard/，根本不在项目目录里。
 # 这里再加一层，是为了防止哪天有人改了 COROS_DATA_DIR 或手动拷了一份进来，
 # 然后 git add . 一把提交上去（tokens.json 是明文 OAuth token）。
+.coros-test-data/
+.coros-*/
 .env
 .env.*
 !.env.example
