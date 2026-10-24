@@ -27,6 +27,12 @@ export default function Training({
   // 默认只看最近两周：116 场全渲染既慢又没人会从上往下翻
   const [range, setRange] = useState<"2w" | "1m" | "3m" | "all">("2w");
   const [sessions, setSessions] = useState<Session[]>([]);
+  const [page, setPage] = useState(1);
+  const PAGE_SIZE = 15;
+
+  useEffect(() => {
+    setPage(1);
+  }, [view, range]);
 
   useEffect(() => {
     Promise.all([api.weekly(weeks), api.load(90), api.activities({ limit: "200" }), api.sessions(), api.races()])
@@ -61,6 +67,13 @@ export default function Training({
   })();
   const sessionsInRange = cutoff ? sessions.filter((s) => s.date >= cutoff) : sessions;
   const actsInRange = cutoff ? acts.filter((a) => a.dateLabel >= cutoff) : acts;
+
+  const totalItems = view === "session" ? sessionsInRange.length : actsInRange.length;
+  const totalPages = Math.max(1, Math.ceil(totalItems / PAGE_SIZE));
+  const currentPage = Math.min(page, totalPages);
+
+  const paginatedSessions = sessionsInRange.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
+  const paginatedActs = actsInRange.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
 
   const rangeKm = sessionsInRange.reduce((n, s) => n + s.totals.distanceKm, 0);
   const multiInRange = sessionsInRange.filter((s) => s.activityCount > 1);
@@ -479,7 +492,7 @@ export default function Training({
                 {sessionsInRange.length === 0 && (
                   <tr><td colSpan={10}><div className="empty-run"><IconCalendar size={40} /><span>该时间范围内没有训练</span></div></td></tr>
                 )}
-                {sessionsInRange.map((s) => (
+                {paginatedSessions.map((s) => (
                   <tr key={s.key} className="clickable" onClick={() => onOpenSession(s.key)}>
                     <td>{s.date ? s.date.slice(5) : "—"}</td>
                     <td style={{ textAlign: "left" }}>
@@ -520,6 +533,13 @@ export default function Training({
                 ))}
               </tbody>
             </table>
+            <TablePagination
+              total={sessionsInRange.length}
+              page={currentPage}
+              pageSize={PAGE_SIZE}
+              onPageChange={setPage}
+              unitLabel="场训练"
+            />
           </div>
         ) : (
           <div className="table-wrap" key="record-table-wrap">
@@ -544,7 +564,7 @@ export default function Training({
                 {actsInRange.length === 0 && (
                   <tr><td colSpan={9}><div className="empty-run"><IconCalendar size={40} /><span>该时间范围内没有训练记录</span></div></td></tr>
                 )}
-                {actsInRange.map((a) => (
+                {paginatedActs.map((a) => (
                   <tr key={a.labelId} className="clickable" onClick={() => onOpen(a.labelId)}>
                     <td>{a.dateLabel ? a.dateLabel.slice(5) : "—"}</td>
                     <td style={{ textAlign: "left", color: "var(--text-dim)" }}>{a.sportName}</td>
@@ -559,10 +579,120 @@ export default function Training({
                 ))}
               </tbody>
             </table>
+            <TablePagination
+              total={actsInRange.length}
+              page={currentPage}
+              pageSize={PAGE_SIZE}
+              onPageChange={setPage}
+              unitLabel="条记录"
+            />
           </div>
         )}
       </div>
     </>
+  );
+}
+
+function TablePagination({
+  total,
+  page,
+  pageSize,
+  onPageChange,
+  unitLabel = "条",
+}: {
+  total: number;
+  page: number;
+  pageSize: number;
+  onPageChange: (p: number) => void;
+  unitLabel?: string;
+}) {
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
+  if (totalPages <= 1) return null;
+
+  return (
+    <div
+      style={{
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "space-between",
+        marginTop: 14,
+        paddingTop: 12,
+        borderTop: "1px solid var(--border)",
+        fontSize: 12,
+        color: "var(--text-dim)",
+        flexWrap: "wrap",
+        gap: 10,
+      }}
+    >
+      <div>
+        共 <strong>{total}</strong> {unitLabel} · 第 <strong>{page}</strong> / {totalPages} 页
+      </div>
+      <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
+        <button
+          type="button"
+          onClick={() => onPageChange(Math.max(1, page - 1))}
+          disabled={page <= 1}
+          style={{
+            background: "var(--surface-2)",
+            border: "1px solid var(--border)",
+            color: page <= 1 ? "var(--text-faint)" : "var(--text)",
+            borderRadius: 6,
+            padding: "4px 9px",
+            cursor: page <= 1 ? "not-allowed" : "pointer",
+            fontSize: 11.5,
+          }}
+        >
+          上一页
+        </button>
+
+        {Array.from({ length: totalPages }, (_, i) => i + 1)
+          .filter((p) => p === 1 || p === totalPages || Math.abs(p - page) <= 2)
+          .map((p, idx, arr) => {
+            const prev = arr[idx - 1];
+            const showEllipsis = prev && p - prev > 1;
+            return (
+              <span key={p} style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+                {showEllipsis && <span style={{ color: "var(--text-faint)", padding: "0 2px" }}>…</span>}
+                <button
+                  type="button"
+                  onClick={() => onPageChange(p)}
+                  style={{
+                    background: p === page ? "var(--accent)" : "var(--surface-2)",
+                    color: p === page ? "var(--accent-ink)" : "var(--text)",
+                    border: `1px solid ${p === page ? "var(--accent)" : "var(--border)"}`,
+                    borderRadius: 6,
+                    minWidth: 26,
+                    height: 26,
+                    padding: "0 5px",
+                    fontSize: 11.5,
+                    fontWeight: p === page ? 700 : 500,
+                    cursor: "pointer",
+                  }}
+                >
+                  {p}
+                </button>
+              </span>
+            );
+          })}
+
+        <button
+          type="button"
+          onClick={() => onPageChange(Math.min(totalPages, page + 1))}
+          disabled={page >= totalPages}
+          style={{
+            background: "var(--surface-2)",
+            border: "1px solid var(--border)",
+            color: page >= totalPages ? "var(--text-faint)" : "var(--text)",
+            borderRadius: 6,
+            padding: "4px 9px",
+            cursor: page >= totalPages ? "not-allowed" : "pointer",
+            fontSize: 11.5,
+          }}
+        >
+          下一页
+        </button>
+      </div>
+    </div>
   );
 }
 
