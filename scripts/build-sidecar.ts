@@ -37,6 +37,13 @@ const finalBunTarget = process.env.BUN_TARGET || bunTarget;
 const outName = `server-${finalTriple}${ext}`;
 const outPath = join(binDir, outName);
 
+console.log("▸ 正在将前端静态资源内嵌至后端代码...");
+const embedRes = spawnSync("bun", ["run", "./scripts/bundle-dist.ts"], { cwd: root, stdio: "inherit" });
+if (embedRes.status !== 0) {
+  console.error("✗ 内嵌前端静态资源失败");
+  process.exit(embedRes.status ?? 1);
+}
+
 console.log(`▸ 正在将后端编译为单文件 Sidecar [${finalTriple}]...`);
 const cmd = [
   "build",
