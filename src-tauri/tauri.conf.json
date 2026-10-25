@@ -1,18 +1,18 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "COROS Dashboard",
-  "version": "1.0.0",
-  "identifier": "com.coros.dashboard",
+  "productName": "PaceCraft",
+  "version": "0.1.0",
+  "identifier": "com.pacecraft.app",
   "build": {
     "beforeDevCommand": "",
     "devUrl": "http://127.0.0.1:43125",
-    "beforeBuildCommand": "bun run build:all",
+    "beforeBuildCommand": "",
     "frontendDist": "../web/dist"
   },
   "app": {
     "windows": [
       {
-        "title": "COROS 训练看板",
+        "title": "PaceCraft - 跑者 AI 训练中心",
         "width": 1280,
         "height": 840,
         "minWidth": 960,
@@ -37,6 +37,16 @@
     ],
     "externalBin": [
       "binaries/server"
-    ]
+    ],
+    "windows": {
+      "nsis": {
+        "installMode": "both",
+        "languages": [
+          "ChineseSimplified",
+          "English"
+        ],
+        "displayLanguageSelector": false
+      }
+    }
   }
 }

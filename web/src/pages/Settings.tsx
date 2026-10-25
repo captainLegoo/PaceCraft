@@ -740,6 +740,12 @@ export default function Settings({ onStatus }: { onStatus: () => void }) {
                 })}
               </div>
 
+              {providerTab === "global" && (
+                <div style={{ marginBottom: 8, padding: "6px 10px", background: "var(--surface-2)", borderRadius: 6, fontSize: 11.5, color: "var(--muted)", border: "1px solid var(--border)" }}>
+                  🌐 <strong>数据出境提示</strong>：选用境外大模型平台时，训练指标数据将由您的设备直接发送至对应境外服务商，请确认您知悉并同意其数据隐私政策。
+                </div>
+              )}
+
               {/* 当前分类下的服务商按钮网格 */}
               <div
                 style={{

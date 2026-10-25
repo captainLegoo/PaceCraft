@@ -7,9 +7,9 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: "发布版本号 (如 v1.0.0)"
+        description: "发布版本号 (如 v0.1.0)"
         required: false
-        default: "v1.0.0"
+        default: "v0.1.0"
 
 jobs:
   release:
@@ -54,6 +54,24 @@ jobs:
       - name: Install dependencies
         run: bun install
 
+      - name: Sync App Version from Tag
+        shell: bash
+        run: |
+          RAW_VER="${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || inputs.version || '0.1.0' }}"
+          VER="${RAW_VER#v}"
+          echo "Syncing app version to $VER..."
+          bun -e "
+            const tauri = JSON.parse(await Bun.file('src-tauri/tauri.conf.json').text());
+            tauri.version = '$VER';
+            await Bun.write('src-tauri/tauri.conf.json', JSON.stringify(tauri, null, 2));
+            const pkg = JSON.parse(await Bun.file('package.json').text());
+            pkg.version = '$VER';
+            await Bun.write('package.json', JSON.stringify(pkg, null, 2));
+            let cargo = await Bun.file('src-tauri/Cargo.toml').text();
+            cargo = cargo.replace(/^version = \".*\"/m, 'version = \"' + '$VER' + '\"');
+            await Bun.write('src-tauri/Cargo.toml', cargo);
+          "
+
       - name: Build web frontend
         run: bun run build:web
 
@@ -66,21 +84,22 @@ jobs:
           ls -lh src-tauri/binaries/
 
       - name: Build Tauri Desktop App
-        uses: tauri-apps/action@v0
+        uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          tagName: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || inputs.version || 'v1.0.0' }}
-          releaseName: "COROS Dashboard ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || inputs.version || 'v1.0.0' }}"
+          tagName: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || inputs.version || 'v0.1.0' }}
+          releaseName: "PaceCraft ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || inputs.version || 'v0.1.0' }}"
           releaseBody: |
-            ## COROS 训练看板桌面客户端
+            ## PaceCraft 跑者 AI 训练中心桌面客户端
 
-            - **Windows**: 下载 `*.exe` 安装包运行
+            - **Windows**: 下载 `*.exe` 安装包安装运行
             - **macOS**: 下载 `*.dmg` 拖入 Applications 运行
 
             ### 特性说明
-            - 开箱即用，无需配置终端与命令行环境
-            - 数据全量加密且仅持久化存储在个人电脑本地 (`~/.coros-dashboard`)
+            - 跨手表生态数据聚合与 AI 训练助理，开箱即用，无需配置终端与 Node/Bun 环境
+            - 数据全量仅持久化存储在个人电脑本地 (`~/.coros-dashboard`)，安全隐私绝对隔离
+            - 支持多跑友独立档案共存切换与智能增量同步
           releaseDraft: false
-          prerelease: false
+          prerelease: ${{ startsWith(github.ref_name, 'v0.') || contains(github.ref_name, 'test') || contains(github.ref_name, 'beta') }}
           args: --target ${{ matrix.target }}

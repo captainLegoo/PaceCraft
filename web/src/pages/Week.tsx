@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { api, type LoadPoint, type Session, type Weekly, type WeekReport } from "../api";
-import { BarChart, Markdown, fmtDate, fmtDur, fmtPace, paceColor } from "../charts";
+import { AiDisclaimerNotice, BarChart, Markdown, fmtDate, fmtDur, fmtPace, paceColor } from "../charts";
 import { IconBack, IconCalendar, IconLoad, IconRoute, IconRun } from "../icons";
 
 /**
@@ -86,7 +86,7 @@ export default function Week({
       <>
         <div className="page-head">
           <div><h2>{fmtDate(weekStart)} 起这一周</h2></div>
-          <button className="btn" onClick={onBack}><IconBack size={15} />返回</button>
+          <button className="btn" onClick={onBack} title="返回上一级（快捷键：Esc 或鼠标后退键）"><IconBack size={15} />返回</button>
         </div>
         <div className="banner info">这一周没有训练记录。</div>
       </>
@@ -154,7 +154,7 @@ export default function Week({
             周一至周日 · {week.count} 条记录 · {weekSessions.length} 场训练
           </div>
         </div>
-        <button className="btn" onClick={onBack}><IconBack size={15} />返回</button>
+        <button className="btn" onClick={onBack} title="返回上一级（快捷键：Esc 或鼠标后退键）"><IconBack size={15} />返回</button>
       </div>
 
       <div className="grid g4" style={{ marginBottom: 14 }}>
@@ -318,14 +318,15 @@ export default function Week({
         )}
         {aiErr && <div className="banner error">{aiErr}</div>}
 
-        <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
+        <div style={{ display: "flex", gap: 8, marginBottom: 14, minWidth: 0, width: "100%" }}>
           <input
+            style={{ flex: 1, minWidth: 0 }}
             placeholder="关注点（可选），例如：这周强度刺激够不够？两个主课表隔了几天？"
             value={focus}
             onChange={(e) => setFocus(e.target.value)}
             onKeyDown={(e) => { if (e.key === "Enter" && aiConfigured && !busy) runAnalyze(); }}
           />
-          <button className="btn primary" disabled={!aiConfigured || busy} onClick={runAnalyze}>
+          <button className="btn primary" style={{ flexShrink: 0, whiteSpace: "nowrap" }} disabled={!aiConfigured || busy} onClick={runAnalyze}>
             {busy ? <><span className="spin" /> 分析中…</> : reports.length > 0 ? "重新分析" : "开始分析"}
           </button>
         </div>
@@ -335,13 +336,14 @@ export default function Week({
         ) : (
           reports.map((r) => (
             <div key={r.id} style={{ borderTop: "1px solid var(--border)", paddingTop: 14, marginTop: 14 }}>
-              <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 10, flexWrap: "wrap" }}>
+              <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 10, flexWrap: "wrap", minWidth: 0, maxWidth: "100%" }}>
                 <span className="pill accent">{r.model}</span>
                 <span className="hint">{new Date(r.createdAt * 1000).toLocaleString("zh-CN")}</span>
                 <span className="pill">{r.sessionCount} 场 / {r.blockCount} 个训练块</span>
-                {r.focus && <span className="pill">关注：{r.focus}</span>}
+                {r.focus && <span className="pill pill-focus">关注：{r.focus}</span>}
               </div>
               <Markdown text={r.report} />
+              <AiDisclaimerNotice />
             </div>
           ))
         )}

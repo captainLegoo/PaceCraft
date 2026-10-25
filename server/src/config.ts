@@ -11,9 +11,8 @@ export const ISSUER = process.env.COROS_ISSUER ?? "https://mcpcn.coros.com";
 export const MCP_URL = process.env.COROS_MCP_URL ?? `${ISSUER}/mcp`;
 
 export const SCOPES = "openid offline_access mcp.tools";
-// OAuth 客户端名。COROS 侧按「客户端名 + 回调地址」识别授权来源，
-// 写具体人名没有意义，反而让开源实例看起来像某个人的私有应用。
-export const CLIENT_NAME = "COROS Local Dashboard";
+// OAuth 客户端名。使用独立第三方品牌名称，表明非官方应用，规避商标侵权风险
+export const CLIENT_NAME = "PaceCraft (Local Runner Hub)";
 export const REDIRECT_PORT = Number(process.env.COROS_REDIRECT_PORT ?? 43123);
 export const REDIRECT_URI = `http://127.0.0.1:${REDIRECT_PORT}/callback`;
 

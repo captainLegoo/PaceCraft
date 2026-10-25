@@ -1,6 +1,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 use std::net::TcpStream;
+use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;
 use tauri::Manager;
@@ -13,18 +14,25 @@ fn main() {
             let shell = app.shell();
 
             // 启动伴生后端服务 (Sidecar)
-            let (_rx, mut child) = shell
+            let (_rx, child) = shell
                 .sidecar("server")
                 .expect("failed to setup server sidecar")
                 .spawn()
                 .expect("failed to spawn server sidecar");
+
+            let child_arc = Arc::new(Mutex::new(Some(child)));
+            let child_for_close = child_arc.clone();
 
             let main_window = app.get_webview_window("main").expect("failed to get main window");
 
             // 监听窗口关闭事件，保证随应用关闭彻底退出后台后端进程
             main_window.on_window_event(move |event| {
                 if let tauri::WindowEvent::CloseRequested { .. } = event {
-                    let _ = child.kill();
+                    if let Ok(mut lock) = child_for_close.lock() {
+                        if let Some(c) = lock.take() {
+                            let _ = c.kill();
+                        }
+                    }
                 }
             });
 

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { api, type Session, type SessionDetail } from "../api";
-import { AerobicDecouplingCard, LineChart, Markdown, ZoneBar, fmtDur, fmtPace, paceColor } from "../charts";
+import { AerobicDecouplingCard, AiDisclaimerNotice, LineChart, Markdown, ZoneBar, fmtDur, fmtPace, paceColor } from "../charts";
 import { IconBack, IconHeart, IconLoad, IconRoute, IconStopwatch as IconStopwatch2 } from "../icons";
 
 export default function SessionView({
@@ -71,7 +71,7 @@ export default function SessionView({
             {"  "}判定为 <strong style={{ color: "var(--accent)" }}>{s.classification}</strong> · {s.classificationReason}
           </div>
         </div>
-        <button className="btn" style={{ flexShrink: 0 }} onClick={onBack}><IconBack size={15} />返回</button>
+        <button className="btn" style={{ flexShrink: 0 }} onClick={onBack} title="返回上一级（快捷键：Esc 或鼠标后退键）"><IconBack size={15} />返回</button>
       </div>
 
       {multi && (
@@ -299,13 +299,14 @@ export default function SessionView({
         ) : (
           reports.map((r) => (
             <div key={r.id} style={{ borderTop: "1px solid var(--border)", paddingTop: 14, marginTop: 14 }}>
-              <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 10, flexWrap: "wrap" }}>
+              <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 10, flexWrap: "wrap", minWidth: 0, maxWidth: "100%" }}>
                 <span className="pill accent">{r.model}</span>
                 <span className="hint">{new Date(r.createdAt * 1000).toLocaleString("zh-CN")}</span>
                 <span className="pill">{r.activityCount} 条记录</span>
-                {r.focus && <span className="pill">关注：{r.focus}</span>}
+                {r.focus && <span className="pill pill-focus">关注：{r.focus}</span>}
               </div>
               <Markdown text={r.report} />
+              <AiDisclaimerNotice />
             </div>
           ))
         )}

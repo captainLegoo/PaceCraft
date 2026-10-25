@@ -62,7 +62,7 @@ export default function ActivityDetailView({
           {data.sessionKey && onOpenSession && (
             <button className="btn" onClick={() => onOpenSession(data.sessionKey!)}>所属训练场次</button>
           )}
-          <button className="btn" onClick={onBack}><IconBack size={15} />返回</button>
+          <button className="btn" onClick={onBack} title="返回上一级（快捷键：Esc 或鼠标后退键）"><IconBack size={15} />返回</button>
         </div>
       </div>
 

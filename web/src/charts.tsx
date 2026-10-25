@@ -939,6 +939,7 @@ export type DecouplingResult = {
   eligible: boolean;
   reason?: string;
   decouplingPct?: number;
+  subText?: string;
   badge?: {
     label: string;
     level: "good" | "warn" | "bad" | "info";
@@ -1059,35 +1060,42 @@ export function calculateAerobicDecoupling(
   const deltaPaceSec = Math.round(paceSec2 - paceSec1);
 
   let badge: NonNullable<DecouplingResult["badge"]>;
-  if (decouplingPct < -3.0) {
+  let subText: string;
+
+  if (decouplingPct < 0) {
     badge = {
       label: "越跑越顺 (负脱钩)",
-      level: "info",
-      text: "后程效率反超前半程（配速明显提速且心率平稳），处于充沛兴奋或渐加速状态",
+      level: "good",
+      text: "后程效率甚至略高于前半程（越跑越顺），说明前半程热身充分、心血管无明显疲劳漂移，后程体能充沛。",
     };
+    subText = "后程越跑越顺 · 动能充沛";
   } else if (decouplingPct <= 5.0) {
     badge = {
-      label: "优秀有氧 (<5%)",
+      label: "优秀稳态 (漂移<5%)",
       level: "good",
-      text: "前后半程心率与配速高度平行，心血管未发生明显漂移，基础有氧耐力与代谢能力非常扎实",
+      text: "前后半程配速与心率高度平行。后程虽然有点累或轻微动能消耗（完全在正常受控范围），但基础有氧耐力与代谢能力极其扎实。",
     };
+    subText = "后程有点累/轻微消耗 · 整体极稳";
   } else if (decouplingPct <= 8.0) {
     badge = {
-      label: "轻度漂移 (5%–8%)",
+      label: "轻度疲劳 (5%–8%)",
       level: "warn",
-      text: "后程出现轻微心率上浮或配速微降，属于长距离后期的正常生理疲劳或散热温升，在合理控制范围内",
+      text: "后程动能有所下降，出现轻微心率上浮或配速微降，属于长距离后程正常的疲劳累积与散热温升，处于可控范围。",
     };
+    subText = "后程动能下降 · 轻度疲劳";
   } else {
     badge = {
-      label: "显著脱钩 (>8%)",
+      label: "显著疲劳 (>8%)",
       level: "bad",
-      text: "后程效率明显衰减（心率持续升高或配速衰退严重），提示当前配速略高于有氧舒适区，或存在脱水、糖原耗尽等耐力短板",
+      text: "后程动能明显衰减（心率持续升高或配速掉速较多），提示当前配速略高于有氧舒适区，或存在脱水、糖原不足等耐力短板。",
     };
+    subText = "后程明显变累 · 动能衰退";
   }
 
   return {
     eligible: true,
     decouplingPct,
+    subText,
     badge,
     half1: {
       paceSec: paceSec1,
@@ -1131,28 +1139,33 @@ export function AerobicDecouplingCard({
     );
   }
 
-  const { decouplingPct, badge, half1, half2, deltaHr, deltaPaceSec } = result;
+  const { decouplingPct, badge, subText, half1, half2, deltaHr, deltaPaceSec } = result;
   const pillClass = badge?.level === "good" ? "good" : badge?.level === "bad" ? "bad" : badge?.level === "warn" ? "warn" : "accent";
   const numColor = badge?.level === "good" ? "var(--good)" : badge?.level === "bad" ? "var(--bad)" : badge?.level === "warn" ? "var(--warn)" : "var(--accent)";
 
   return (
     <div className="card" style={{ marginBottom: 14 }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", flexWrap: "wrap", gap: 10 }}>
-        <div>
-          <h3 className="card-title" style={{ display: "flex", alignItems: "center", gap: 8 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 10 }}>
+        <div style={{ flex: 1, minWidth: 260 }}>
+          <h3 className="card-title" style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
             有氧脱钩率分析（Aerobic Decoupling）
             <span className={`pill ${pillClass}`} style={{ fontSize: 12, fontWeight: 600 }}>
               {badge?.label}
             </span>
           </h3>
-          <p className="card-sub" style={{ margin: 0 }}>
-            基于 Joe Friel 耐力模型：对比前后半程效率因子（EF = 速度 / 心率）。脱钩率 &lt; 5% 证明有氧底子扎实，无明显心血管漂移。
+          <p className="card-sub" style={{ margin: "4px 0 0", lineHeight: 1.5 }}>
+            对比前后半程效率因子（配速/心率）：<strong>负值（-）</strong>代表越跑越顺、动能充沛；<strong>正值（+）</strong>代表后程开始有点累或动能下降。脱钩率 ≤ 5% 证明有氧底子极扎实。
           </p>
         </div>
-        <div style={{ textAlign: "right" }}>
-          <span className="num" style={{ fontSize: 26, fontWeight: 700, color: numColor }}>
+        <div style={{ textAlign: "right", alignSelf: "center" }}>
+          <div className="num" style={{ fontSize: 26, fontWeight: 700, color: numColor, lineHeight: 1.1 }}>
             {decouplingPct! > 0 ? `+${decouplingPct}%` : `${decouplingPct}%`}
-          </span>
+          </div>
+          {subText && (
+            <div style={{ fontSize: 11.5, color: "var(--text-dim)", marginTop: 4 }}>
+              {subText}
+            </div>
+          )}
         </div>
       </div>
 
@@ -1180,13 +1193,29 @@ export function AerobicDecouplingCard({
         </div>
 
         <div className="stat" style={{ background: "var(--surface-2)", padding: "12px 14px", borderRadius: 8 }}>
-          <span className="label" style={{ fontWeight: 600, color: "var(--text)" }}>后程变化量</span>
-          <span className="value num" style={{ fontSize: 20 }}>
-            心率 {deltaHr! >= 0 ? `+${deltaHr}` : deltaHr} <span className="unit" style={{ fontSize: 13, marginRight: 8 }}>bpm</span>
-            配速 {deltaPaceSec! >= 0 ? `+${deltaPaceSec}s` : `${deltaPaceSec}s`}
+          <span className="label" style={{ fontWeight: 600, color: "var(--text)" }}>后程体感变化</span>
+          <span className="value num" style={{ fontSize: 18, display: "flex", gap: 10, flexWrap: "wrap", alignItems: "baseline" }}>
+            <span>
+              心率 <strong style={{ color: deltaHr! > 3 ? "var(--warn)" : deltaHr! < -2 ? "var(--accent)" : "inherit" }}>
+                {deltaHr! > 0 ? `↑ ${deltaHr}` : deltaHr! < 0 ? `↓ ${Math.abs(deltaHr!)}` : "持平"}
+              </strong>
+              {deltaHr !== 0 && <span className="unit" style={{ fontSize: 12, marginLeft: 2 }}>bpm</span>}
+            </span>
+            <span>
+              配速 <strong style={{ color: deltaPaceSec! > 2 ? "var(--warn)" : deltaPaceSec! < -2 ? "var(--good)" : "inherit" }}>
+                {deltaPaceSec! > 1 ? `慢 ${deltaPaceSec}s` : deltaPaceSec! < -1 ? `快 ${Math.abs(deltaPaceSec!)}s` : "持平"}
+              </strong>
+              {Math.abs(deltaPaceSec!) > 1 && <span className="unit" style={{ fontSize: 12, marginLeft: 2 }}>/km</span>}
+            </span>
           </span>
           <span className="hint">
-            {deltaHr! > 5 ? "后程心率明显上浮（心血管漂移）" : deltaHr! < -2 ? "后程心率下降" : "心率与配速高度平稳"}
+            {deltaHr! > 5
+              ? "后程有点累，心率明显上浮"
+              : deltaPaceSec! < -2
+              ? "后程越跑越顺，体能充沛自然提速"
+              : deltaPaceSec! > 4
+              ? "后程动能有所下降，出现微掉速"
+              : "前后半程心率与配速高度平稳"}
           </span>
         </div>
       </div>
@@ -1197,3 +1226,34 @@ export function AerobicDecouplingCard({
     </div>
   );
 }
+
+/**
+ * AI 生成内容标识与免责声明组件
+ * 符合《生成式人工智能服务管理暂行办法》第十二条关于生成内容显著标识的要求，
+ * 并提供运动健康与训练决策免责提示。
+ */
+export function AiDisclaimerNotice() {
+  return (
+    <div
+      style={{
+        marginTop: 12,
+        padding: "8px 12px",
+        background: "var(--bg-subtle, rgba(255, 255, 255, 0.03))",
+        border: "1px dashed var(--border)",
+        borderRadius: 6,
+        fontSize: 12,
+        color: "var(--text-faint)",
+        display: "flex",
+        alignItems: "center",
+        gap: 8,
+        lineHeight: 1.4,
+      }}
+    >
+      <span style={{ fontSize: 14, flexShrink: 0 }}>🤖</span>
+      <span>
+        <strong>AI 生成内容提示</strong>：本分析由大语言模型自动生成，仅供科学训练量化参考，不构成医疗诊断或强制运动处方。请结合实际体感与专业教练/医生建议科学训练。
+      </span>
+    </div>
+  );
+}
+

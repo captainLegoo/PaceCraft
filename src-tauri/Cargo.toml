@@ -1,7 +1,7 @@
 [package]
-name = "coros-dashboard"
-version = "1.0.0"
-description = "COROS Training Dashboard"
+name = "pacecraft"
+version = "0.1.0"
+description = "PaceCraft - AI Running Hub"
 authors = ["Kyle"]
 edition = "2021"
 

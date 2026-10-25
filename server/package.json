@@ -1,5 +1,6 @@
 {
   "name": "@coros-dashboard/server",
+  "license": "MIT",
   "private": true,
   "type": "module",
   "scripts": {

@@ -428,6 +428,16 @@ tr.clickable { cursor: pointer; }
 .pill.bad { color: var(--bad-text); border-color: var(--bad-border); background: var(--bad-bg); }
 .pill.info { color: var(--info-text); border-color: var(--info-border); background: var(--info-bg); }
 .pill.accent { color: var(--accent); border-color: var(--accent-border); background: var(--accent-bg); }
+.pill.pill-focus {
+  white-space: normal;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+  max-width: 100%;
+  line-height: 1.5;
+  border-radius: 6px;
+  padding: 2px 8px;
+  box-sizing: border-box;
+}
 
 /* ---------- 运动类型勾选 ---------- */
 /* 用 pill 的视觉语言做成可点的 chip：勾选态 = accent，未选 = surface-2。
@@ -1327,6 +1337,7 @@ tbody tr.expanded-detail-row:hover > td {
     padding: 8px 16px calc(76px + env(safe-area-inset-bottom));
   }
   .page-head {
+    padding-top: 8px;
     margin-bottom: 16px;
     flex-wrap: wrap;
     align-items: flex-start;
@@ -1398,6 +1409,7 @@ tbody tr.expanded-detail-row:hover > td {
   }
 
   .hub-header {
+    padding-top: 8px;
     flex-direction: column;
     align-items: stretch;
     gap: 12px;

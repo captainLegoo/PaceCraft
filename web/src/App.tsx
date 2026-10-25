@@ -3,7 +3,7 @@ import { api } from "./api";
 import type { FollowState } from "./api";
 import { ThemeToggle, useTheme } from "./theme";
 import { useTableScroll } from "./table-scroll";
-import { IconDatabase, IconFlag, IconMenu, IconPulse, IconShoe, IconSync } from "./icons";
+import { IconBack, IconDatabase, IconFlag, IconMenu, IconPulse, IconShoe, IconSync } from "./icons";
 import Training from "./pages/Training";
 import ActivityDetailView from "./pages/ActivityDetail";
 import Settings from "./pages/Settings";
@@ -43,14 +43,144 @@ const NAV: { key: "training" | "race" | "readiness" | "settings"; label: string;
   { key: "settings", label: "系统设置", sub: "AI · 同步 · 工作流", icon: IconDatabase },
 ];
 
+function routeToHash(r: Route): string {
+  switch (r.page) {
+    case "activity":
+      return `#/activity?id=${encodeURIComponent(r.labelId ?? "")}${r.fromSessionKey ? `&from=${encodeURIComponent(r.fromSessionKey)}` : ""}`;
+    case "session":
+      return `#/session?key=${encodeURIComponent(r.sessionKey ?? "")}`;
+    case "week":
+      return `#/week?start=${encodeURIComponent(r.weekStart ?? "")}`;
+    case "race":
+      return `#/race`;
+    case "prediction":
+      return `#/prediction`;
+    case "prep":
+      return `#/prep`;
+    case "readiness":
+      return `#/readiness`;
+    case "fitness":
+      return `#/fitness`;
+    case "health":
+      return `#/health`;
+    case "settings":
+      return `#/settings`;
+    case "training":
+    default:
+      return `#/training`;
+  }
+}
+
+function hashToRoute(hash: string): Route {
+  const clean = hash.replace(/^#\/?/, "");
+  if (!clean) return { page: "training" };
+
+  const [path, query] = clean.split("?");
+  const params = new URLSearchParams(query || "");
+
+  switch (path) {
+    case "activity": {
+      const labelId = params.get("id") || "";
+      const fromSessionKey = params.get("from") || undefined;
+      return labelId ? { page: "activity", labelId, fromSessionKey } : { page: "training" };
+    }
+    case "session": {
+      const sessionKey = params.get("key") || "";
+      return sessionKey ? { page: "session", sessionKey } : { page: "training" };
+    }
+    case "week": {
+      const weekStart = params.get("start") || "";
+      return weekStart ? { page: "week", weekStart } : { page: "training" };
+    }
+    case "race":
+      return { page: "race" };
+    case "prediction":
+      return { page: "prediction" };
+    case "prep":
+      return { page: "prep" };
+    case "readiness":
+      return { page: "readiness" };
+    case "fitness":
+      return { page: "fitness" };
+    case "health":
+      return { page: "health" };
+    case "settings":
+      return { page: "settings" };
+    case "training":
+    default:
+      return { page: "training" };
+  }
+}
+
+function isSameRoute(a: Route, b: Route): boolean {
+  return routeToHash(a) === routeToHash(b);
+}
+
 export default function App() {
-  const [route, setRoute] = useState<Route>({ page: "training" });
+  const [route, setRoute] = useState<Route>(() => {
+    const initial = hashToRoute(typeof window !== "undefined" ? window.location.hash : "");
+    if (typeof window !== "undefined") {
+      window.history.replaceState({ ...initial, appNav: true }, "", routeToHash(initial));
+    }
+    return initial;
+  });
+
+  const routeRef = useRef(route);
+  routeRef.current = route;
+
+  const historyDepth = useRef(0);
   const [status, setStatus] = useState<any>(null);
   const { theme, toggle } = useTheme();
 
   /** 窄屏下侧边栏变成抽屉，默认收起 */
   const [navOpen, setNavOpen] = useState(false);
   useTableScroll();
+
+  const navigate = useCallback((newRoute: Route, replace = false) => {
+    if (isSameRoute(routeRef.current, newRoute)) {
+      window.scrollTo({ top: 0, behavior: "smooth" });
+      setNavOpen(false);
+      return;
+    }
+    const hash = routeToHash(newRoute);
+    if (replace) {
+      window.history.replaceState({ ...newRoute, appNav: true }, "", hash);
+    } else {
+      window.history.pushState({ ...newRoute, appNav: true, hasPrev: true }, "", hash);
+      historyDepth.current += 1;
+    }
+    setRoute(newRoute);
+    setNavOpen(false);
+    window.scrollTo({ top: 0, behavior: "instant" });
+  }, []);
+
+  const handleBack = useCallback(() => {
+    if (historyDepth.current > 0 || window.history.state?.hasPrev) {
+      window.history.back();
+    } else {
+      // 兜底：如果是直接访问详情页进来的，回退至逻辑上一层
+      const current = routeRef.current;
+      if (current.page === "activity" && current.fromSessionKey) {
+        navigate({ page: "session", sessionKey: current.fromSessionKey }, true);
+      } else {
+        navigate({ page: "training" }, true);
+      }
+    }
+  }, [navigate]);
+
+  // 监听浏览器后退/前进事件（支持移动端原生手势侧滑、浏览器后退按钮、鼠标侧键）
+  useEffect(() => {
+    const onPopState = (e: PopStateEvent) => {
+      const targetRoute = (e.state as Route | null) ?? hashToRoute(window.location.hash);
+      setRoute(targetRoute);
+      setNavOpen(false);
+      if (historyDepth.current > 0) {
+        historyDepth.current -= 1;
+      }
+    };
+    window.addEventListener("popstate", onPopState);
+    return () => window.removeEventListener("popstate", onPopState);
+  }, []);
 
   // 抽屉开着时锁住背景滚动：否则手指在遮罩上滑一下，
   // 背后的长页面会跟着滚，抽屉看起来像没打开。
@@ -66,12 +196,33 @@ export default function App() {
     };
   }, [navOpen]);
 
-  // 抽屉里点任意导航项就顺手收起。两个 setState 会被 React 18 自动批成一次渲染，
-  // 所以不会出现「页面已经切了、抽屉还开着」的那种中间态。
+  // 键盘快捷键监听：Web 端在非输入状态下按 Esc 键返回上一级
+  const isDetailPage = route.page === "activity" || route.page === "session" || route.page === "week";
+
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        if (navOpen) return; // 抽屉打开时由上面的监听器优先关闭抽屉
+
+        const activeTag = document.activeElement?.tagName.toLowerCase();
+        if (activeTag === "input" || activeTag === "textarea") {
+          (document.activeElement as HTMLElement)?.blur();
+          return;
+        }
+
+        if (isDetailPage) {
+          e.preventDefault();
+          handleBack();
+        }
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [navOpen, isDetailPage, handleBack]);
+
   const go = useCallback((page: Route["page"]) => {
-    setRoute({ page });
-    setNavOpen(false);
-  }, []);
+    navigate({ page });
+  }, [navigate]);
 
   /** 数据版本号：同步成功后 +1，所有页面据此重新拉数据 */
   const [dataVersion, setDataVersion] = useState(0);
@@ -162,10 +313,10 @@ export default function App() {
   };
 
   const openActivity = (labelId: string, fromSessionKey?: string) =>
-    labelId && setRoute({ page: "activity", labelId, fromSessionKey });
-  const openSession = (sessionKey: string) => sessionKey && setRoute({ page: "session", sessionKey });
+    labelId && navigate({ page: "activity", labelId, fromSessionKey });
+  const openSession = (sessionKey: string) => sessionKey && navigate({ page: "session", sessionKey });
   // 周跑量柱状图点进来的是「这一周」，不是某一条记录
-  const openWeek = (weekStart: string) => weekStart && setRoute({ page: "week", weekStart });
+  const openWeek = (weekStart: string) => weekStart && navigate({ page: "week", weekStart });
 
   // 顶栏标题：详情页（某次活动/某次训练）在 NAV 里没有条目，用副标题兜底
   const currentLabel =
@@ -183,21 +334,26 @@ export default function App() {
       <aside className={`sidebar ${navOpen ? "open" : ""}`}>
         <div className="brand">
           <div className="brand-mark" aria-hidden>
-            <svg viewBox="0 0 40 40" fill="none">
-              {/* 跑道分道线 + 跑步的人，做品牌图形 */}
-              <path d="M4 33h32" stroke="currentColor" strokeWidth="1" opacity="0.25" strokeLinecap="round" />
-              <path d="M6 28.5h28M8 24h24M10 19.5h20" stroke="currentColor" strokeWidth="1" opacity="0.16" strokeLinecap="round" />
-              <g stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
-                <circle cx="24.5" cy="8.4" r="2.1" fill="currentColor" stroke="none" />
-                <path d="M22.4 12.4 18.6 14.6l1.4 3.9-3.3 5.7" />
-                <path d="m20 18.2 3.8.8 2.6 4.7" />
-                <path d="m21.2 11.8 3.7 2.3 3.3-.7" />
-                <path d="M15 15.1 12 16.3" />
-              </g>
+            <svg viewBox="0 0 120 120" fill="none">
+              {/* PaceCraft 品牌标志：外层 P (Pace 配速突破) + 内嵌 C (Craft 隐私数据锁扣) */}
+              <path
+                d="M34 94 V26 H64 C79 26 88 35 88 48 C88 61 79 70 64 70 H48"
+                stroke="var(--accent)"
+                strokeWidth="10"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+              <path
+                d="M68 41 H55 C50.5 41 47 44 47 48 C47 52 50.5 55 55 55 H68"
+                stroke="var(--hr)"
+                strokeWidth="6.5"
+                strokeLinecap="round"
+              />
+              <circle cx="56" cy="48" r="3.2" fill="var(--accent)" />
             </svg>
           </div>
-          <h1>COROS 训练看板</h1>
-          <p>自建 · 数据仅存本机</p>
+          <h1>PaceCraft</h1>
+          <p>跑者 AI 训练中心 · 数据仅存本机</p>
         </div>
         <ProfileSwitcher
           onProfileChanged={() => {
@@ -284,11 +440,12 @@ export default function App() {
         <div className="mobile-bar">
           <button
             className="menu-btn"
-            onClick={() => setNavOpen((v) => !v)}
-            aria-label={navOpen ? "关闭菜单" : "打开菜单"}
+            onClick={() => isDetailPage ? handleBack() : setNavOpen((v) => !v)}
+            aria-label={isDetailPage ? "返回" : navOpen ? "关闭菜单" : "打开菜单"}
             aria-expanded={navOpen}
+            title={isDetailPage ? "返回上一级（可手势侧滑返回）" : undefined}
           >
-            <IconMenu size={20} />
+            {isDetailPage ? <IconBack size={20} /> : <IconMenu size={20} />}
           </button>
           <span className="mobile-bar-title">{currentLabel}</span>
           {/* 同步按钮同时常驻这里：桌面版它在侧边栏底部，手机上侧边栏是收起的 */}
@@ -365,7 +522,7 @@ export default function App() {
         {route.page === "week" && route.weekStart && (
           <Week
             weekStart={route.weekStart}
-            onBack={() => setRoute({ page: "training" })}
+            onBack={handleBack}
             onOpenSession={openSession}
             onOpenActivity={openActivity}
             aiConfigured={!!status?.aiConfigured}
@@ -376,7 +533,7 @@ export default function App() {
           <ActivityDetailView
             labelId={route.labelId}
             aiConfigured={!!status?.aiConfigured}
-            onBack={() => route.fromSessionKey ? openSession(route.fromSessionKey) : setRoute({ page: "training" })}
+            onBack={handleBack}
             onOpenSession={openSession}
           />
         )}
@@ -385,7 +542,7 @@ export default function App() {
           <SessionView
             sessionKey={route.sessionKey}
             aiConfigured={!!status?.aiConfigured}
-            onBack={() => setRoute({ page: "training" })}
+            onBack={handleBack}
             onOpenActivity={openActivity}
           />
         )}
