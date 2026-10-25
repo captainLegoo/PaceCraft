@@ -38,15 +38,17 @@ import { analyzeWeek, normalizeWeekStart } from "./ai/week.ts";
 import { buildReport } from "./prediction/pipeline.ts";
 import { analyzeRacePrep, marathonPrep } from "./prediction/prep.ts";
 import { disconnectAuth, getAuthStatus, startAuthFlow } from "./coros/auth-service.ts";
-import { switchProfileDatabase } from "./db/client.ts";
+import { closeCurrentDatabase, switchProfileDatabase } from "./db/client.ts";
 import {
   createNewProfile,
   deleteProfile,
   getActiveProfileId,
   getProfileDbPath,
   listProfileMetas,
+  ROOT_DATA_DIR,
   setActiveProfileId,
   updateProfileMeta,
+  wipeAllLocalData,
 } from "./profile-manager.ts";
 
 const one = <T>(rows: T[]) => rows[0] ?? null;
@@ -149,6 +151,20 @@ const app = new Elysia()
       return { ok: true, activeId: getActiveProfileId() };
     } catch (e) {
       return new Response(JSON.stringify({ error: (e as Error).message }), { status: 400 });
+    }
+  })
+
+  /** 系统数据管理：查看目录路径与彻底抹除所有本地数据 */
+  .get("/api/system/data-info", () => ({ rootDataDir: ROOT_DATA_DIR }))
+  .post("/api/system/wipe-data", () => {
+    try {
+      stopFollow();
+      closeCurrentDatabase();
+      wipeAllLocalData();
+      switchProfileDatabase(getProfileDbPath(getActiveProfileId()));
+      return { ok: true, activeId: getActiveProfileId() };
+    } catch (e) {
+      return new Response(JSON.stringify({ error: (e as Error).message }), { status: 500 });
     }
   })
 

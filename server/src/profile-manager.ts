@@ -200,3 +200,15 @@ export function deleteProfile(id: string): { ok: boolean } {
 
   return { ok: true };
 }
+
+/**
+ * 彻底抹除并重置本机所有跑友数据与档案 (Wipe all data)
+ * 清空 ~/.coros-dashboard 目录并重新初始化默认档案
+ */
+export function wipeAllLocalData(): { ok: boolean } {
+  if (existsSync(ROOT_DATA_DIR)) {
+    rmSync(ROOT_DATA_DIR, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
+  }
+  ensureProfileSystem();
+  return { ok: true };
+}

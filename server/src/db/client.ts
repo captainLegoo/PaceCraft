@@ -35,13 +35,17 @@ function runMigrations(targetSqlite: Database) {
   }
 }
 
-export function switchProfileDatabase(newDbPath: string) {
+export function closeCurrentDatabase() {
   if (currentSqlite) {
     try {
       currentSqlite.exec("PRAGMA wal_checkpoint(TRUNCATE);");
       currentSqlite.close();
     } catch {}
   }
+}
+
+export function switchProfileDatabase(newDbPath: string) {
+  closeCurrentDatabase();
 
   mkdirSync(dirname(newDbPath), { recursive: true, mode: 0o700 });
   currentSqlite = new Database(newDbPath, { create: true });

@@ -388,6 +388,8 @@ export default function Settings({ onStatus }: { onStatus: () => void }) {
   const [testing, setTesting] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [syncDays, setSyncDays] = useState(120);
+  const [dataDir, setDataDir] = useState<string>("");
+  const [wiping, setWiping] = useState(false);
 
   // 同步哪些运动类型：编码表由服务端下发，这里只存选中的 code
   const [sports, setSports] = useState<SyncSportsPayload | null>(null);
@@ -543,6 +545,7 @@ export default function Settings({ onStatus }: { onStatus: () => void }) {
       setPicked(s.selected);
     }).catch(() => {});
     loadHr();
+    api.systemDataInfo().then((info) => setDataDir(info.rootDataDir)).catch(() => {});
   }, []);
 
   /** 切换一个运动类型 */
@@ -572,6 +575,29 @@ export default function Settings({ onStatus }: { onStatus: () => void }) {
       setSportsMsg({ kind: "error", text: (e as Error).message });
     } finally {
       setSportsSaving(false);
+    }
+  };
+
+  const handleWipeData = async () => {
+    const confirmed = window.confirm(
+      "【高危操作警告】\n\n此操作将彻底删除本机所有跑友档案、SQLite 历史训练数据库与授权凭证（保存在本地目录中），操作完全不可逆！\n\n确定要清空所有本地数据并重置吗？"
+    );
+    if (!confirmed) return;
+
+    const secondConfirm = window.prompt("如确认彻底抹除，请输入 WIPE 并点击确定：");
+    if (secondConfirm !== "WIPE") {
+      alert("输入未匹配，已取消操作。");
+      return;
+    }
+
+    setWiping(true);
+    try {
+      await api.wipeAllData();
+      alert("本地所有数据已成功清空，系统将自动重新载入。");
+      window.location.reload();
+    } catch (err: any) {
+      alert(`清空失败: ${err?.message || "未知错误"}`);
+      setWiping(false);
     }
   };
 
@@ -1470,6 +1496,39 @@ export default function Settings({ onStatus }: { onStatus: () => void }) {
           <li>心率区间由本看板按 Tanaka 公式推算（COROS 未提供分区字段），不是官方数据。</li>
           <li>FIT 原始文件每天限 50 次下载，当前看板不自动拉取，仅在你需要时再考虑。</li>
         </ul>
+      </div>
+
+      <div className="card" style={{ borderColor: "rgba(239, 68, 68, 0.35)", marginTop: 14 }}>
+        <h3 className="card-title" style={{ color: "var(--bad, #ef4444)" }}>
+          <IconDatabase size={14} /> 本地数据管理与安全重置 (Danger Zone)
+        </h3>
+        <p className="card-sub">
+          PaceCraft 采用 100% 本地存储架构，所有运动记录、OAuth 凭证及跑力模型均存放在你的个人电脑主目录下。
+        </p>
+
+        <div style={{ background: "var(--surface-2)", padding: "10px 14px", borderRadius: 8, fontSize: 12.5, marginBottom: 14 }}>
+          <div style={{ color: "var(--muted)", marginBottom: 4 }}>本地持久化存储根路径：</div>
+          <code style={{ fontSize: 12, wordBreak: "break-all" }}>{dataDir || "~/.coros-dashboard"}</code>
+        </div>
+
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 12 }}>
+          <div style={{ fontSize: 12, color: "var(--muted)", maxWidth: 520, lineHeight: 1.5 }}>
+            如需彻底卸载软件、抹除隐私或重置所有跑友档案，点击右侧按钮即可安全清空本地全部数据。
+          </div>
+          <button
+            className="btn"
+            onClick={handleWipeData}
+            disabled={wiping}
+            style={{
+              background: "rgba(239, 68, 68, 0.15)",
+              color: "var(--bad, #ef4444)",
+              borderColor: "rgba(239, 68, 68, 0.4)",
+              fontWeight: 600,
+            }}
+          >
+            {wiping ? <><span className="spin" /> 正在清空数据…</> : "清空本地所有档案与数据"}
+          </button>
+        </div>
       </div>
     </>
   );

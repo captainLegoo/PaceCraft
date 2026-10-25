@@ -359,4 +359,7 @@ export const api = {
     req<{ ok: boolean; profile: ProfileItem }>(`/api/profiles/${id}`, { method: "PUT", body: JSON.stringify({ name }) }),
   deleteProfile: (id: string) =>
     req<{ ok: boolean; activeId: string }>(`/api/profiles/${id}`, { method: "DELETE" }),
+
+  systemDataInfo: () => req<{ rootDataDir: string }>("/api/system/data-info"),
+  wipeAllData: () => req<{ ok: boolean; activeId: string }>("/api/system/wipe-data", { method: "POST" }),
 };

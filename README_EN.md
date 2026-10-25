@@ -104,6 +104,9 @@ Navigate to **<http://127.0.0.1:43124>** in your browser.
   ```
 - **Credential Protection**: OAuth token files are strictly written with `0o600` permissions (readable solely by the current OS user) and are deeply excluded via `.gitignore`.
 - **Network Boundary**: Binds exclusively to the loopback interface (`127.0.0.1`) by default, preventing unauthorized exposure across public or shared networks.
+- **Data Erasure & Reset**:
+  - **In-App Reset**: Go to Settings -> "Danger Zone" to securely wipe all local profile databases and tokens.
+  - **Terminal Manual Cleanup**: If the app has already been uninstalled / moved to trash, run `rm -rf ~/.coros-dashboard` in your terminal to completely wipe all traces.
 
 ---
 
