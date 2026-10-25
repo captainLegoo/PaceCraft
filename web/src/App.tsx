@@ -238,7 +238,10 @@ export default function App() {
 
   const {
     connecting: authConnecting,
+    authUrl,
     connect: connectCoros,
+    cancel: cancelCoros,
+    openBrowser: openCorosBrowser,
   } = useCorosAuth(() => {
     refresh();
     void doSyncRef.current?.();
@@ -480,23 +483,54 @@ export default function App() {
                 当前尚未绑定 COROS 高驰账号。一键授权后即可自动拉取你的跑步记录、心率与体能负荷数据。
               </div>
             </div>
-            <button
-              onClick={connectCoros}
-              disabled={authConnecting}
-              style={{
-                background: "#2563eb",
-                color: "#fff",
-                border: "none",
-                borderRadius: 8,
-                padding: "8px 18px",
-                fontSize: 13,
-                fontWeight: 600,
-                cursor: "pointer",
-                boxShadow: "0 2px 8px rgba(37, 99, 235, 0.35)",
-              }}
-            >
-              {authConnecting ? "正在打开授权页面…" : "🔗 一键连接 COROS 账号"}
-            </button>
+            {!authConnecting ? (
+              <button
+                onClick={connectCoros}
+                style={{
+                  background: "#2563eb",
+                  color: "#fff",
+                  border: "none",
+                  borderRadius: 8,
+                  padding: "8px 18px",
+                  fontSize: 13,
+                  fontWeight: 600,
+                  cursor: "pointer",
+                  boxShadow: "0 2px 8px rgba(37, 99, 235, 0.35)",
+                }}
+              >
+                🔗 一键连接 COROS 账号
+              </button>
+            ) : (
+              <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                <span style={{ fontSize: 12, color: "#93c5fd" }}>正在等待浏览器授权…</span>
+                <button
+                  type="button"
+                  onClick={openCorosBrowser}
+                  style={{ fontSize: 12, padding: "5px 10px", background: "#2563eb", color: "#fff", border: "none", borderRadius: 6, cursor: "pointer" }}
+                >
+                  🌐 打开页面
+                </button>
+                {authUrl && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      navigator.clipboard.writeText(authUrl);
+                      alert("授权链接已复制到剪贴板，请直接粘贴至浏览器地址栏打开。");
+                    }}
+                    style={{ fontSize: 12, padding: "5px 10px", background: "rgba(255,255,255,0.1)", color: "#fff", border: "1px solid rgba(255,255,255,0.2)", borderRadius: 6, cursor: "pointer" }}
+                  >
+                    📋 复制链接
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={cancelCoros}
+                  style={{ fontSize: 12, padding: "5px 10px", background: "transparent", color: "var(--text-dim)", border: "1px solid var(--border)", borderRadius: 6, cursor: "pointer" }}
+                >
+                  取消
+                </button>
+              </div>
+            )}
           </div>
         )}
 

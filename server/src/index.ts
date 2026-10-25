@@ -38,7 +38,7 @@ import { analyzeActivity, analyzeSession, callModel, getAiConfig, saveAiConfig }
 import { analyzeWeek, normalizeWeekStart } from "./ai/week.ts";
 import { buildReport } from "./prediction/pipeline.ts";
 import { analyzeRacePrep, marathonPrep } from "./prediction/prep.ts";
-import { disconnectAuth, getAuthStatus, startAuthFlow } from "./coros/auth-service.ts";
+import { disconnectAuth, getAuthStatus, openExternalUrl, startAuthFlow } from "./coros/auth-service.ts";
 import { closeCurrentDatabase, switchProfileDatabase } from "./db/client.ts";
 import {
   createNewProfile,
@@ -179,6 +179,14 @@ const app = new Elysia()
     }
   })
   .post("/api/auth/disconnect", () => disconnectAuth())
+  .post("/api/open-external", ({ body }) => {
+    const url = (body as any)?.url;
+    if (typeof url === "string" && (url.startsWith("http://") || url.startsWith("https://"))) {
+      openExternalUrl(url);
+      return { ok: true };
+    }
+    return new Response(JSON.stringify({ error: "Invalid URL" }), { status: 400 });
+  })
 
   .post("/api/sync", async ({ query }) => {
     const days = Number((query as any).days ?? 120);

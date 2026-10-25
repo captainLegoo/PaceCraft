@@ -1,5 +1,6 @@
 import { createServer, type Server } from "node:http";
 import { randomBytes } from "node:crypto";
+import { execFile } from "node:child_process";
 import { REDIRECT_PORT } from "../config.ts";
 import {
   buildAuthorizeUrl,
@@ -17,6 +18,20 @@ import { getActiveProfileId, updateProfileMeta } from "../profile-manager.ts";
 
 let activeServer: Server | null = null;
 let activeTimer: Timer | null = null;
+
+export function openExternalUrl(url: string) {
+  try {
+    if (process.platform === "darwin") {
+      execFile("open", [url]);
+    } else if (process.platform === "win32") {
+      execFile("cmd", ["/c", "start", "", url]);
+    } else {
+      execFile("xdg-open", [url]);
+    }
+  } catch (err) {
+    console.warn("自动调起默认浏览器失败:", err);
+  }
+}
 
 function b64url(buf: Buffer): string {
   return buf.toString("base64").replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
@@ -256,6 +271,9 @@ export async function startAuthFlow(): Promise<{ authorizeUrl: string }> {
     activeServer?.listen(REDIRECT_PORT, "127.0.0.1", () => resolve());
     activeServer?.on("error", (e) => reject(e));
   });
+
+  // 在系统默认浏览器中自动调起 COROS 官方授权页面
+  openExternalUrl(authorizeUrl);
 
   return { authorizeUrl };
 }
