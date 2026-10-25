@@ -349,6 +349,8 @@ export const api = {
   authStatus: () => req<AuthStatus>("/api/auth/status"),
   startAuth: () => req<{ authorizeUrl: string }>("/api/auth/start", { method: "POST" }),
   disconnectAuth: () => req<{ ok: boolean }>("/api/auth/disconnect", { method: "POST" }),
+  openExternal: (url: string) =>
+    req<{ ok: boolean }>("/api/open-external", { method: "POST", body: JSON.stringify({ url }) }),
 
   profiles: () => req<{ activeId: string; profiles: ProfileItem[] }>("/api/profiles"),
   switchProfile: (id: string) =>

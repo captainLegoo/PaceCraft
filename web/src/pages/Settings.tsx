@@ -366,9 +366,12 @@ export default function Settings({ onStatus }: { onStatus: () => void }) {
     auth,
     loading: authLoading,
     connecting: authConnecting,
+    authUrl,
     msg: authMsg,
     connect: connectCoros,
     disconnect: disconnectCoros,
+    cancel: cancelCoros,
+    openBrowser: openCorosBrowser,
   } = useCorosAuth(() => {
     onStatus();
     api.status().then(setStatus).catch(() => {});
@@ -1351,26 +1354,62 @@ export default function Settings({ onStatus }: { onStatus: () => void }) {
                 <p style={{ fontSize: 12, color: "var(--text-dim)", margin: "0 0 12px 0", lineHeight: 1.5 }}>
                   连接后可直接拉取历史跑步数据、心率、分圈及体能负荷指标。
                 </p>
-                <button
-                  type="button"
-                  onClick={connectCoros}
-                  disabled={authConnecting}
-                  style={{
-                    background: "#2563eb",
-                    color: "#fff",
-                    border: "none",
-                    borderRadius: 6,
-                    padding: "8px 16px",
-                    fontSize: 13,
-                    fontWeight: 600,
-                    cursor: "pointer",
-                    display: "inline-flex",
-                    alignItems: "center",
-                    gap: 6,
-                  }}
-                >
-                  {authConnecting ? "正在等待浏览器授权…" : "🔗 一键连接 COROS 账号"}
-                </button>
+                {!authConnecting ? (
+                  <button
+                    type="button"
+                    onClick={connectCoros}
+                    style={{
+                      background: "#2563eb",
+                      color: "#fff",
+                      border: "none",
+                      borderRadius: 6,
+                      padding: "8px 16px",
+                      fontSize: 13,
+                      fontWeight: 600,
+                      cursor: "pointer",
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: 6,
+                    }}
+                  >
+                    🔗 一键连接 COROS 账号
+                  </button>
+                ) : (
+                  <div style={{ background: "var(--bg-subtle, rgba(0,0,0,0.2))", padding: "10px 12px", borderRadius: 6, border: "1px solid var(--border)" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8, fontSize: 12.5, fontWeight: 500, color: "#60a5fa" }}>
+                      <span className="spinner" style={{ display: "inline-block", width: 12, height: 12, border: "2px solid #60a5fa", borderTopColor: "transparent", borderRadius: "50%", animation: "spin 1s linear infinite" }} />
+                      正在等待浏览器完成授权…
+                    </div>
+                    <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+                      <button
+                        type="button"
+                        onClick={openCorosBrowser}
+                        style={{ fontSize: 12, padding: "4px 10px", background: "#2563eb", color: "#fff", border: "none", borderRadius: 4, cursor: "pointer" }}
+                      >
+                        🌐 在浏览器中打开
+                      </button>
+                      {authUrl && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            navigator.clipboard.writeText(authUrl);
+                            alert("授权链接已复制到剪贴板，请直接粘贴至浏览器地址栏打开。");
+                          }}
+                          style={{ fontSize: 12, padding: "4px 10px", background: "var(--surface-2)", color: "var(--fg)", border: "1px solid var(--border)", borderRadius: 4, cursor: "pointer" }}
+                        >
+                          📋 复制授权链接
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        onClick={cancelCoros}
+                        style={{ fontSize: 12, padding: "4px 10px", background: "transparent", color: "var(--muted)", border: "1px solid var(--border)", borderRadius: 4, cursor: "pointer" }}
+                      >
+                        取消
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </div>
