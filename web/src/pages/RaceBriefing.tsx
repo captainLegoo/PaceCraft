@@ -128,9 +128,9 @@ function PredictionCard({ b, goalSec }: { b: Briefing; goalSec: number | null })
           <span className="hint">手动设定目标用时</span>
         </div>
         <div className="stat">
-          <span className="label">当前预测</span>
+          <span className="label">当前实战预测</span>
           <span className="value num" style={{ color: "var(--accent)", fontSize: 24 }}>{fDur(p.bestSec)}</span>
-          <span className="hint">已折算地形与海拔</span>
+          <span className="hint">赛事专项 · 已折算地形与海拔</span>
         </div>
         <div className="stat">
           <span className="label">距比赛</span>
@@ -188,6 +188,9 @@ function PredictionCard({ b, goalSec }: { b: Briefing; goalSec: number | null })
             </div>
           </div>
           <div style={{ marginTop: 6, fontSize: 11.5, color: "var(--text-faint)" }}>{p.confidenceNote}</div>
+          <div style={{ marginTop: 8, padding: "6px 8px", background: "var(--bg)", borderRadius: 4, fontSize: 11, color: "var(--text-faint)", lineHeight: 1.5 }}>
+            💡 <strong>与预测主页的区别</strong>：此处的备赛预测直接锚定历史真实比赛实战净成绩（反映大赛减量与全力拼搏上限），并针对本场赛道折算地形与海拔；而「预测」主页是日常训练与轻松长跑（LSD）的多模型加权推导，偏向日常保守基线。
+          </div>
         </div>
       </details>
     </>

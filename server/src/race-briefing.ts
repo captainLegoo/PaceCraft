@@ -715,8 +715,10 @@ export function predictMarathon(
     highSec: Math.round(high),
     basis:
       `基于 ${valid.length} 场真实全马的海平面等效成绩中位数 ` +
-      `${fmtHM(medianSec)}，按当前训练状态调整 ${adjustPct >= 0 ? "+" : ""}${adjustPct.toFixed(1)}%，` +
-      `再折算本场地形（${routeClimbRate} m/km）与海拔（${routeAltitude} m）。`,
+      `${fmtHM(medianSec)}，按当前训练状态调整 ${adjustPct >= 0 ? "+" : ""}${adjustPct.toFixed(1)}%` +
+      (routeClimbRate > 0 || routeAltitude > 0
+        ? `，再折算本场地形（${routeClimbRate} m/km）与海拔（${routeAltitude} m${routeClimbRate === 0 ? "，未传轨迹默认平路" : ""}）。`
+        : `（未上传路线轨迹时，默认按平路与海平面理想基准推算，导入 GPX 后将自动叠加赛道爬升与海拔折算）。`),
     factors,
     confidence,
     confidenceNote,

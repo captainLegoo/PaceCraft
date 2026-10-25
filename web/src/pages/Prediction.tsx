@@ -340,14 +340,14 @@ export default function Prediction() {
       </div>
 
       <div className="card" style={{ marginBottom: 14 }}>
-        <h3 className="card-title">成绩预测（自建模型）vs COROS 官方</h3>
+        <h3 className="card-title">日常训练能力预测（自建多模型）vs COROS 官方</h3>
         <p className="card-sub">
-          点任意一行展开，看这个数字由哪几个模型合成、各自权重多少、锚点是哪次训练。
+          基于日常乳酸阈值、间歇及训练拉练数据加权集成。日常长距离多为轻松跑（LSD），外推相对保守，反映日常体能基线；特定赛事的实战预测请前往「赛事」查看备赛简报。点任意一行可展开查看子模型构成。
         </p>
         <table>
           <thead>
             <tr>
-              <th>距离</th><th>自建预测</th><th>配速</th><th>可信区间</th>
+              <th>距离</th><th>日常综合预测</th><th>配速</th><th>可信区间</th>
               <th>信心</th><th>实测校验</th><th>官方预测</th><th>差异</th>
             </tr>
           </thead>
@@ -488,8 +488,7 @@ export default function Prediction() {
       <div className="card">
         <h3 className="card-title">锚点明细：每个距离的最佳连续成绩</h3>
         <p className="card-sub">
-          必须是在<strong>同一次训练内连续</strong>跑出来的。间歇组之间不会拼接，
-          所以不会出现「10 组 ×1km 被当成 10 公里成绩」这种假锚点。
+          所有成绩均取自单次跑步中<strong>一口气不间断跑完</strong>的最佳区间。系统不会跳过间歇休息去强行拼凑碎片（例如「10 组 1km 间歇跑」不会被剔除休息强行拼成 10 公里成绩），确保每个锚点都是货真价实的持续耐力表现。
         </p>
         <table>
           <thead>
@@ -510,12 +509,28 @@ export default function Prediction() {
                   <td style={{ color: "var(--text-faint)" }}>{e.date}</td>
                   <td className="num" style={{ color: "var(--text-faint)" }}>{e.loadThatDay ?? "—"}</td>
                   <td className="num" style={{ color: "var(--text-faint)" }}>{d.candidateCounts[String(e.targetKm)] ?? 1}</td>
-                  <td><span className="pill" style={{ color: TIER_DESC[tier].color }}>{tier}</span></td>
+                  <td>
+                    <span
+                      className="pill"
+                      style={{ color: TIER_DESC[tier].color }}
+                      title={`${tier} 级（${tier === "A" ? "≥15km" : tier === "B" ? "8~15km" : "<8km"}）：${TIER_DESC[tier].desc}`}
+                    >
+                      {tier} 级
+                    </span>
+                  </td>
                 </tr>
               );
             })}
           </tbody>
         </table>
+        <div className="legend" style={{ marginTop: 12, display: "flex", flexWrap: "wrap", gap: 14 }}>
+          {Object.entries(TIER_DESC).map(([k, v]) => (
+            <div className="legend-item" key={k} style={{ fontSize: 12 }}>
+              <span className="legend-swatch" style={{ background: v.color }} />
+              <strong style={{ color: v.color }}>{k} 级</strong>（{k === "A" ? "≥15km" : k === "B" ? "8~15km" : "<8km"}）：{v.desc}
+            </div>
+          ))}
+        </div>
       </div>
     </>
   );

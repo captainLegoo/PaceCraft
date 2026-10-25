@@ -69,8 +69,8 @@ export default function Fitness() {
         <h3 className="card-title">成绩预测</h3>
         <p className="card-sub">
           <strong style={{ color: "var(--text-dim)" }}>COROS 官方模型</strong>，只吃当前
-          VO₂max 与阈值配速。备赛页和赛事页显示的是自建预测（锚定你的真实比赛成绩），
-          口径不同、数值会有几分钟差异，以自建预测为准。
+          VO₂max 与阈值配速。备赛页和赛事页显示的是赛事专属预测（锚定真实比赛成绩与赛道地形），
+          口径不同、数值会有几分钟差异，以赛事备赛预测为准。
         </p>
         <div className="grid g4">
           {preds.map((p) => (
