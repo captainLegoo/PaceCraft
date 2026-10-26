@@ -3,7 +3,7 @@ import { api } from "./api";
 import type { FollowState } from "./api";
 import { ThemeToggle, useTheme } from "./theme";
 import { useTableScroll } from "./table-scroll";
-import { IconBack, IconDatabase, IconFlag, IconMenu, IconPulse, IconShoe, IconSync } from "./icons";
+import { IconBack, IconDatabase, IconFlag, IconMenu, IconPulse, IconRefresh, IconShoe, IconSync } from "./icons";
 import Training from "./pages/Training";
 import ActivityDetailView from "./pages/ActivityDetail";
 import Settings from "./pages/Settings";
@@ -250,6 +250,15 @@ export default function App() {
     refresh();
     api.followStatus().then(setFollow).catch(() => {});
     loadQuota();
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && (e.key === "r" || e.key === "R")) {
+        e.preventDefault();
+        window.location.reload();
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
   }, []);
 
   // 跟随开启时轮询状态；一旦服务端说有新数据待拉，提醒用户
@@ -389,6 +398,14 @@ export default function App() {
         })}
 
         <div className="sidebar-foot">
+          <button
+            className="sync-btn"
+            onClick={() => window.location.reload()}
+            title="刷新页面（快捷键 Cmd+R / Ctrl+R）"
+          >
+            <IconRefresh size={14} />
+            <span>刷新页面</span>
+          </button>
           <button
             className="sync-btn"
             onClick={doSync}

@@ -617,10 +617,18 @@ const app = new Elysia()
   .get("/api/health", ({ query }) => {
     const days = Number((query as any).days ?? 60);
     const tail = <T,>(rows: T[]) => rows.slice(-days);
+    const healthRows = tail(db.select().from(dailyHealth).orderBy(asc(dailyHealth.date)).all());
+    let stressRows = tail(db.select().from(stress).orderBy(asc(stress.date)).all());
+    // 容错兜底：若独立的 stress 序列偶发拉取为空，从 dailyHealth 中提取 stressAvg 补齐，保证图表正常展现
+    if (stressRows.length === 0 && healthRows.length > 0) {
+      stressRows = healthRows
+        .filter((h) => h.stressAvg !== null && h.stressAvg !== undefined)
+        .map((h) => ({ date: h.dateLabel, avgStress: h.stressAvg, level: null }));
+    }
     return {
-      health: tail(db.select().from(dailyHealth).orderBy(asc(dailyHealth.date)).all()),
+      health: healthRows,
       hr: tail(db.select().from(heartRate).orderBy(asc(heartRate.date)).all()),
-      stress: tail(db.select().from(stress).orderBy(asc(stress.date)).all()),
+      stress: stressRows,
       sleep: tail(db.select().from(sleep).orderBy(asc(sleep.date)).all()),
     };
   })

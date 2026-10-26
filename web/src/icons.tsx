@@ -175,6 +175,18 @@ export function IconGear({ size = 18, className }: P) {
   );
 }
 
+/** 刷新页面 */
+export function IconRefresh({ size = 18, className }: P) {
+  return (
+    <svg {...base(size)} className={className} aria-hidden>
+      <path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
+      <path d="M3 3v5h5" />
+      <path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16" />
+      <path d="M16 16h5v5" />
+    </svg>
+  );
+}
+
 /** 同步 */
 export function IconSync({ size = 18, className }: P) {
   return (
