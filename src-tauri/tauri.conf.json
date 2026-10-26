@@ -58,7 +58,7 @@
       "nsis": {
         "installMode": "both",
         "languages": [
-          "ChineseSimplified",
+          "SimpChinese",
           "English"
         ],
         "displayLanguageSelector": false,

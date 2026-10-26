@@ -1,5 +1,5 @@
 import { chromium } from "playwright-core";
-import { existsSync, mkdirSync, copyFileSync } from "node:fs";
+import { existsSync, mkdirSync, copyFileSync, readFileSync, writeFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { execSync } from "node:child_process";
 
@@ -54,8 +54,52 @@ async function main() {
     execSync(`iconutil -c icns "${iconsetDir}" -o "${join(iconsDir, "icon.icns")}" >/dev/null 2>&1`);
   } catch {}
 
-  // 兜底一个 icon.ico
-  copyFileSync(join(iconsDir, "32x32.png"), join(iconsDir, "icon.ico"));
+  // 生成 Windows icon.ico (多尺寸标准 ICO 格式，兼容 MSVC RC.EXE)
+  try {
+    const icoSizes = [16, 32, 48, 64, 128, 256];
+    const entries: { entry: Buffer; imgSize: number }[] = [];
+    const imageBuffers: Buffer[] = [];
+
+    for (const sz of icoSizes) {
+      const tmpPng = join(iconsDir, `__tmp_${sz}.png`);
+      const tmpIco = join(iconsDir, `__tmp_${sz}.ico`);
+      execSync(`sips -z ${sz} ${sz} "${basePng}" --out "${tmpPng}" >/dev/null 2>&1`);
+      execSync(`sips -s format ico "${tmpPng}" --out "${tmpIco}" >/dev/null 2>&1`);
+      const buf = readFileSync(tmpIco);
+      const count = buf.readUInt16LE(4);
+      if (count === 1) {
+        const entry = Buffer.from(buf.subarray(6, 22));
+        const imgOffset = entry.readUInt32LE(12);
+        const imgSize = entry.readUInt32LE(8);
+        const imgData = buf.subarray(imgOffset, imgOffset + imgSize);
+        entries.push({ entry, imgSize });
+        imageBuffers.push(imgData);
+      }
+      try { rmSync(tmpPng); rmSync(tmpIco); } catch {}
+    }
+
+    if (entries.length > 0) {
+      const header = Buffer.alloc(6);
+      header.writeUInt16LE(0, 0); // reserved
+      header.writeUInt16LE(1, 2); // type = icon
+      header.writeUInt16LE(entries.length, 4); // count
+
+      let currentOffset = 6 + 16 * entries.length;
+      const dirBuffer = Buffer.alloc(16 * entries.length);
+
+      for (let i = 0; i < entries.length; i++) {
+        const { entry, imgSize } = entries[i];
+        entry.writeUInt32LE(currentOffset, 12);
+        entry.copy(dirBuffer, i * 16);
+        currentOffset += imgSize;
+      }
+
+      const finalIco = Buffer.concat([header, dirBuffer, ...imageBuffers]);
+      writeFileSync(join(iconsDir, "icon.ico"), finalIco);
+    }
+  } catch (icoErr) {
+    console.warn("生成标准 icon.ico 遇到警告:", icoErr);
+  }
 
   console.log("✓ 图标资源已生成至: src-tauri/icons/");
 }

@@ -1,3 +1,4 @@
+import { EMBEDDED_DIST } from "./embedded-dist.ts";
 import { Elysia } from "elysia";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
@@ -991,18 +992,36 @@ const app = new Elysia()
 
   // ---------- 生产模式：同源托管前端，因此完全不需要 CORS ----------
   .get("/*", async ({ request }) => {
-    const distDir = join(import.meta.dir, "../../web/dist");
-    if (!existsSync(distDir)) {
-      return new Response("前端尚未构建：请在项目根目录运行 bun run build", { status: 404 });
-    }
     const pathname = new URL(request.url).pathname;
-    const rel = pathname === "/" ? "index.html" : pathname.slice(1);
-    const file = Bun.file(join(distDir, rel));
-    if (await file.exists()) return new Response(file);
+    const rel = pathname === "/" ? "index.html" : pathname.replace(/^\/+/, "");
 
-    const index = Bun.file(join(distDir, "index.html"));
-    if (await index.exists()) return new Response(index); // SPA 回退
-    return new Response("Not Found", { status: 404 });
+    // 1. 本地源码运行场景：如果存在物理 web/dist 目录，优先读取热更新静态文件
+    const distDir = join(import.meta.dir, "../../web/dist");
+    if (existsSync(distDir)) {
+      const file = Bun.file(join(distDir, rel));
+      if (await file.exists()) return new Response(file);
+
+      const index = Bun.file(join(distDir, "index.html"));
+      if (await index.exists()) return new Response(index);
+    }
+
+    // 2. 桌面安装包 / 单文件编译场景：从内嵌静态资源表中读取
+    if (EMBEDDED_DIST[rel]) {
+      const item = EMBEDDED_DIST[rel];
+      return new Response(Buffer.from(item.base64, "base64"), {
+        headers: { "Content-Type": item.mime },
+      });
+    }
+
+    // SPA 路由回退到 index.html
+    if (EMBEDDED_DIST["index.html"]) {
+      const item = EMBEDDED_DIST["index.html"];
+      return new Response(Buffer.from(item.base64, "base64"), {
+        headers: { "Content-Type": item.mime },
+      });
+    }
+
+    return new Response("前端尚未构建：请在项目根目录运行 bun run build", { status: 404 });
   })
 
   // 只监听回环地址，不对外暴露。
