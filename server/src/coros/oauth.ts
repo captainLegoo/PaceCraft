@@ -12,6 +12,13 @@ import {
   TOKEN_REFRESH_MARGIN_SEC,
 } from "../config.ts";
 
+export type AccountMismatchInfo = {
+  existingNickname: string;
+  incomingNickname: string;
+  activityCount: number;
+  rawUserInfo?: string;
+};
+
 export type TokenSet = {
   accessToken: string;
   refreshToken?: string;
@@ -20,6 +27,7 @@ export type TokenSet = {
   scope?: string;
   clientId?: string;
   issuer: string;
+  mismatch?: AccountMismatchInfo | null;
 };
 
 type Discovery = {

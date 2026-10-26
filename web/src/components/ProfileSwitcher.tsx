@@ -92,11 +92,13 @@ export default function ProfileSwitcher({
 
   const handleDelete = async (e: React.MouseEvent, id: string, name: string) => {
     e.stopPropagation();
-    if (!window.confirm(`确定要删除跑友档案「${name}」吗？\n该档案下的所有本地训练数据和凭证将被彻底删除且无法恢复。`)) {
+    if (confirmDeleteId !== id) {
+      setConfirmDeleteId(id);
       return;
     }
     try {
       await api.deleteProfile(id);
+      setConfirmDeleteId(null);
       await loadProfiles();
       onProfileChanged();
     } catch (e) {
@@ -104,8 +106,20 @@ export default function ProfileSwitcher({
     }
   };
 
-  const displayName = activeProfile?.nickname || activeProfile?.name || "默认跑友";
-  const avatarLetter = (activeProfile?.nickname || activeProfile?.name || "P").slice(0, 1).toUpperCase();
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+
+  const formatProfileName = (p?: { name?: string; nickname?: string | null } | null) => {
+    if (!p) return "默认跑友";
+    const name = p.name?.trim() || "默认跑友";
+    const nick = p.nickname?.trim();
+    if (nick && nick !== name) {
+      return `${name}（${nick}）`;
+    }
+    return name || nick || "默认跑友";
+  };
+
+  const displayName = formatProfileName(activeProfile);
+  const avatarLetter = (activeProfile?.name || activeProfile?.nickname || "P").slice(0, 1).toUpperCase();
 
   return (
     <div className="profile-switcher-container" ref={dropdownRef} style={{ position: "relative", marginBottom: 12 }}>
@@ -180,8 +194,8 @@ export default function ProfileSwitcher({
             {data?.profiles.map((p) => {
               const isActive = p.id === data.activeId;
               const isEditing = editingId === p.id;
-              const nameText = p.nickname || p.name;
-              const initial = nameText.slice(0, 1).toUpperCase();
+              const nameText = formatProfileName(p);
+              const initial = (p.name || p.nickname || "P").slice(0, 1).toUpperCase();
 
               return (
                 <div
@@ -250,9 +264,6 @@ export default function ProfileSwitcher({
                             </span>
                           )}
                         </div>
-                        {p.nickname && p.name !== p.nickname && (
-                          <div style={{ fontSize: 10, color: "var(--text-dim)" }}>备注: {p.name}</div>
-                        )}
                       </div>
                     )}
                   </div>
@@ -275,6 +286,40 @@ export default function ProfileSwitcher({
                       >
                         保存
                       </button>
+                    ) : confirmDeleteId === p.id ? (
+                      <div style={{ display: "flex", alignItems: "center", gap: 3 }}>
+                        <button
+                          type="button"
+                          onClick={(e) => handleDelete(e, p.id, nameText)}
+                          style={{
+                            border: "none",
+                            background: "#ef4444",
+                            color: "#fff",
+                            borderRadius: 4,
+                            fontSize: 10,
+                            padding: "2px 5px",
+                            cursor: "pointer",
+                            fontWeight: 600,
+                          }}
+                        >
+                          确认删除
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setConfirmDeleteId(null)}
+                          style={{
+                            border: "1px solid var(--border)",
+                            background: "transparent",
+                            color: "var(--text-dim)",
+                            borderRadius: 4,
+                            fontSize: 10,
+                            padding: "2px 4px",
+                            cursor: "pointer",
+                          }}
+                        >
+                          取消
+                        </button>
+                      </div>
                     ) : (
                       <>
                         <button
@@ -283,7 +328,7 @@ export default function ProfileSwitcher({
                             setEditingId(p.id);
                             setEditName(p.name);
                           }}
-                          title="修改备注"
+                          title="修改档案名称"
                           style={{
                             border: "none",
                             background: "transparent",

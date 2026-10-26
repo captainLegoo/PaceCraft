@@ -393,6 +393,10 @@ export default function Settings({ onStatus }: { onStatus: () => void }) {
   const [syncDays, setSyncDays] = useState(120);
   const [dataDir, setDataDir] = useState<string>("");
   const [wiping, setWiping] = useState(false);
+  const [showWipeBox, setShowWipeBox] = useState(false);
+  const [wipeInput, setWipeInput] = useState("");
+  const [wipeError, setWipeError] = useState<string | null>(null);
+  const [confirmingDisconnect, setConfirmingDisconnect] = useState(false);
 
   // 同步哪些运动类型：编码表由服务端下发，这里只存选中的 code
   const [sports, setSports] = useState<SyncSportsPayload | null>(null);
@@ -581,25 +585,15 @@ export default function Settings({ onStatus }: { onStatus: () => void }) {
     }
   };
 
-  const handleWipeData = async () => {
-    const confirmed = window.confirm(
-      "【高危操作警告】\n\n此操作将彻底删除本机所有跑友档案、SQLite 历史训练数据库与授权凭证（保存在本地目录中），操作完全不可逆！\n\n确定要清空所有本地数据并重置吗？"
-    );
-    if (!confirmed) return;
-
-    const secondConfirm = window.prompt("如确认彻底抹除，请输入 WIPE 并点击确定：");
-    if (secondConfirm !== "WIPE") {
-      alert("输入未匹配，已取消操作。");
-      return;
-    }
-
+  const handleConfirmWipe = async () => {
+    if (wipeInput.trim() !== "WIPE") return;
     setWiping(true);
+    setWipeError(null);
     try {
       await api.wipeAllData();
-      alert("本地所有数据已成功清空，系统将自动重新载入。");
       window.location.reload();
     } catch (err: any) {
-      alert(`清空失败: ${err?.message || "未知错误"}`);
+      setWipeError(err?.message || "未知错误");
       setWiping(false);
     }
   };
@@ -1314,9 +1308,9 @@ export default function Settings({ onStatus }: { onStatus: () => void }) {
             <h3 className="card-title">
               <span style={{ display: "inline-block", width: 8, height: 8, borderRadius: "50%", background: auth?.connected ? "#10b981" : "#f59e0b", marginRight: 6 }} />
               COROS 账号连接
-              {status?.profile?.name && (
+              {status?.profile && (
                 <span style={{ fontSize: 11, fontWeight: "normal", color: "var(--text-dim)", marginLeft: 8 }}>
-                  (档案: {status.profile.name})
+                  (档案: {status.profile.nickname && status.profile.nickname !== status.profile.name ? `${status.profile.name}（${status.profile.nickname}）` : status.profile.name})
                 </span>
               )}
             </h3>
@@ -1337,13 +1331,44 @@ export default function Settings({ onStatus }: { onStatus: () => void }) {
                 <div style={{ fontSize: 12, color: "var(--text-dim)" }}>
                   Token 有效期至：{auth.expiresAt ? new Date(auth.expiresAt * 1000).toLocaleString("zh-CN") : "长期有效（自动续期）"}
                 </div>
-                <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
+                <div style={{ display: "flex", gap: 8, marginTop: 12, alignItems: "center", flexWrap: "wrap" }}>
                   <button className="btn-secondary" onClick={connectCoros} disabled={authConnecting} style={{ fontSize: 12, padding: "5px 12px" }}>
                     {authConnecting ? "正在打开授权页面…" : "重新授权"}
                   </button>
-                  <button className="btn-danger" onClick={disconnectCoros} disabled={authLoading} style={{ fontSize: 12, padding: "5px 12px", background: "rgba(239,68,68,0.1)", color: "#ef4444", border: "1px solid rgba(239,68,68,0.2)", borderRadius: 6, cursor: "pointer" }}>
-                    解除绑定
-                  </button>
+                  {!confirmingDisconnect ? (
+                    <button
+                      type="button"
+                      className="btn-danger"
+                      onClick={() => setConfirmingDisconnect(true)}
+                      disabled={authLoading}
+                      style={{ fontSize: 12, padding: "5px 12px", background: "rgba(239,68,68,0.1)", color: "#ef4444", border: "1px solid rgba(239,68,68,0.2)", borderRadius: 6, cursor: "pointer" }}
+                    >
+                      解除绑定
+                    </button>
+                  ) : (
+                    <div style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "3px 8px", background: "rgba(239,68,68,0.08)", borderRadius: 6, border: "1px solid rgba(239,68,68,0.25)" }}>
+                      <span style={{ fontSize: 12, color: "#ef4444", fontWeight: 500 }}>确定解除？</span>
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          await disconnectCoros();
+                          setConfirmingDisconnect(false);
+                        }}
+                        disabled={authLoading}
+                        style={{ fontSize: 11.5, padding: "3px 8px", background: "#ef4444", color: "#fff", border: "none", borderRadius: 4, cursor: "pointer", fontWeight: 600 }}
+                      >
+                        {authLoading ? "解绑中…" : "确认解绑"}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setConfirmingDisconnect(false)}
+                        disabled={authLoading}
+                        style={{ fontSize: 11.5, padding: "3px 6px", background: "transparent", color: "var(--text-dim)", border: "1px solid var(--border)", borderRadius: 4, cursor: "pointer" }}
+                      >
+                        取消
+                      </button>
+                    </div>
+                  )}
                 </div>
               </div>
             ) : (
@@ -1491,8 +1516,8 @@ export default function Settings({ onStatus }: { onStatus: () => void }) {
               <input type="number" value={syncDays} onChange={(e) => setSyncDays(Number(e.target.value))} />
               <div className="hint">活动多时同步耗时较长（拉取分圈是主要开销），首次建议设小一点。</div>
             </label>
-            <button className="btn" onClick={doSync} disabled={syncing}>
-              {syncing ? <><span className="spin" /> 同步中，约需 1–2 分钟…</> : "立即同步"}
+            <button className="btn" onClick={doSync} disabled={syncing || !auth?.connected} title={!auth?.connected ? "请先连接 COROS 账号" : undefined}>
+              {syncing ? <><span className="spin" /> 同步中，约需 1–2 分钟…</> : !auth?.connected ? "请先连接 COROS 账号" : "立即同步"}
             </button>
             {msg && (
               <div className={`banner ${msg.kind === "ok" ? "info" : "error"}`} style={{ marginTop: 14, marginBottom: 0 }}>
@@ -1550,24 +1575,86 @@ export default function Settings({ onStatus }: { onStatus: () => void }) {
           <code style={{ fontSize: 12, wordBreak: "break-all" }}>{dataDir || "~/.coros-dashboard"}</code>
         </div>
 
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 12 }}>
-          <div style={{ fontSize: 12, color: "var(--muted)", maxWidth: 520, lineHeight: 1.5 }}>
-            如需彻底卸载软件、抹除隐私或重置所有跑友档案，点击右侧按钮即可安全清空本地全部数据。
+        {!showWipeBox ? (
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 12 }}>
+            <div style={{ fontSize: 12, color: "var(--muted)", maxWidth: 520, lineHeight: 1.5 }}>
+              如需彻底卸载软件、抹除隐私或重置所有跑友档案，点击右侧按钮即可安全清空本地全部数据。
+            </div>
+            <button
+              className="btn"
+              onClick={() => { setShowWipeBox(true); setWipeInput(""); setWipeError(null); }}
+              disabled={wiping}
+              style={{
+                background: "rgba(239, 68, 68, 0.15)",
+                color: "var(--bad, #ef4444)",
+                borderColor: "rgba(239, 68, 68, 0.4)",
+                fontWeight: 600,
+              }}
+            >
+              清空本地所有档案与数据
+            </button>
           </div>
-          <button
-            className="btn"
-            onClick={handleWipeData}
-            disabled={wiping}
-            style={{
-              background: "rgba(239, 68, 68, 0.15)",
-              color: "var(--bad, #ef4444)",
-              borderColor: "rgba(239, 68, 68, 0.4)",
-              fontWeight: 600,
-            }}
-          >
-            {wiping ? <><span className="spin" /> 正在清空数据…</> : "清空本地所有档案与数据"}
-          </button>
-        </div>
+        ) : (
+          <div style={{
+            background: "rgba(239, 68, 68, 0.08)",
+            border: "1px solid rgba(239, 68, 68, 0.35)",
+            borderRadius: 8,
+            padding: "16px",
+          }}>
+            <div style={{ color: "#ef4444", fontWeight: 600, fontSize: 13.5, marginBottom: 8, display: "flex", alignItems: "center", gap: 6 }}>
+              <span>⚠️</span> 【高危操作警告】清空本地所有数据
+            </div>
+            <p style={{ fontSize: 12.5, color: "var(--text-dim)", margin: "0 0 12px 0", lineHeight: 1.6 }}>
+              此操作将彻底删除本机所有跑友档案、SQLite 历史训练数据库与授权凭证，操作完全不可逆！<br />
+              如确认彻底抹除，请在下方输入 <strong style={{ color: "#ef4444", fontFamily: "monospace", fontSize: 13 }}>WIPE</strong> 并点击确认：
+            </p>
+            <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+              <input
+                type="text"
+                placeholder="输入 WIPE 确认"
+                value={wipeInput}
+                onChange={(e) => setWipeInput(e.target.value)}
+                disabled={wiping}
+                style={{
+                  padding: "6px 12px",
+                  borderRadius: 6,
+                  border: "1px solid rgba(239, 68, 68, 0.4)",
+                  background: "var(--surface)",
+                  color: "var(--text)",
+                  fontSize: 13,
+                  width: 150,
+                  fontFamily: "monospace",
+                  fontWeight: 600,
+                }}
+              />
+              <button
+                className="btn"
+                onClick={handleConfirmWipe}
+                disabled={wipeInput.trim() !== "WIPE" || wiping}
+                style={{
+                  background: wipeInput.trim() === "WIPE" ? "#dc2626" : "rgba(239, 68, 68, 0.2)",
+                  color: wipeInput.trim() === "WIPE" ? "#fff" : "rgba(255, 255, 255, 0.4)",
+                  borderColor: "transparent",
+                  fontWeight: 600,
+                }}
+              >
+                {wiping ? <><span className="spin" /> 正在清空…</> : "确认彻底抹除"}
+              </button>
+              <button
+                className="btn btn-subtle"
+                onClick={() => { setShowWipeBox(false); setWipeInput(""); setWipeError(null); }}
+                disabled={wiping}
+              >
+                取消
+              </button>
+            </div>
+            {wipeError && (
+              <div style={{ marginTop: 10, color: "#ef4444", fontSize: 12 }}>
+                抹除失败：{wipeError}
+              </div>
+            )}
+          </div>
+        )}
       </div>
     </>
   );

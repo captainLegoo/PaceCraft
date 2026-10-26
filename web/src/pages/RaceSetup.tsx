@@ -200,6 +200,7 @@ export default function RaceSetup({
   const [dragOver, setDragOver] = useState(false);
   // 关联的那次训练（若有）
   const [labelId, setLabelId] = useState<string | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState(false);
 
 
   const loadBriefing = (id: number) =>
@@ -1037,13 +1038,33 @@ export default function RaceSetup({
           <button className="pill" onClick={openEditForm} style={{ cursor: "pointer", border: "none", background: "none" }}>
             修改
           </button>
-          <button
-            className="pill"
-            onClick={() => { if (confirm(`删除「${detail.race.name}」这场赛事设定？`)) void remove(); }}
-            style={{ cursor: "pointer", border: "none", background: "none", color: "var(--warn)" }}
-          >
-            删除
-          </button>
+          {!confirmDelete ? (
+            <button
+              className="pill"
+              onClick={() => setConfirmDelete(true)}
+              style={{ cursor: "pointer", border: "none", background: "none", color: "var(--warn)" }}
+            >
+              删除
+            </button>
+          ) : (
+            <span style={{ display: "inline-flex", gap: 6, alignItems: "center" }}>
+              <span style={{ fontSize: 12, color: "var(--warn)", fontWeight: 500 }}>确定删除？</span>
+              <button
+                className="pill"
+                onClick={() => { setConfirmDelete(false); void remove(); }}
+                style={{ cursor: "pointer", background: "var(--warn)", color: "#fff", border: "none" }}
+              >
+                确定
+              </button>
+              <button
+                className="pill"
+                onClick={() => setConfirmDelete(false)}
+                style={{ cursor: "pointer", border: "none", background: "none" }}
+              >
+                取消
+              </button>
+            </span>
+          )}
         </div>
       </div>
 

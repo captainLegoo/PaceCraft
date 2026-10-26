@@ -64,13 +64,17 @@ export function useCorosAuth(onSuccess?: () => void) {
       let popup: Window | null = null;
 
       // 1. 监听来自授权完成子窗口的 postMessage
-      const handler = (e: MessageEvent) => {
+      const handler = async (e: MessageEvent) => {
         if (e.data?.type === "COROS_AUTH_RESULT") {
           cleanupListeners();
           if (e.data.ok) {
-            setMsg({ text: "COROS 账号连接成功！", kind: "ok" });
-            refreshAuth();
-            onSuccessRef.current?.();
+            const s = await refreshAuth();
+            if (s?.mismatch) {
+              setMsg({ text: "检测到授权账号与当前档案已有数据不一致，请在界面中选择处理方式", kind: "ok" });
+            } else {
+              setMsg({ text: "COROS 账号连接成功！", kind: "ok" });
+              onSuccessRef.current?.();
+            }
           } else {
             setMsg({ text: "授权未完成或已被取消", kind: "err" });
           }
@@ -91,8 +95,12 @@ export function useCorosAuth(onSuccess?: () => void) {
           setAuthUrl(null);
           const latest = await refreshAuth();
           if (latest?.connected) {
-            setMsg({ text: "COROS 账号已就绪！", kind: "ok" });
-            onSuccessRef.current?.();
+            if (latest.mismatch) {
+              setMsg({ text: "检测到授权账号与当前档案已有数据不一致，请在界面中选择处理方式", kind: "ok" });
+            } else {
+              setMsg({ text: "COROS 账号已就绪！", kind: "ok" });
+              onSuccessRef.current?.();
+            }
           }
           return;
         }
@@ -102,8 +110,12 @@ export function useCorosAuth(onSuccess?: () => void) {
           cleanupListeners();
           setConnecting(false);
           setAuthUrl(null);
-          setMsg({ text: "COROS 账号连接成功！", kind: "ok" });
-          onSuccessRef.current?.();
+          if (s.mismatch) {
+            setMsg({ text: "检测到授权账号与当前档案已有数据不一致，请在界面中选择处理方式", kind: "ok" });
+          } else {
+            setMsg({ text: "COROS 账号连接成功！", kind: "ok" });
+            onSuccessRef.current?.();
+          }
         }
       }, 2000);
     } catch (e) {
@@ -114,12 +126,12 @@ export function useCorosAuth(onSuccess?: () => void) {
   };
 
   const disconnect = async () => {
-    if (!window.confirm("确定要解除当前 COROS 账号绑定吗？解除后需重新授权才能同步最新数据。")) return;
     setLoading(true);
     try {
       await api.disconnectAuth();
       await refreshAuth();
       setMsg({ text: "已解除 COROS 账号绑定", kind: "ok" });
+      onSuccessRef.current?.();
     } catch (e) {
       setMsg({ text: `解绑失败：${(e as Error).message}`, kind: "err" });
     } finally {

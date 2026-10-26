@@ -160,11 +160,18 @@ export type ProfileItem = {
   active: boolean;
 };
 
+export type AccountMismatchInfo = {
+  existingNickname: string;
+  incomingNickname: string;
+  activityCount: number;
+};
+
 export type AuthStatus = {
   connected: boolean;
   nickname: string | null;
   expiresAt: number | null;
   expired: boolean;
+  mismatch?: AccountMismatchInfo | null;
 };
 
 /** 同步运动类型配置：编码表由服务端下发，前端不自己维护一份 */
@@ -349,6 +356,11 @@ export const api = {
   authStatus: () => req<AuthStatus>("/api/auth/status"),
   startAuth: () => req<{ authorizeUrl: string }>("/api/auth/start", { method: "POST" }),
   disconnectAuth: () => req<{ ok: boolean }>("/api/auth/disconnect", { method: "POST" }),
+  resolveMismatch: (action: "create_new" | "overwrite" | "merge") =>
+    req<{ ok: boolean; activeId: string }>("/api/auth/resolve-mismatch", {
+      method: "POST",
+      body: JSON.stringify({ action }),
+    }),
   openExternal: (url: string) =>
     req<{ ok: boolean }>("/api/open-external", { method: "POST", body: JSON.stringify({ url }) }),
 

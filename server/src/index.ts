@@ -38,7 +38,13 @@ import { analyzeActivity, analyzeSession, callModel, getAiConfig, saveAiConfig }
 import { analyzeWeek, normalizeWeekStart } from "./ai/week.ts";
 import { buildReport } from "./prediction/pipeline.ts";
 import { analyzeRacePrep, marathonPrep } from "./prediction/prep.ts";
-import { disconnectAuth, getAuthStatus, openExternalUrl, startAuthFlow } from "./coros/auth-service.ts";
+import {
+  disconnectAuth,
+  getAuthStatus,
+  openExternalUrl,
+  resolveAccountMismatch,
+  startAuthFlow,
+} from "./coros/auth-service.ts";
 import { closeCurrentDatabase, switchProfileDatabase } from "./db/client.ts";
 import {
   createNewProfile,
@@ -133,10 +139,45 @@ const app = new Elysia()
       return new Response(JSON.stringify({ error: "当前档案正在同步数据中，请稍候同步完成后再新建跑友" }), { status: 409 });
     }
     const name = (body as any)?.name;
+    // 继承当前活跃档案的 AI 配置与运动类型设置
+    let aiRow: any = null;
+    let syncRow: any = null;
+    try {
+      aiRow = sqlite.query("SELECT * FROM ai_settings WHERE id = 1 LIMIT 1").get();
+      syncRow = sqlite.query("SELECT * FROM sync_settings WHERE id = 1 LIMIT 1").get();
+    } catch {}
+
     stopFollow();
     const newProfile = createNewProfile(name);
     setActiveProfileId(newProfile.id);
     switchProfileDatabase(getProfileDbPath(newProfile.id));
+
+    try {
+      if (aiRow) {
+        sqlite.query(`
+          INSERT INTO ai_settings (id, provider, base_url, api_key, model, temperature, max_tokens, updated_at)
+          VALUES (1, ?, ?, ?, ?, ?, ?, unixepoch())
+          ON CONFLICT(id) DO UPDATE SET
+            provider = excluded.provider,
+            base_url = excluded.base_url,
+            api_key = excluded.api_key,
+            model = excluded.model,
+            temperature = excluded.temperature,
+            max_tokens = excluded.max_tokens,
+            updated_at = unixepoch()
+        `).run(aiRow.provider, aiRow.base_url, aiRow.api_key, aiRow.model, aiRow.temperature, aiRow.max_tokens);
+      }
+      if (syncRow) {
+        sqlite.query(`
+          INSERT INTO sync_settings (id, sport_type_codes, updated_at)
+          VALUES (1, ?, unixepoch())
+          ON CONFLICT(id) DO UPDATE SET
+            sport_type_codes = excluded.sport_type_codes,
+            updated_at = unixepoch()
+        `).run(syncRow.sport_type_codes);
+      }
+    } catch {}
+
     return { ok: true, profile: newProfile };
   })
   .put("/api/profiles/:id", ({ params, body }) => {
@@ -145,6 +186,9 @@ const app = new Elysia()
     return { ok: true, profile: updated };
   })
   .delete("/api/profiles/:id", ({ params }) => {
+    if (syncInFlight) {
+      return new Response(JSON.stringify({ error: "当前正在同步数据中，请稍候同步完成后再删除档案" }), { status: 409 });
+    }
     try {
       stopFollow();
       deleteProfile(params.id);
@@ -158,6 +202,9 @@ const app = new Elysia()
   /** 系统数据管理：查看目录路径与彻底抹除所有本地数据 */
   .get("/api/system/data-info", () => ({ rootDataDir: ROOT_DATA_DIR }))
   .post("/api/system/wipe-data", () => {
+    if (syncInFlight) {
+      return new Response(JSON.stringify({ error: "当前正在同步数据中，请稍候同步完成后再清空数据" }), { status: 409 });
+    }
     try {
       stopFollow();
       closeCurrentDatabase();
@@ -179,6 +226,18 @@ const app = new Elysia()
     }
   })
   .post("/api/auth/disconnect", () => disconnectAuth())
+  .post("/api/auth/resolve-mismatch", ({ body }) => {
+    try {
+      const action = (body as any)?.action;
+      if (!action || !["create_new", "overwrite", "merge"].includes(action)) {
+        return new Response(JSON.stringify({ error: "无效的操作指令" }), { status: 400 });
+      }
+      const res = resolveAccountMismatch(action);
+      return res;
+    } catch (e) {
+      return new Response(JSON.stringify({ error: (e as Error).message }), { status: 400 });
+    }
+  })
   .post("/api/open-external", ({ body }) => {
     const url = (body as any)?.url;
     if (typeof url === "string" && (url.startsWith("http://") || url.startsWith("https://"))) {
@@ -189,6 +248,13 @@ const app = new Elysia()
   })
 
   .post("/api/sync", async ({ query }) => {
+    const auth = getAuthStatus();
+    if (!auth.connected) {
+      return new Response(JSON.stringify({ error: "尚未连接 COROS 账号，请先完成授权" }), { status: 400 });
+    }
+    if (auth.mismatch) {
+      return new Response(JSON.stringify({ error: "检测到高驰账号不一致，请先确认处理方式" }), { status: 409 });
+    }
     const days = Number((query as any).days ?? 120);
     const withLaps = (query as any).laps !== "false";
     return await syncAll({ days, withLaps });
@@ -215,7 +281,16 @@ const app = new Elysia()
 
   /** 后台跟随：手表上传后自动探测 */
   .get("/api/sync/follow", () => followState())
-  .post("/api/sync/follow", () => startFollow())
+  .post("/api/sync/follow", () => {
+    const auth = getAuthStatus();
+    if (!auth.connected) {
+      return new Response(JSON.stringify({ error: "尚未连接 COROS 账号，无法开启跟随" }), { status: 400 });
+    }
+    if (auth.mismatch) {
+      return new Response(JSON.stringify({ error: "检测到高驰账号不一致，请先确认处理方式" }), { status: 409 });
+    }
+    return startFollow();
+  })
   .delete("/api/sync/follow", () => stopFollow())
 
   /**
@@ -227,6 +302,13 @@ const app = new Elysia()
    *  - 返回结构化结果（含新增了多少条），前端可以明确告诉用户"同步到了"
    */
   .post("/api/sync/quick", async ({ query }) => {
+    const auth = getAuthStatus();
+    if (!auth.connected) {
+      return { ok: false, message: "尚未连接 COROS 账号，请先完成授权" };
+    }
+    if (auth.mismatch) {
+      return { ok: false, message: "检测到高驰账号不一致，请先在看板中确认处理方式" };
+    }
     if (syncInFlight) {
       return { ok: false, busy: true, message: "同步正在进行中，请稍候" };
     }
