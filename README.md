@@ -7,8 +7,8 @@
 
 [English](README_EN.md) | **简体中文**
 
-[![GitHub Release](https://img.shields.io/github/v/release/your-username/PaceCraft?color=5a7d00&label=Release)](https://github.com/your-username/PaceCraft/releases)
-[![Platform](https://img.shields.io/badge/Platform-macOS%20%7C%20Windows-blue)](https://github.com/your-username/PaceCraft/releases)
+[![GitHub Release](https://img.shields.io/github/v/release/captainLegoo/PaceCraft?include_prereleases&color=5a7d00&label=Release)](https://github.com/captainLegoo/PaceCraft/releases)
+[![Platform](https://img.shields.io/badge/Platform-macOS%20%7C%20Windows-blue)](https://github.com/captainLegoo/PaceCraft/releases)
 [![License](https://img.shields.io/badge/License-MIT-gray.svg)](#开源协议与免责声明)
 
 </div>
@@ -49,11 +49,24 @@
 
 无需配置 Node.js、Bun 或终端环境：
 
-1. 前往 [Releases 发行页](../../releases) 下载对应系统的最新安装包：
+1. 前往 [Releases 发行页](https://github.com/captainLegoo/PaceCraft/releases) 下载对应系统的最新安装包：
    - **macOS**：下载 `.dmg` 文件，打开后拖入 Applications 目录。
    - **Windows**：下载 `.exe` 安装程序直接运行。
 2. 打开 PaceCraft，根据界面引导点击 **「连接 COROS 账号」** 完成网页授权。
 3. 系统将自动拉取历史训练数据，开始你的科学训练与 AI 复盘！
+
+> [!TIP]
+> **首次运行遇到系统安全拦截提示？（macOS & Windows 快速解决）**
+> 
+> 本项目为开源独立软件，尚未购买商业代码签名证书，部分系统在首次打开从浏览器下载的程序时可能会有拦截提示（并非软件本身有问题）：
+> 
+> - **🍎 macOS 用户（提示「已损坏，无法打开」或被隔离拦截）**
+>   - **方式一（终端一键解除，最推荐）**：打开 Mac「终端」应用，执行 `xattr -cr /Applications/PaceCraft.app` 即可。
+>   - **方式二（系统设置中授权）**：打开 Mac **「系统设置」** ➔ **「隐私与安全性」** ➔ 页面下方找到安全性提示，点击 **「仍要打开」**。
+>   - **方式三（访达右键）**：在「访达」应用程序中，按住 `Control` 键点击 PaceCraft 选择 **「打开」**。
+> 
+> - **🪟 Windows 用户（蓝底弹窗提示「Windows 已保护你的电脑 / SmartScreen」）**
+>   - 点击弹窗上的 **「更多信息」 (More info)** ➔ 再点击右下角出现的 **「仍要运行」 (Run anyway)** 即可继续安装运行。仅首次安装时提示一次，之后不再提示。
 
 ---
 
@@ -67,7 +80,7 @@
 
 ```bash
 # 1. 克隆代码仓库
-git clone https://github.com/your-username/PaceCraft.git
+git clone https://github.com/captainLegoo/PaceCraft.git
 cd PaceCraft
 
 # 2. 安装项目依赖

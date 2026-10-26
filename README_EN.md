@@ -7,8 +7,8 @@
 
 **English** | [简体中文](README.md)
 
-[![GitHub Release](https://img.shields.io/github/v/release/your-username/PaceCraft?color=5a7d00&label=Release)](https://github.com/your-username/PaceCraft/releases)
-[![Platform](https://img.shields.io/badge/Platform-macOS%20%7C%20Windows-blue)](https://github.com/your-username/PaceCraft/releases)
+[![GitHub Release](https://img.shields.io/github/v/release/captainLegoo/PaceCraft?include_prereleases&color=5a7d00&label=Release)](https://github.com/captainLegoo/PaceCraft/releases)
+[![Platform](https://img.shields.io/badge/Platform-macOS%20%7C%20Windows-blue)](https://github.com/captainLegoo/PaceCraft/releases)
 [![License](https://img.shields.io/badge/License-MIT-gray.svg)](#-license--disclaimer)
 
 </div>
@@ -55,11 +55,24 @@ PaceCraft performs lap-by-lap data cleaning, independent race capability forecas
 
 No need to install Node.js, Bun, or use terminal commands:
 
-1. Download the latest installer from the [Releases Page](../../releases):
+1. Download the latest installer from the [Releases Page](https://github.com/captainLegoo/PaceCraft/releases):
    - **macOS**: Download `.dmg`, open it, and drag PaceCraft to your Applications folder.
    - **Windows**: Download and run `.exe` installer.
 2. Launch PaceCraft and follow the UI prompt to click **"Connect COROS Account"** for browser-based OAuth authorization.
 3. Your historical training data will automatically synchronize into your local database!
+
+> [!TIP]
+> **System Security Warnings on First Launch? (macOS & Windows Quick Fix)**
+> 
+> As an independent open-source project without commercial code-signing certificates, some operating systems might display an initial safety warning for downloaded files:
+> 
+> - **🍎 macOS Users ("PaceCraft is damaged and cannot be opened")**
+>   - **Method 1 (Terminal, Recommended)**: Run `xattr -cr /Applications/PaceCraft.app` in Terminal.
+>   - **Method 2 (System Settings)**: Open **System Settings** ➔ **Privacy & Security** ➔ Scroll to Security section and click **"Open Anyway"**.
+>   - **Method 3 (Control-Click)**: In Finder's Applications folder, hold `Control` and click `PaceCraft.app`, select **"Open"**.
+> 
+> - **🪟 Windows Users ("Windows protected your PC / Microsoft Defender SmartScreen")**
+>   - Click the underlined **"More info"** link on the blue prompt ➔ Click the **"Run anyway"** button that appears. This only prompts once during initial installation.
 
 ---
 
@@ -73,7 +86,7 @@ Ideal for contributors or those wishing to access the dashboard on a mobile devi
 
 ```bash
 # 1. Clone the repository
-git clone https://github.com/your-username/PaceCraft.git
+git clone https://github.com/captainLegoo/PaceCraft.git
 cd PaceCraft
 
 # 2. Install dependencies

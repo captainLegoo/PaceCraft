@@ -99,6 +99,12 @@ jobs:
             - **Windows**: 下载 `*.exe` 安装包安装运行
             - **macOS**: 下载 `*.dmg` 拖入 Applications 运行
 
+            > **🍎 macOS 首次打开提示「已损坏，无法打开」？**
+            > 打开 Mac「终端」执行 `xattr -cr /Applications/PaceCraft.app`，或在「系统设置」➔「隐私与安全性」中点击「仍要打开」。
+            > 
+            > **🪟 Windows 提示「Windows 已保护你的电脑 (SmartScreen)」？**
+            > 点击弹窗中的「更多信息 (More info)」➔ 点击「仍要运行 (Run anyway)」即可正常安装。
+
             ### 特性说明
             - 跨手表生态数据聚合与 AI 训练助理，开箱即用，无需配置终端与 Node/Bun 环境
             - 数据全量仅持久化存储在个人电脑本地 (`~/.coros-dashboard`)，安全隐私绝对隔离
