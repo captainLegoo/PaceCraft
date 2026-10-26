@@ -61,6 +61,19 @@ No need to install Node.js, Bun, or use terminal commands:
 2. Launch PaceCraft and follow the UI prompt to click **"Connect COROS Account"** for browser-based OAuth authorization.
 3. Your historical training data will automatically synchronize into your local database!
 
+> [!TIP]
+> **System Security Warnings on First Launch? (macOS & Windows Quick Fix)**
+> 
+> As an independent open-source project without commercial code-signing certificates, some operating systems might display an initial safety warning for downloaded files:
+> 
+> - **🍎 macOS Users ("PaceCraft is damaged and cannot be opened")**
+>   - **Method 1 (Terminal, Recommended)**: Run `xattr -cr /Applications/PaceCraft.app` in Terminal.
+>   - **Method 2 (System Settings)**: Open **System Settings** ➔ **Privacy & Security** ➔ Scroll to Security section and click **"Open Anyway"**.
+>   - **Method 3 (Control-Click)**: In Finder's Applications folder, hold `Control` and click `PaceCraft.app`, select **"Open"**.
+> 
+> - **🪟 Windows Users ("Windows protected your PC / Microsoft Defender SmartScreen")**
+>   - Click the underlined **"More info"** link on the blue prompt ➔ Click the **"Run anyway"** button that appears. This only prompts once during initial installation.
+
 ---
 
 ### Option 2: Run from Source (Developers & LAN Access)
