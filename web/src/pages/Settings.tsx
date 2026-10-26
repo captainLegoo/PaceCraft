@@ -372,10 +372,16 @@ export default function Settings({ onStatus }: { onStatus: () => void }) {
     disconnect: disconnectCoros,
     cancel: cancelCoros,
     openBrowser: openCorosBrowser,
-  } = useCorosAuth(() => {
-    onStatus();
-    api.status().then(setStatus).catch(() => {});
-  });
+  } = useCorosAuth(
+    () => {
+      onStatus();
+      api.status().then(setStatus).catch(() => {});
+    },
+    () => {
+      onStatus();
+      api.status().then(setStatus).catch(() => {});
+    }
+  );
 
   const [cfg, setCfg] = useState<any>({
     provider: "openai", baseUrl: "https://api.openai.com/v1", apiKey: "",

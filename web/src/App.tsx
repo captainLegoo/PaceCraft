@@ -226,8 +226,8 @@ export default function App() {
 
   /** 数据版本号：同步成功后 +1，所有页面据此重新拉数据 */
   const [dataVersion, setDataVersion] = useState(0);
-  /** 让轮询回调能调用最新的 doSync，避免闭包捕获旧函数 */
-  const doSyncRef = useRef<(() => Promise<void>) | null>(null);
+  /** 让轮询回调能调用最新的 runSync，避免闭包捕获旧函数 */
+  const runSyncRef = useRef<(() => Promise<void>) | null>(null);
   const [syncing, setSyncing] = useState(false);
   const [syncMsg, setSyncMsg] = useState<{ text: string; kind: "ok" | "err" } | null>(null);
   const [follow, setFollow] = useState<FollowState | null>(null);
@@ -246,10 +246,15 @@ export default function App() {
     cancel: cancelCoros,
     openBrowser: openCorosBrowser,
     refreshAuth,
-  } = useCorosAuth(() => {
-    refresh();
-    void doSyncRef.current?.();
-  });
+  } = useCorosAuth(
+    () => {
+      refresh();
+      void runSyncRef.current?.();
+    },
+    () => {
+      refresh();
+    }
+  );
 
   const [resolvingMismatch, setResolvingMismatch] = useState(false);
   const [mismatchError, setMismatchError] = useState<string | null>(null);
@@ -262,7 +267,7 @@ export default function App() {
       await api.resolveMismatch(action);
       await refreshAuth();
       refresh();
-      void doSyncRef.current?.();
+      void runSyncRef.current?.();
     } catch (err: any) {
       setMismatchError(err?.message || "处理失败，请稍后重试");
     } finally {
@@ -292,7 +297,7 @@ export default function App() {
         setFollow((prev) => {
           // 发现「服务端有今天的数据但本地没有」时自动同步
           if (s.lastCheckMessage?.includes("本地还没有")) {
-            void doSyncRef.current?.();
+            void runSyncRef.current?.();
           }
           return s;
         });
@@ -305,11 +310,7 @@ export default function App() {
 
   const isConnected = Boolean(status?.auth?.connected);
 
-  const doSync = async () => {
-    if (!isConnected) {
-      connectCoros();
-      return;
-    }
+  const runSync = async () => {
     if (syncing) return;
     setSyncing(true);
     setSyncMsg(null);
@@ -336,7 +337,17 @@ export default function App() {
     }
   };
 
-  doSyncRef.current = doSync;
+  runSyncRef.current = runSync;
+
+  const doSync = async () => {
+    if (!isConnected) {
+      if (!authConnecting) {
+        connectCoros();
+      }
+      return;
+    }
+    await runSync();
+  };
 
   const toggleFollow = async () => {
     if (!isConnected) {

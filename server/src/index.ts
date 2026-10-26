@@ -226,8 +226,8 @@ const app = new Elysia()
       return new Response(JSON.stringify({ error: (e as Error).message }), { status: 500 });
     }
   })
-  .post("/api/auth/disconnect", () => disconnectAuth())
-  .post("/api/auth/cancel", () => cancelAuthFlow())
+  .post("/api/auth/disconnect", async () => await disconnectAuth())
+  .post("/api/auth/cancel", async () => await cancelAuthFlow())
   .post("/api/auth/resolve-mismatch", ({ body }) => {
     try {
       const action = (body as any)?.action;
