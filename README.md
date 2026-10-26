@@ -7,8 +7,8 @@
 
 [English](README_EN.md) | **简体中文**
 
-[![GitHub Release](https://img.shields.io/github/v/release/your-username/PaceCraft?color=5a7d00&label=Release)](https://github.com/your-username/PaceCraft/releases)
-[![Platform](https://img.shields.io/badge/Platform-macOS%20%7C%20Windows-blue)](https://github.com/your-username/PaceCraft/releases)
+[![GitHub Release](https://img.shields.io/github/v/release/captainLegoo/PaceCraft?color=5a7d00&label=Release)](https://github.com/captainLegoo/PaceCraft/releases)
+[![Platform](https://img.shields.io/badge/Platform-macOS%20%7C%20Windows-blue)](https://github.com/captainLegoo/PaceCraft/releases)
 [![License](https://img.shields.io/badge/License-MIT-gray.svg)](#开源协议与免责声明)
 
 </div>
@@ -80,7 +80,7 @@
 
 ```bash
 # 1. 克隆代码仓库
-git clone https://github.com/your-username/PaceCraft.git
+git clone https://github.com/captainLegoo/PaceCraft.git
 cd PaceCraft
 
 # 2. 安装项目依赖

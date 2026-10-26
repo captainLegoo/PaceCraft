@@ -7,8 +7,8 @@
 
 **English** | [简体中文](README.md)
 
-[![GitHub Release](https://img.shields.io/github/v/release/your-username/PaceCraft?color=5a7d00&label=Release)](https://github.com/your-username/PaceCraft/releases)
-[![Platform](https://img.shields.io/badge/Platform-macOS%20%7C%20Windows-blue)](https://github.com/your-username/PaceCraft/releases)
+[![GitHub Release](https://img.shields.io/github/v/release/captainLegoo/PaceCraft?color=5a7d00&label=Release)](https://github.com/captainLegoo/PaceCraft/releases)
+[![Platform](https://img.shields.io/badge/Platform-macOS%20%7C%20Windows-blue)](https://github.com/captainLegoo/PaceCraft/releases)
 [![License](https://img.shields.io/badge/License-MIT-gray.svg)](#-license--disclaimer)
 
 </div>
@@ -86,7 +86,7 @@ Ideal for contributors or those wishing to access the dashboard on a mobile devi
 
 ```bash
 # 1. Clone the repository
-git clone https://github.com/your-username/PaceCraft.git
+git clone https://github.com/captainLegoo/PaceCraft.git
 cd PaceCraft
 
 # 2. Install dependencies
