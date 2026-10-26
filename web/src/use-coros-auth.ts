@@ -60,20 +60,10 @@ export function useCorosAuth(onSuccess?: () => void) {
       const { authorizeUrl } = await api.startAuth();
       setAuthUrl(authorizeUrl);
 
-      // 1. 尝试通知后端调用系统默认浏览器（Safari / Chrome）打开授权页（桌面端必备）
-      api.openExternal(authorizeUrl).catch(() => {});
-
-      // 2. 网页端环境同时尝试 window.open 弹窗
+      // 后端已自动调起系统默认浏览器（openExternalUrl），前端此处无需重复调起
       let popup: Window | null = null;
-      try {
-        popup = window.open(
-          authorizeUrl,
-          "coros_auth_window",
-          "width=560,height=720,menubar=no,toolbar=no,status=no",
-        );
-      } catch {}
 
-      // 3. 监听来自授权完成子窗口的 postMessage
+      // 1. 监听来自授权完成子窗口的 postMessage
       const handler = (e: MessageEvent) => {
         if (e.data?.type === "COROS_AUTH_RESULT") {
           cleanupListeners();
