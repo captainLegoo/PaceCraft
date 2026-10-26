@@ -240,6 +240,7 @@ export default function App() {
     auth,
     connecting: authConnecting,
     authUrl,
+    msg: authMsg,
     connect: connectCoros,
     disconnect: disconnectCoros,
     cancel: cancelCoros,
@@ -555,6 +556,11 @@ export default function App() {
               <div style={{ fontSize: 13, color: "var(--text-dim)", lineHeight: 1.5 }}>
                 当前尚未绑定 COROS 高驰账号。一键授权后即可自动拉取你的跑步记录、心率与体能负荷数据。
               </div>
+              {authMsg && (
+                <div style={{ fontSize: 12.5, color: authMsg.kind === "err" ? "#ef4444" : "#10b981", marginTop: 6, fontWeight: 500 }}>
+                  {authMsg.text}
+                </div>
+              )}
             </div>
             {!authConnecting ? (
               <button

@@ -39,6 +39,7 @@ import { analyzeWeek, normalizeWeekStart } from "./ai/week.ts";
 import { buildReport } from "./prediction/pipeline.ts";
 import { analyzeRacePrep, marathonPrep } from "./prediction/prep.ts";
 import {
+  cancelAuthFlow,
   disconnectAuth,
   getAuthStatus,
   openExternalUrl,
@@ -226,6 +227,7 @@ const app = new Elysia()
     }
   })
   .post("/api/auth/disconnect", () => disconnectAuth())
+  .post("/api/auth/cancel", () => cancelAuthFlow())
   .post("/api/auth/resolve-mismatch", ({ body }) => {
     try {
       const action = (body as any)?.action;

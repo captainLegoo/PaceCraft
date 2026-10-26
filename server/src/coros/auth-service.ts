@@ -34,13 +34,40 @@ export function openExternalUrl(url: string) {
     if (process.platform === "darwin") {
       execFile("open", [url]);
     } else if (process.platform === "win32") {
-      execFile("cmd", ["/c", "start", "", url]);
+      // 在 Windows 下避免使用 cmd /c（cmd 会把 & 识别为命令分隔符导致 URL 查询参数被截断）
+      // 使用 PowerShell 的 Start-Process，用单引号字面量传参，100% 完整保留所有 query 参数
+      const escaped = url.replace(/'/g, "''");
+      execFile(
+        "powershell",
+        ["-NoProfile", "-NonInteractive", "-Command", `Start-Process '${escaped}'`],
+        (err) => {
+          if (err) {
+            // 兜底：使用 rundll32 url.dll,FileProtocolHandler
+            execFile("rundll32", ["url.dll,FileProtocolHandler", url]);
+          }
+        },
+      );
     } else {
       execFile("xdg-open", [url]);
     }
   } catch (err) {
     console.warn("自动调起默认浏览器失败:", err);
   }
+}
+
+export function cancelAuthFlow(): { ok: boolean } {
+  if (activeTimer) {
+    clearTimeout(activeTimer);
+    activeTimer = null;
+  }
+  if (activeServer) {
+    try {
+      activeServer.closeAllConnections?.();
+      activeServer.close();
+    } catch {}
+    activeServer = null;
+  }
+  return { ok: true };
 }
 
 function b64url(buf: Buffer): string {
@@ -90,16 +117,7 @@ export function getAuthStatus(): AuthStatus {
 
 export function disconnectAuth(): { ok: boolean } {
   clearTokens();
-  if (activeTimer) {
-    clearTimeout(activeTimer);
-    activeTimer = null;
-  }
-  if (activeServer) {
-    try {
-      activeServer.close();
-    } catch {}
-    activeServer = null;
-  }
+  cancelAuthFlow();
   try {
     updateProfileMeta(getActiveProfileId(), { nickname: null });
   } catch {}
@@ -107,14 +125,18 @@ export function disconnectAuth(): { ok: boolean } {
 }
 
 export async function startAuthFlow(): Promise<{ authorizeUrl: string }> {
-  // 1. 如果已有等待中的回调服务，先行清理
+  // 1. 如果已有等待中的回调服务，先行清理并等待彻底释放端口
   if (activeTimer) {
     clearTimeout(activeTimer);
     activeTimer = null;
   }
   if (activeServer) {
     try {
-      activeServer.close();
+      activeServer.closeAllConnections?.();
+      await new Promise<void>((resolve) => {
+        activeServer!.close(() => resolve());
+        setTimeout(resolve, 300);
+      });
     } catch {}
     activeServer = null;
   }
@@ -279,17 +301,33 @@ export async function startAuthFlow(): Promise<{ authorizeUrl: string }> {
   });
 
   activeTimer = setTimeout(() => {
-    if (activeServer) {
-      activeServer.close();
-      activeServer = null;
-    }
-    activeTimer = null;
+    cancelAuthFlow();
   }, TIMEOUT_MS);
 
-  await new Promise<void>((resolve, reject) => {
-    activeServer?.listen(REDIRECT_PORT, "127.0.0.1", () => resolve());
-    activeServer?.on("error", (e) => reject(e));
-  });
+  // 带重试机制的端口监听（防止系统 socket 处于 TIME_WAIT 状态时偶发 EADDRINUSE）
+  let lastErr: any = null;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      await new Promise<void>((resolve, reject) => {
+        const onErr = (e: any) => reject(e);
+        activeServer!.once("error", onErr);
+        activeServer!.listen(REDIRECT_PORT, "127.0.0.1", () => {
+          activeServer!.removeListener("error", onErr);
+          resolve();
+        });
+      });
+      lastErr = null;
+      break;
+    } catch (e: any) {
+      lastErr = e;
+      if (e.code === "EADDRINUSE" && attempt < 2) {
+        await new Promise((r) => setTimeout(r, 400));
+        continue;
+      }
+      throw e;
+    }
+  }
+  if (lastErr) throw lastErr;
 
   // 在系统默认浏览器中自动调起 COROS 官方授权页面
   openExternalUrl(authorizeUrl);

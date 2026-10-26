@@ -28,6 +28,7 @@ export function useCorosAuth(onSuccess?: () => void) {
     cleanupListeners();
     setConnecting(false);
     setAuthUrl(null);
+    api.cancelAuth().catch(() => {});
   }, [cleanupListeners]);
 
   useEffect(() => {
@@ -142,9 +143,6 @@ export function useCorosAuth(onSuccess?: () => void) {
   const openBrowser = useCallback(() => {
     if (authUrl) {
       api.openExternal(authUrl).catch(() => {});
-      try {
-        window.open(authUrl, "_blank");
-      } catch {}
     }
   }, [authUrl]);
 

@@ -356,6 +356,7 @@ export const api = {
   authStatus: () => req<AuthStatus>("/api/auth/status"),
   startAuth: () => req<{ authorizeUrl: string }>("/api/auth/start", { method: "POST" }),
   disconnectAuth: () => req<{ ok: boolean }>("/api/auth/disconnect", { method: "POST" }),
+  cancelAuth: () => req<{ ok: boolean }>("/api/auth/cancel", { method: "POST" }),
   resolveMismatch: (action: "create_new" | "overwrite" | "merge") =>
     req<{ ok: boolean; activeId: string }>("/api/auth/resolve-mismatch", {
       method: "POST",
