@@ -3,7 +3,7 @@ import { api } from "./api";
 import type { FollowState } from "./api";
 import { ThemeToggle, useTheme } from "./theme";
 import { useTableScroll } from "./table-scroll";
-import { IconBack, IconDatabase, IconFlag, IconMenu, IconPulse, IconShoe, IconSync } from "./icons";
+import { IconBack, IconCloudSync, IconDatabase, IconFlag, IconMenu, IconPulse, IconRefresh, IconShoe, IconSync } from "./icons";
 import Training from "./pages/Training";
 import ActivityDetailView from "./pages/ActivityDetail";
 import Settings from "./pages/Settings";
@@ -250,6 +250,15 @@ export default function App() {
     refresh();
     api.followStatus().then(setFollow).catch(() => {});
     loadQuota();
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && (e.key === "r" || e.key === "R")) {
+        e.preventDefault();
+        window.location.reload();
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
   }, []);
 
   // 跟随开启时轮询状态；一旦服务端说有新数据待拉，提醒用户
@@ -391,11 +400,19 @@ export default function App() {
         <div className="sidebar-foot">
           <button
             className="sync-btn"
+            onClick={() => window.location.reload()}
+            title="刷新页面（快捷键 Cmd+R / Ctrl+R）"
+          >
+            <IconRefresh size={14} />
+            <span>刷新页面</span>
+          </button>
+          <button
+            className="sync-btn"
             onClick={doSync}
             disabled={syncing}
             title="立即从 COROS 拉取最近 3 天的训练数据"
           >
-            <IconSync size={14} />
+            <IconCloudSync size={14} />
             <span>{syncing ? "同步中…" : "立即同步"}</span>
           </button>
           <button
@@ -453,7 +470,7 @@ export default function App() {
           <span className="mobile-bar-title">{currentLabel}</span>
           {/* 同步按钮同时常驻这里：桌面版它在侧边栏底部，手机上侧边栏是收起的 */}
           <button className="mobile-sync" onClick={doSync} disabled={syncing} title="立即从 COROS 拉取最近 3 天的训练数据">
-            <IconSync size={15} />
+            <IconCloudSync size={15} />
             <span>{syncing ? "同步中" : "同步"}</span>
           </button>
         </div>

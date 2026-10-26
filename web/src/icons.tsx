@@ -175,6 +175,27 @@ export function IconGear({ size = 18, className }: P) {
   );
 }
 
+/** 刷新页面 —— 浏览器风格的单箭头重载图标 ↻ */
+export function IconRefresh({ size = 18, className }: P) {
+  return (
+    <svg {...base(size)} className={className} aria-hidden>
+      <path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8" />
+      <path d="M21 3v5h-5" />
+    </svg>
+  );
+}
+
+/** 云端拉取同步 —— 云朵 + 向下箭头 ☁↓ */
+export function IconCloudSync({ size = 18, className }: P) {
+  return (
+    <svg {...base(size)} className={className} aria-hidden>
+      <path d="M4 14.899A7 7 0 1 1 15.71 8h1.79a4.5 4.5 0 0 1 2.5 8.242" />
+      <path d="M12 12v8" />
+      <path d="m8.5 16.5 3.5 3.5 3.5-3.5" />
+    </svg>
+  );
+}
+
 /** 同步 */
 export function IconSync({ size = 18, className }: P) {
   return (

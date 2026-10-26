@@ -113,17 +113,27 @@ export function invalidateToolCache() {
 }
 
 /** 调一个 MCP 工具，返回其 content 拼接后的文本（多数工具返回 JSON 字符串）。 */
-export async function callTool(name: string, args: Record<string, unknown> = {}): Promise<string> {
-  const result = await rpc("tools/call", { name, arguments: args });
-  if (result.isError) {
-    throw new McpError(`tool ${name} returned isError`, result.content);
+export async function callTool(name: string, args: Record<string, unknown> = {}, maxRetries = 2): Promise<string> {
+  let lastText = "";
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    const result = await rpc("tools/call", { name, arguments: args });
+    if (result.isError) {
+      throw new McpError(`tool ${name} returned isError`, result.content);
+    }
+    const content = Array.isArray(result.content) ? result.content : [];
+    const text = content
+      .filter((c: any) => c?.type === "text")
+      .map((c: any) => c.text)
+      .join("\n");
+    
+    // 如果命中高驰官方 API 偶发临时限流/不可用，自动退避重试
+    if (text.includes("COROS API is temporarily unavailable") && attempt < maxRetries) {
+      await new Promise((r) => setTimeout(r, 800 * (attempt + 1)));
+      continue;
+    }
+    return text;
   }
-  const content = Array.isArray(result.content) ? result.content : [];
-  const text = content
-    .filter((c: any) => c?.type === "text")
-    .map((c: any) => c.text)
-    .join("\n");
-  return text;
+  return lastText;
 }
 
 /** 工具返回的通常是 JSON 文本，尽力解析，失败就原样返回。 */
