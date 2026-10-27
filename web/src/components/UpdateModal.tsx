@@ -14,6 +14,16 @@ export type NetworkInfo = {
   preferredRoute: "auto" | "proxy" | "direct";
 };
 
+export type ReleaseCheckResponse = {
+  hasUpdate: boolean;
+  latestVersion: string;
+  currentVersion: string;
+  releaseNotes: string;
+  publishedAt?: string;
+  downloadUrl: string;
+  routeUsed: string;
+};
+
 export default function UpdateModal({
   open,
   onClose,
@@ -41,109 +51,100 @@ export default function UpdateModal({
 
   const downloadedRef = useRef(0);
   const totalRef = useRef(0);
+  const inFlightRef = useRef(false);
 
-  // 获取当前 IP 地区与网络线路
-  const loadNetworkRegion = useCallback(async () => {
-    try {
-      const res = await fetch("/api/updater/region");
-      if (res.ok) {
-        const info = (await res.json()) as NetworkInfo;
-        setNetworkInfo(info);
-        setSelectedRoute(info.preferredRoute || "auto");
-        return info;
-      }
-    } catch {
-      // 容错忽略
-    }
-    return null;
-  }, []);
+  // 执行版本检测：统一请求本地后端代理，彻底避免浏览器直接打 GitHub API 触发 403 限流
+  const executeCheck = useCallback(
+    async (routeToUse?: "auto" | "proxy" | "direct") => {
+      if (inFlightRef.current) return;
+      inFlightRef.current = true;
+      setChecking(true);
+      setStatus("checking");
+      setErrorMsg(null);
+      setUpdateObj(null);
+      setNewVersion(null);
+      setNotes(null);
 
-  const runCheck = useCallback(async (routeOverride?: "auto" | "proxy" | "direct") => {
-    setChecking(true);
-    setStatus("checking");
-    setErrorMsg(null);
-    setUpdateObj(null);
-    setNewVersion(null);
-    setNotes(null);
+      const route = routeToUse || selectedRoute;
 
-    try {
-      // 1. 同步当前路线设置至本地后端服务
-      const activeRoute = routeOverride || selectedRoute;
       try {
-        await fetch("/api/updater/route", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ route: activeRoute }),
-        });
-      } catch {}
+        // 1. 获取网络区域与设置路线
+        let currentRegion = networkInfo;
+        try {
+          const regRes = await fetch("/api/updater/region");
+          if (regRes.ok) {
+            currentRegion = await regRes.json();
+            setNetworkInfo(currentRegion);
+          }
+          await fetch("/api/updater/route", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ route }),
+          });
+        } catch {}
 
-      // 2. 检测更新
-      if (isTauriEnv()) {
-        const update = await check();
-        if (update && update.available) {
-          setUpdateObj(update);
-          setNewVersion(update.version);
-          setNotes(update.body ?? "包含稳定性提升与功能改进。");
+        // 2. 通过本地服务安全探测版本（带服务端缓存与合法 Header，无 403 风险）
+        const checkRes = await fetch(
+          `/api/updater/check?currentVersion=${encodeURIComponent(currentAppVersion)}&channel=${route}`
+        );
+        if (!checkRes.ok) {
+          throw new Error(`检测服务响应异常 (HTTP ${checkRes.status})`);
+        }
+        const data: ReleaseCheckResponse = await checkRes.json();
+
+        if (data.hasUpdate && data.latestVersion) {
+          setNewVersion(data.latestVersion);
+          setNotes(data.releaseNotes || "包含稳定性提升与功能改进。");
+
+          // 如果是在桌面应用环境，预初始化 Tauri Updater 对象供静默安装
+          if (isTauriEnv()) {
+            try {
+              const tauriUpdate = await check();
+              if (tauriUpdate) {
+                setUpdateObj(tauriUpdate);
+              }
+            } catch (e) {
+              console.warn("Tauri check background init notice:", e);
+            }
+          }
+
           setStatus("available");
         } else {
           setStatus("up-to-date");
         }
-      } else {
-        // 非桌面环境（纯浏览器访问）：根据路线选择请求源
-        const isDomestic = activeRoute === "proxy" || (activeRoute === "auto" && networkInfo?.region === "CN");
-        const apiUrl = isDomestic
-          ? "https://ghproxy.net/https://api.github.com/repos/captainLegoo/PaceCraft/releases/latest"
-          : "https://api.github.com/repos/captainLegoo/PaceCraft/releases/latest";
-
-        const res = await fetch(apiUrl, {
-          headers: { Accept: "application/vnd.github.v3+json" },
-        });
-        if (!res.ok) throw new Error(`查询版本失败 (HTTP ${res.status})`);
-        const data = await res.json();
-        const latestTag: string = data.tag_name || "";
-        const cleanLatest = latestTag.replace(/^v/, "");
-        const cleanCurrent = currentAppVersion.replace(/^v/, "");
-
-        if (cleanLatest && cleanLatest !== cleanCurrent) {
-          setNewVersion(cleanLatest);
-          setNotes(data.body ?? "包含新功能与修复。");
-          setStatus("available");
-        } else {
-          setStatus("up-to-date");
-        }
+      } catch (err: any) {
+        console.warn("Check update failed:", err);
+        setStatus("error");
+        setErrorMsg(err?.message || "检测更新失败，请检查网络连接或稍后重试。");
+      } finally {
+        inFlightRef.current = false;
+        setChecking(false);
       }
-    } catch (err: any) {
-      console.warn("Check update failed:", err);
-      setStatus("error");
-      setErrorMsg(err?.message || "检测更新失败，请稍后重试或检查网络连接。");
-    } finally {
-      setChecking(false);
-    }
-  }, [currentAppVersion, selectedRoute, networkInfo]);
+    },
+    [currentAppVersion, selectedRoute, networkInfo]
+  );
 
-  // 弹窗打开时加载网络状态并执行检测
+  // 仅在弹窗打开时触发一次检测，绝不循环
   useEffect(() => {
     if (open) {
-      loadNetworkRegion().then(() => {
-        runCheck();
-      });
+      executeCheck();
     }
-  }, [open, loadNetworkRegion, runCheck]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
 
-  // 切换线路
+  // 手动切换线路
   const handleRouteChange = async (newRoute: "auto" | "proxy" | "direct") => {
+    if (checking || status === "downloading") return;
     setSelectedRoute(newRoute);
-    await runCheck(newRoute);
+    await executeCheck(newRoute);
   };
 
-  // 开始下载安装
+  // 开始下载并安装
   const handleStartUpdate = async () => {
-    if (!isTauriEnv()) {
+    if (!isTauriEnv() || !updateObj) {
       window.open("https://github.com/captainLegoo/PaceCraft/releases/latest", "_blank");
       return;
     }
-
-    if (!updateObj) return;
 
     setStatus("downloading");
     setErrorMsg(null);
@@ -302,6 +303,7 @@ export default function UpdateModal({
             <span style={{ color: "var(--text-dim, #777)" }}>路线:</span>
             <button
               type="button"
+              disabled={checking}
               onClick={() => handleRouteChange("auto")}
               style={{
                 background: selectedRoute === "auto" ? "rgba(255, 107, 0, 0.25)" : "transparent",
@@ -310,13 +312,14 @@ export default function UpdateModal({
                 borderRadius: 4,
                 padding: "2px 6px",
                 fontSize: 11,
-                cursor: "pointer",
+                cursor: checking ? "not-allowed" : "pointer",
               }}
             >
               ⚡️ 自动识别
             </button>
             <button
               type="button"
+              disabled={checking}
               onClick={() => handleRouteChange("proxy")}
               style={{
                 background: selectedRoute === "proxy" ? "rgba(255, 107, 0, 0.25)" : "transparent",
@@ -325,13 +328,14 @@ export default function UpdateModal({
                 borderRadius: 4,
                 padding: "2px 6px",
                 fontSize: 11,
-                cursor: "pointer",
+                cursor: checking ? "not-allowed" : "pointer",
               }}
             >
               🇨🇳 国内加速
             </button>
             <button
               type="button"
+              disabled={checking}
               onClick={() => handleRouteChange("direct")}
               style={{
                 background: selectedRoute === "direct" ? "rgba(255, 107, 0, 0.25)" : "transparent",
@@ -340,7 +344,7 @@ export default function UpdateModal({
                 borderRadius: 4,
                 padding: "2px 6px",
                 fontSize: 11,
-                cursor: "pointer",
+                cursor: checking ? "not-allowed" : "pointer",
               }}
             >
               🌍 海外直连
@@ -365,7 +369,7 @@ export default function UpdateModal({
               />
               <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
               <div style={{ fontSize: 13, color: "var(--text-sub, #aaa)" }}>
-                正在通过【{activeRouteLabel}】检测新版本...
+                正在安全检测最新版本...
               </div>
             </div>
           )}
@@ -435,7 +439,7 @@ export default function UpdateModal({
                     borderRadius: 6,
                   }}
                 >
-                  💡 检测到你当前在浏览器中运行，请点击下方按钮前往 Release 页面下载客户端安装包覆盖升级。
+                  💡 检测到你当前在浏览器中运行，点击下方按钮前往 Release 页面下载客户端安装包升级。
                 </div>
               )}
             </div>
@@ -498,7 +502,7 @@ export default function UpdateModal({
           {status === "error" && (
             <div style={{ padding: "14px 0" }}>
               <div style={{ fontSize: 14, color: "#ef4444", marginBottom: 8, fontWeight: 500 }}>
-                ⚠️ 更新过程出现异常
+                ⚠️ 检测出现异常
               </div>
               <div
                 style={{
@@ -514,7 +518,7 @@ export default function UpdateModal({
                 {errorMsg}
               </div>
               <div style={{ fontSize: 12, color: "var(--text-sub, #888)", lineHeight: 1.5 }}>
-                💡 提示：如果当前线路较慢，可点击上方切换为【国内加速】或【海外直连】重新测试，亦可直接前往 GitHub 手动下载。
+                💡 提示：可尝试切换线路为【国内加速】重新测试，亦可直接前往 GitHub 手动下载。
               </div>
             </div>
           )}
@@ -578,7 +582,7 @@ export default function UpdateModal({
                   fontWeight: 600,
                 }}
               >
-                {isTauriEnv() ? "立即自动更新" : "前往 Release 下载"}
+                {isTauriEnv() && updateObj ? "立即自动更新" : "前往 Release 下载"}
               </button>
             </>
           )}
@@ -634,7 +638,7 @@ export default function UpdateModal({
                 手动网页下载
               </button>
               <button
-                onClick={() => runCheck()}
+                onClick={() => executeCheck()}
                 style={{
                   padding: "8px 18px",
                   background: "var(--accent-color, #ff6b00)",

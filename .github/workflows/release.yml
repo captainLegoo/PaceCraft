@@ -123,5 +123,5 @@ jobs:
             - 数据全量仅持久化存储在个人电脑本地 (`~/.coros-dashboard`)，安全隐私绝对隔离
             - 支持多跑友独立档案共存切换与智能增量同步
           releaseDraft: false
-          prerelease: ${{ startsWith(github.ref_name, 'v0.') || contains(github.ref_name, 'test') || contains(github.ref_name, 'beta') }}
+          prerelease: ${{ contains(github.ref_name, 'alpha') || contains(github.ref_name, 'beta') || contains(github.ref_name, 'rc') || contains(github.ref_name, 'test') }}
           args: --target ${{ matrix.target }}

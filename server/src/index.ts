@@ -48,7 +48,7 @@ import {
   startAuthFlow,
 } from "./coros/auth-service.ts";
 import { closeCurrentDatabase, switchProfileDatabase } from "./db/client.ts";
-import { detectRegion, fetchUpdateManifest, getPreferredRoute, setPreferredRoute } from "./updater.ts";
+import { checkLatestRelease, detectRegion, fetchUpdateManifest, getPreferredRoute, setPreferredRoute } from "./updater.ts";
 import {
   createNewProfile,
   deleteProfile,
@@ -109,6 +109,12 @@ const app = new Elysia()
     }
   })
   /** 软件自动更新与网络线路检测 */
+  .get("/api/updater/check", async ({ query }) => {
+    const curVer = (query as any)?.currentVersion || APP_VERSION;
+    const channel = (query as any)?.channel;
+    const result = await checkLatestRelease(curVer, channel);
+    return result;
+  })
   .get("/api/updater/region", async () => {
     const region = await detectRegion();
     return {
