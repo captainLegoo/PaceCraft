@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { createPortal } from "react-dom";
 import { check, type Update } from "@tauri-apps/plugin-updater";
 import { relaunch } from "@tauri-apps/plugin-process";
+import { api } from "../api";
 
 export function isTauriEnv(): boolean {
   return typeof window !== "undefined" && Boolean((window as any).__TAURI_INTERNALS__);
@@ -126,7 +127,9 @@ export default function UpdateModal({
 
   const handleStartUpdate = async () => {
     if (!isTauriEnv() || !updateObj) {
-      window.open("https://github.com/captainLegoo/PaceCraft/releases/latest", "_blank");
+      api.openExternal("https://github.com/captainLegoo/PaceCraft/releases/latest").catch(() => {
+        window.open("https://github.com/captainLegoo/PaceCraft/releases/latest", "_blank");
+      });
       return;
     }
 

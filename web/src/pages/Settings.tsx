@@ -693,6 +693,13 @@ export default function Settings({
   };
 
   const currentProviderId = selectedProviderId;
+  const handleOpenReleasePage = (e: React.MouseEvent) => {
+    e.preventDefault();
+    api.openExternal("https://github.com/captainLegoo/PaceCraft/releases").catch(() => {
+      window.open("https://github.com/captainLegoo/PaceCraft/releases", "_blank");
+    });
+  };
+
   const currentProvider = PROVIDERS.find((p) => p.id === currentProviderId) || PROVIDERS[PROVIDERS.length - 1];
   const isLocalEndpoint = /localhost|127\.0\.0\.1|11434/.test(cfg.baseUrl || "");
   const canSubmit = !saving && !testing && (cfg.apiKey || status?.aiConfigured || isLocalEndpoint) && !!cfg.baseUrl && !!cfg.model;
@@ -930,6 +937,12 @@ export default function Settings({
                     href={currentProvider.docUrl}
                     target="_blank"
                     rel="noopener noreferrer"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      api.openExternal(currentProvider.docUrl!).catch(() => {
+                        window.open(currentProvider.docUrl!, "_blank");
+                      });
+                    }}
                     style={{ color: "var(--accent)", textDecoration: "none", fontWeight: 500 }}
                   >
                     🔗 获取 API Key（{currentProvider.docLabel || "平台控制台"}）↗
@@ -1627,6 +1640,7 @@ export default function Settings({
                         rel="noopener noreferrer"
                         className="version-tag"
                         title={`当前版本：${appVersion}（点击查看 Release 记录）`}
+                        onClick={handleOpenReleasePage}
                       >
                         <span className="dot" />
                         <span>{appVersion}</span>
@@ -1675,6 +1689,7 @@ export default function Settings({
             rel="noopener noreferrer"
             className="version-tag"
             title="查看所有发布版本"
+            onClick={handleOpenReleasePage}
           >
             <span className="dot" />
             <span>PaceCraft {appVersion}</span>
