@@ -1,6 +1,7 @@
 import { createServer, type Server } from "node:http";
 import { randomBytes } from "node:crypto";
 import { execFile } from "node:child_process";
+import { writeFileSync } from "node:fs";
 import { REDIRECT_PORT } from "../config.ts";
 import {
   buildAuthorizeUrl,
@@ -10,11 +11,20 @@ import {
   loadTokens,
   registerClient,
   saveTokens,
+  type AccountMismatchInfo,
 } from "./oauth.ts";
 import { callTool } from "./mcp.ts";
-import { sqlite } from "../db/client.ts";
+import { upsertUserProfile } from "./user-profile.ts";
+import { sqlite, switchProfileDatabase } from "../db/client.ts";
 import { users } from "../db/schema.ts";
-import { getActiveProfileId, updateProfileMeta } from "../profile-manager.ts";
+import {
+  getActiveProfileId,
+  setActiveProfileId,
+  createNewProfile,
+  updateProfileMeta,
+  getProfileTokenPath,
+  getProfileDbPath,
+} from "../profile-manager.ts";
 
 let activeServer: Server | null = null;
 let activeTimer: Timer | null = null;
@@ -24,13 +34,40 @@ export function openExternalUrl(url: string) {
     if (process.platform === "darwin") {
       execFile("open", [url]);
     } else if (process.platform === "win32") {
-      execFile("cmd", ["/c", "start", "", url]);
+      // 在 Windows 下避免使用 cmd /c（cmd 会把 & 识别为命令分隔符导致 URL 查询参数被截断）
+      // 使用 PowerShell 的 Start-Process，用单引号字面量传参，100% 完整保留所有 query 参数
+      const escaped = url.replace(/'/g, "''");
+      execFile(
+        "powershell",
+        ["-NoProfile", "-NonInteractive", "-Command", `Start-Process '${escaped}'`],
+        (err) => {
+          if (err) {
+            // 兜底：使用 rundll32 url.dll,FileProtocolHandler
+            execFile("rundll32", ["url.dll,FileProtocolHandler", url]);
+          }
+        },
+      );
     } else {
       execFile("xdg-open", [url]);
     }
   } catch (err) {
     console.warn("自动调起默认浏览器失败:", err);
   }
+}
+
+export function cancelAuthFlow(): { ok: boolean } {
+  if (activeTimer) {
+    clearTimeout(activeTimer);
+    activeTimer = null;
+  }
+  if (activeServer) {
+    try {
+      activeServer.closeAllConnections?.();
+      activeServer.close();
+    } catch {}
+    activeServer = null;
+  }
+  return { ok: true };
 }
 
 function b64url(buf: Buffer): string {
@@ -42,6 +79,7 @@ export type AuthStatus = {
   nickname: string | null;
   expiresAt: number | null;
   expired: boolean;
+  mismatch?: AccountMismatchInfo | null;
 };
 
 export function getAuthStatus(): AuthStatus {
@@ -70,36 +108,35 @@ export function getAuthStatus(): AuthStatus {
 
   return {
     connected: true,
-    nickname,
+    nickname: tokens.mismatch ? tokens.mismatch.incomingNickname : nickname,
     expiresAt: tokens.expiresAt ?? null,
     expired,
+    mismatch: tokens.mismatch ?? null,
   };
 }
 
 export function disconnectAuth(): { ok: boolean } {
   clearTokens();
-  if (activeTimer) {
-    clearTimeout(activeTimer);
-    activeTimer = null;
-  }
-  if (activeServer) {
-    try {
-      activeServer.close();
-    } catch {}
-    activeServer = null;
-  }
+  cancelAuthFlow();
+  try {
+    updateProfileMeta(getActiveProfileId(), { nickname: null });
+  } catch {}
   return { ok: true };
 }
 
 export async function startAuthFlow(): Promise<{ authorizeUrl: string }> {
-  // 1. 如果已有等待中的回调服务，先行清理
+  // 1. 如果已有等待中的回调服务，先行清理并等待彻底释放端口
   if (activeTimer) {
     clearTimeout(activeTimer);
     activeTimer = null;
   }
   if (activeServer) {
     try {
-      activeServer.close();
+      activeServer.closeAllConnections?.();
+      await new Promise<void>((resolve) => {
+        activeServer!.close(() => resolve());
+        setTimeout(resolve, 300);
+      });
     } catch {}
     activeServer = null;
   }
@@ -211,36 +248,40 @@ export async function startAuthFlow(): Promise<{ authorizeUrl: string }> {
 
     try {
       const tokens = await exchangeCode(clientId, code, verifier);
-      saveTokens(tokens);
 
       // 尝试静默拉取用户基本信息存入 users 表
       try {
         const raw = await callTool("queryUserInfo", {});
-        const num = (re: RegExp) => Number(raw.match(re)?.[1] ?? NaN);
-        sqlite.query(`
-          INSERT INTO users (height_cm, weight_kg, birthday, gender, nickname, raw)
-          VALUES (?,?,?,?,?,?)
-          ON CONFLICT(nickname) DO UPDATE SET
-            height_cm = excluded.height_cm,
-            weight_kg = excluded.weight_kg,
-            birthday  = excluded.birthday,
-            gender    = excluded.gender,
-            raw       = excluded.raw
-        `).run(
-          num(/Height:\s*([\d.]+)/), num(/Weight:\s*([\d.]+)/),
-          raw.match(/Birthday:\s*(\S+)/)?.[1] ?? null,
-          raw.match(/Gender:\s*(\w+)/)?.[1] ?? null,
-          (raw.match(/Nickname:\s*(.+)/)?.[1] ?? "").replace(/["'\s]+"?\s*$/, "") || null,
-          raw,
-        );
-
         const nick = (raw.match(/Nickname:\s*(.+)/)?.[1] ?? "").replace(/["'\s]+"?\s*$/, "") || null;
-        if (nick) {
-          try {
-            updateProfileMeta(getActiveProfileId(), { nickname: nick, name: nick });
-          } catch {}
+
+        // 检查本档案是否已有历史运动数据和不同的跑友记录（防串号数据隔离）
+        const existingUser = sqlite.query("SELECT nickname FROM users LIMIT 1").get() as { nickname: string | null } | null;
+        const existingCount = (sqlite.query("SELECT count(*) as c FROM activities").get() as { c: number } | null)?.c ?? 0;
+        const existingNick = existingUser?.nickname;
+
+        if (existingNick && nick && existingNick !== nick && existingCount > 0) {
+          // 账号不一致且已有数据！记录待处理 mismatch，不直接覆盖旧数据
+          tokens.mismatch = {
+            existingNickname: existingNick,
+            incomingNickname: nick,
+            activityCount: existingCount,
+            rawUserInfo: raw,
+          };
+          saveTokens(tokens);
+        } else {
+          // 账号一致（或本档案无历史运动记录），直接保存并写入
+          delete tokens.mismatch;
+          saveTokens(tokens);
+
+          const finalNick = upsertUserProfile(raw, nick);
+          if (finalNick) {
+            try {
+              updateProfileMeta(getActiveProfileId(), { nickname: finalNick });
+            } catch {}
+          }
         }
       } catch (profileErr) {
+        saveTokens(tokens);
         console.warn("拉取用户昵称失败（不影响主授权）:", profileErr);
       }
 
@@ -260,20 +301,153 @@ export async function startAuthFlow(): Promise<{ authorizeUrl: string }> {
   });
 
   activeTimer = setTimeout(() => {
-    if (activeServer) {
-      activeServer.close();
-      activeServer = null;
-    }
-    activeTimer = null;
+    cancelAuthFlow();
   }, TIMEOUT_MS);
 
-  await new Promise<void>((resolve, reject) => {
-    activeServer?.listen(REDIRECT_PORT, "127.0.0.1", () => resolve());
-    activeServer?.on("error", (e) => reject(e));
-  });
+  // 带重试机制的端口监听（防止系统 socket 处于 TIME_WAIT 状态时偶发 EADDRINUSE）
+  let lastErr: any = null;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      await new Promise<void>((resolve, reject) => {
+        const onErr = (e: any) => reject(e);
+        activeServer!.once("error", onErr);
+        activeServer!.listen(REDIRECT_PORT, "127.0.0.1", () => {
+          activeServer!.removeListener("error", onErr);
+          resolve();
+        });
+      });
+      lastErr = null;
+      break;
+    } catch (e: any) {
+      lastErr = e;
+      if (e.code === "EADDRINUSE" && attempt < 2) {
+        await new Promise((r) => setTimeout(r, 400));
+        continue;
+      }
+      throw e;
+    }
+  }
+  if (lastErr) throw lastErr;
 
   // 在系统默认浏览器中自动调起 COROS 官方授权页面
   openExternalUrl(authorizeUrl);
 
   return { authorizeUrl };
+}
+
+export function resolveAccountMismatch(action: "create_new" | "overwrite" | "merge"): {
+  ok: boolean;
+  activeId: string;
+} {
+  const tokens = loadTokens();
+  if (!tokens || !tokens.mismatch) {
+    throw new Error("当前档案并无待处理的账号不一致问题");
+  }
+
+  const { incomingNickname, rawUserInfo } = tokens.mismatch;
+  const currentProfileId = getActiveProfileId();
+
+  if (action === "create_new") {
+    // 0. 读取原档案的 AI 配置与运动白名单配置，以便新档案继承
+    let aiRow: any = null;
+    let syncRow: any = null;
+    try {
+      aiRow = sqlite.query("SELECT * FROM ai_settings WHERE id = 1 LIMIT 1").get();
+      syncRow = sqlite.query("SELECT * FROM sync_settings WHERE id = 1 LIMIT 1").get();
+    } catch {}
+
+    // 1. 为新授权账号自动建立独立档案
+    const newProfile = createNewProfile(incomingNickname);
+
+    // 2. 将 token（剥离 mismatch 标记）迁移至新档案
+    const cleanTokens = { ...tokens };
+    delete cleanTokens.mismatch;
+    const newTokenPath = getProfileTokenPath(newProfile.id);
+    writeFileSync(newTokenPath, JSON.stringify(cleanTokens, null, 2), { mode: 0o600 });
+
+    // 3. 原档案解除待处理授权，保留所有原有历史数据
+    clearTokens();
+
+    // 4. 切换到新档案及其独立数据库
+    setActiveProfileId(newProfile.id);
+    switchProfileDatabase(getProfileDbPath(newProfile.id));
+
+    // 5. 继承原档案的 AI 配置与运动类型设置（实现开箱即用）
+    try {
+      if (aiRow) {
+        sqlite.query(`
+          INSERT INTO ai_settings (id, provider, base_url, api_key, model, temperature, max_tokens, updated_at)
+          VALUES (1, ?, ?, ?, ?, ?, ?, unixepoch())
+          ON CONFLICT(id) DO UPDATE SET
+            provider = excluded.provider,
+            base_url = excluded.base_url,
+            api_key = excluded.api_key,
+            model = excluded.model,
+            temperature = excluded.temperature,
+            max_tokens = excluded.max_tokens,
+            updated_at = unixepoch()
+        `).run(aiRow.provider, aiRow.base_url, aiRow.api_key, aiRow.model, aiRow.temperature, aiRow.max_tokens);
+      }
+      if (syncRow) {
+        sqlite.query(`
+          INSERT INTO sync_settings (id, sport_type_codes, updated_at)
+          VALUES (1, ?, unixepoch())
+          ON CONFLICT(id) DO UPDATE SET
+            sport_type_codes = excluded.sport_type_codes,
+            updated_at = unixepoch()
+        `).run(syncRow.sport_type_codes);
+      }
+    } catch {}
+
+    // 6. 初始化新档案的 users 表与元信息
+    if (rawUserInfo) {
+      const finalNick = upsertUserProfile(rawUserInfo, incomingNickname);
+      updateProfileMeta(newProfile.id, { nickname: finalNick ?? incomingNickname });
+    }
+
+    return { ok: true, activeId: newProfile.id };
+  }
+
+  if (action === "overwrite") {
+    // 抹除当前档案的历史训练数据
+    const tables = [
+      "activities", "activity_details", "laps", "training_load",
+      "daily_health", "sleep", "heart_rate", "stress",
+      "fitness", "recovery", "ai_reports", "ai_session_reports",
+      "ai_week_reports", "ai_chat", "sync_log", "fit_quota", "scheduled_workouts", "users"
+    ];
+    sqlite.transaction(() => {
+      for (const table of tables) {
+        try {
+          sqlite.query(`DELETE FROM ${table}`).run();
+        } catch {}
+      }
+    })();
+
+    if (rawUserInfo) {
+      upsertUserProfile(rawUserInfo, incomingNickname);
+    }
+    updateProfileMeta(currentProfileId, { nickname: incomingNickname });
+
+    const cleanTokens = { ...tokens };
+    delete cleanTokens.mismatch;
+    saveTokens(cleanTokens);
+
+    return { ok: true, activeId: currentProfileId };
+  }
+
+  if (action === "merge") {
+    if (rawUserInfo) {
+      upsertUserProfile(rawUserInfo, incomingNickname);
+    }
+    updateProfileMeta(currentProfileId, { nickname: incomingNickname });
+
+    const cleanTokens = { ...tokens };
+    delete cleanTokens.mismatch;
+    saveTokens(cleanTokens);
+
+    return { ok: true, activeId: currentProfileId };
+  }
+
+  throw new Error(`未知操作: ${action}`);
 }

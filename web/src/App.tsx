@@ -237,15 +237,38 @@ export default function App() {
   const loadQuota = () => api.fitQuota().then(setQuota).catch(() => {});
 
   const {
+    auth,
     connecting: authConnecting,
     authUrl,
+    msg: authMsg,
     connect: connectCoros,
+    disconnect: disconnectCoros,
     cancel: cancelCoros,
     openBrowser: openCorosBrowser,
+    refreshAuth,
   } = useCorosAuth(() => {
     refresh();
     void doSyncRef.current?.();
   });
+
+  const [resolvingMismatch, setResolvingMismatch] = useState(false);
+  const [mismatchError, setMismatchError] = useState<string | null>(null);
+  const [copiedAuthUrl, setCopiedAuthUrl] = useState(false);
+
+  const handleResolveMismatch = async (action: "create_new" | "overwrite" | "merge") => {
+    setResolvingMismatch(true);
+    setMismatchError(null);
+    try {
+      await api.resolveMismatch(action);
+      await refreshAuth();
+      refresh();
+      void doSyncRef.current?.();
+    } catch (err: any) {
+      setMismatchError(err?.message || "处理失败，请稍后重试");
+    } finally {
+      setResolvingMismatch(false);
+    }
+  };
   useEffect(() => {
     refresh();
     api.followStatus().then(setFollow).catch(() => {});
@@ -280,7 +303,13 @@ export default function App() {
 
 
 
+  const isConnected = Boolean(status?.auth?.connected);
+
   const doSync = async () => {
+    if (!isConnected) {
+      connectCoros();
+      return;
+    }
     if (syncing) return;
     setSyncing(true);
     setSyncMsg(null);
@@ -310,6 +339,10 @@ export default function App() {
   doSyncRef.current = doSync;
 
   const toggleFollow = async () => {
+    if (!isConnected) {
+      setSyncMsg({ text: "尚未连接 COROS 账号，无法开启自动跟随", kind: "err" });
+      return;
+    }
     try {
       const s = follow?.active ? await api.followStop() : await api.followStart();
       setFollow(s);
@@ -406,19 +439,38 @@ export default function App() {
             <IconRefresh size={14} />
             <span>刷新页面</span>
           </button>
-          <button
-            className="sync-btn"
-            onClick={doSync}
-            disabled={syncing}
-            title="立即从 COROS 拉取最近 3 天的训练数据"
-          >
-            <IconCloudSync size={14} />
-            <span>{syncing ? "同步中…" : "立即同步"}</span>
-          </button>
+          {isConnected ? (
+            <button
+              className="sync-btn"
+              onClick={doSync}
+              disabled={syncing}
+              title="立即从 COROS 拉取最近 3 天的训练数据"
+            >
+              <IconCloudSync size={14} />
+              <span>{syncing ? "同步中…" : "立即同步"}</span>
+            </button>
+          ) : (
+            <button
+              className="sync-btn"
+              onClick={connectCoros}
+              disabled={authConnecting}
+              style={{
+                background: "rgba(37, 99, 235, 0.12)",
+                color: "#60a5fa",
+                borderColor: "rgba(59, 130, 246, 0.35)",
+                fontWeight: 600,
+              }}
+              title="当前尚未连接高驰账号，点击立即连接"
+            >
+              <span>{authConnecting ? "正在等待授权…" : "🔗 连接 COROS 账号"}</span>
+            </button>
+          )}
           <button
             className={`sync-btn follow ${follow?.active ? "on" : ""}`}
             onClick={toggleFollow}
-            title="手表上传后自动同步（COROS 通常有 1-4 小时延迟）"
+            disabled={!isConnected}
+            style={!isConnected ? { opacity: 0.45, cursor: "not-allowed" } : undefined}
+            title={isConnected ? "手表上传后自动同步（COROS 通常有 1-4 小时延迟）" : "尚未连接 COROS 账号，请先连接"}
           >
             <span className="dot" />
             <span>{follow?.active ? "跟随中" : "开启自动跟随"}</span>
@@ -469,9 +521,14 @@ export default function App() {
           </button>
           <span className="mobile-bar-title">{currentLabel}</span>
           {/* 同步按钮同时常驻这里：桌面版它在侧边栏底部，手机上侧边栏是收起的 */}
-          <button className="mobile-sync" onClick={doSync} disabled={syncing} title="立即从 COROS 拉取最近 3 天的训练数据">
+          <button
+            className="mobile-sync"
+            onClick={isConnected ? doSync : connectCoros}
+            disabled={syncing || authConnecting}
+            title={isConnected ? "立即从 COROS 拉取最近 3 天的训练数据" : "点击连接 COROS 账号"}
+          >
             <IconCloudSync size={15} />
-            <span>{syncing ? "同步中" : "同步"}</span>
+            <span>{syncing ? "同步中" : isConnected ? "同步" : "连接"}</span>
           </button>
         </div>
 
@@ -499,6 +556,11 @@ export default function App() {
               <div style={{ fontSize: 13, color: "var(--text-dim)", lineHeight: 1.5 }}>
                 当前尚未绑定 COROS 高驰账号。一键授权后即可自动拉取你的跑步记录、心率与体能负荷数据。
               </div>
+              {authMsg && (
+                <div style={{ fontSize: 12.5, color: authMsg.kind === "err" ? "#ef4444" : "#10b981", marginTop: 6, fontWeight: 500 }}>
+                  {authMsg.text}
+                </div>
+              )}
             </div>
             {!authConnecting ? (
               <button
@@ -532,11 +594,12 @@ export default function App() {
                     type="button"
                     onClick={() => {
                       navigator.clipboard.writeText(authUrl);
-                      alert("授权链接已复制到剪贴板，请直接粘贴至浏览器地址栏打开。");
+                      setCopiedAuthUrl(true);
+                      setTimeout(() => setCopiedAuthUrl(false), 3000);
                     }}
                     style={{ fontSize: 12, padding: "5px 10px", background: "rgba(255,255,255,0.1)", color: "#fff", border: "1px solid rgba(255,255,255,0.2)", borderRadius: 6, cursor: "pointer" }}
                   >
-                    📋 复制链接
+                    {copiedAuthUrl ? "✓ 已复制" : "📋 复制链接"}
                   </button>
                 )}
                 <button
@@ -662,6 +725,142 @@ export default function App() {
           </>
         )}
       </main>
+
+      {/* 防串号数据隔离保护：检测到高驰账号变更提示弹窗 */}
+      {auth?.mismatch && (
+        <div style={{
+          position: "fixed",
+          inset: 0,
+          background: "rgba(0, 0, 0, 0.78)",
+          backdropFilter: "blur(5px)",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          zIndex: 9999,
+          padding: 20,
+        }}>
+          <div style={{
+            background: "var(--surface)",
+            border: "1px solid var(--border)",
+            borderRadius: 14,
+            maxWidth: 540,
+            width: "100%",
+            padding: 24,
+            boxShadow: "0 25px 50px -12px rgba(0, 0, 0, 0.5)",
+          }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12 }}>
+              <span style={{ fontSize: 24 }}>⚠️</span>
+              <h3 style={{ margin: 0, fontSize: 18, fontWeight: 600, color: "var(--text)" }}>
+                检测到高驰账号变更
+              </h3>
+            </div>
+            
+            <p style={{ fontSize: 13, color: "var(--text-dim)", lineHeight: 1.6, margin: "0 0 16px 0" }}>
+              当前档案已有「<strong style={{ color: "#60a5fa" }}>{auth.mismatch.existingNickname}</strong>」的{" "}
+              <strong>{auth.mismatch.activityCount}</strong> 条训练数据，但刚刚在浏览器中授权登录的高驰官方账号是「<strong style={{ color: "#34d399" }}>{auth.mismatch.incomingNickname}</strong>」。
+              <br /><br />
+              为防止不同跑友的运动记录、分圈配速与体能负荷模型发生混淆与交叉污染，请选择如何处置：
+            </p>
+
+            <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 18 }}>
+              {/* 选项 1: 强烈推荐新建档案 */}
+              <button
+                type="button"
+                disabled={resolvingMismatch}
+                onClick={() => handleResolveMismatch("create_new")}
+                style={{
+                  textAlign: "left",
+                  padding: "12px 16px",
+                  borderRadius: 10,
+                  background: "rgba(16, 185, 129, 0.1)",
+                  border: "1px solid rgba(16, 185, 129, 0.4)",
+                  cursor: resolvingMismatch ? "not-allowed" : "pointer",
+                  color: "var(--text)",
+                }}
+              >
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 4 }}>
+                  <span style={{ fontWeight: 600, fontSize: 13.5, color: "#10b981" }}>
+                    ① 为「{auth.mismatch.incomingNickname}」创建新档案并切换
+                  </span>
+                  <span style={{ fontSize: 11, background: "#10b981", color: "#fff", padding: "2px 6px", borderRadius: 4, fontWeight: 600 }}>
+                    强烈推荐
+                  </span>
+                </div>
+                <div style={{ fontSize: 12, color: "var(--text-dim)", lineHeight: 1.4 }}>
+                  保留当前档案内「{auth.mismatch.existingNickname}」的所有数据不动，自动建立新档案并立即拉取「{auth.mismatch.incomingNickname}」的数据。
+                </div>
+              </button>
+
+              {/* 选项 2: 重置当前档案 */}
+              <button
+                type="button"
+                disabled={resolvingMismatch}
+                onClick={() => handleResolveMismatch("overwrite")}
+                style={{
+                  textAlign: "left",
+                  padding: "12px 16px",
+                  borderRadius: 10,
+                  background: "rgba(239, 68, 68, 0.08)",
+                  border: "1px solid rgba(239, 68, 68, 0.25)",
+                  cursor: resolvingMismatch ? "not-allowed" : "pointer",
+                  color: "var(--text)",
+                }}
+              >
+                <div style={{ fontWeight: 600, fontSize: 13.5, color: "#ef4444", marginBottom: 4 }}>
+                  ② 清空当前档案旧数据，仅保留「{auth.mismatch.incomingNickname}」
+                </div>
+                <div style={{ fontSize: 12, color: "var(--text-dim)", lineHeight: 1.4 }}>
+                  彻底清空当前档案已有的 {auth.mismatch.activityCount} 条历史训练，换绑为新账号并重新开始拉取。
+                </div>
+              </button>
+
+              {/* 选项 3: 合并 */}
+              <button
+                type="button"
+                disabled={resolvingMismatch}
+                onClick={() => handleResolveMismatch("merge")}
+                style={{
+                  textAlign: "left",
+                  padding: "12px 16px",
+                  borderRadius: 10,
+                  background: "var(--surface-2)",
+                  border: "1px solid var(--border)",
+                  cursor: resolvingMismatch ? "not-allowed" : "pointer",
+                  color: "var(--text)",
+                }}
+              >
+                <div style={{ fontWeight: 600, fontSize: 13.5, color: "var(--text)", marginBottom: 4 }}>
+                  ③ 确认为同一人（如改名或大小号），合并导入
+                </div>
+                <div style={{ fontSize: 12, color: "var(--text-dim)", lineHeight: 1.4 }}>
+                  已知晓数据将混入当前档案，将「{auth.mismatch.incomingNickname}」的数据直接合入现有数据库。
+                </div>
+              </button>
+            </div>
+
+            {mismatchError && (
+              <div style={{ color: "#ef4444", fontSize: 12.5, marginBottom: 12 }}>
+                处理失败：{mismatchError}
+              </div>
+            )}
+
+            <div style={{ display: "flex", justifyContent: "flex-end" }}>
+              <button
+                type="button"
+                className="btn btn-subtle"
+                disabled={resolvingMismatch}
+                onClick={async () => {
+                  await disconnectCoros();
+                  await refreshAuth();
+                }}
+                style={{ fontSize: 12 }}
+              >
+                取消本次授权绑定
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* 移动端常驻底部导航 TabBar */}
       <nav className="mobile-tabbar" aria-label="移动端主导航">

@@ -1,4 +1,5 @@
 import { db, sqlite } from "../db/client.ts";
+import { upsertUserProfile } from "./user-profile.ts";
 import {
   activityDetails,
   activities,
@@ -31,6 +32,7 @@ import {
   type SportRecord,
 } from "../coros/parse.ts";
 import { FIT_DAILY_LIMIT } from "../config.ts";
+import { getActiveProfileId, updateProfileMeta } from "../profile-manager.ts";
 
 /**
  * 同步哪些运动类型由用户在设置页勾选，落在 sync_settings 表里。
@@ -128,13 +130,15 @@ export async function syncAll(opts: { days?: number; withLaps?: boolean } = {}):
       calories=excluded.calories, raw=excluded.raw, synced_at=unixepoch()
   `);
 
-  for (const r of byId.values()) {
-    upsertActivity.run(
-      r.labelId, r.sportType, r.sportName, r.date, r.dateLabel, r.startTimestamp, r.endTimestamp,
-      r.location, r.lat, r.lon, r.durationSec, r.distanceKm, r.avgPaceSec, r.avgHr, r.calories,
-      JSON.stringify(r),
-    );
-  }
+  sqlite.transaction(() => {
+    for (const r of byId.values()) {
+      upsertActivity.run(
+        r.labelId, r.sportType, r.sportName, r.date, r.dateLabel, r.startTimestamp, r.endTimestamp,
+        r.location, r.lat, r.lon, r.durationSec, r.distanceKm, r.avgPaceSec, r.avgHr, r.calories,
+        JSON.stringify(r),
+      );
+    }
+  })();
 
   // ---- 2. 单次详情 + 分圈 ----
   let detailCount = 0;
@@ -218,8 +222,11 @@ export async function syncAll(opts: { days?: number; withLaps?: boolean } = {}):
       ON CONFLICT(date) DO UPDATE SET comment=excluded.comment, short_load=excluded.short_load,
         long_load=excluded.long_load, ratio=excluded.ratio
     `);
-    for (const p of parseTrainingLoad(raw)) ins.run(p.date, p.comment, p.shortLoad, p.longLoad, p.ratio);
-    loadDays = parseTrainingLoad(raw).length;
+    const parsed = parseTrainingLoad(raw);
+    sqlite.transaction(() => {
+      for (const p of parsed) ins.run(p.date, p.comment, p.shortLoad, p.longLoad, p.ratio);
+    })();
+    loadDays = parsed.length;
   } catch (e) {
     errors.push(`queryTrainingLoadAssessment: ${(e as Error).message}`);
   }
@@ -237,12 +244,14 @@ export async function syncAll(opts: { days?: number; withLaps?: boolean } = {}):
         hrv_baseline=excluded.hrv_baseline
     `);
     const parsed = parseDailyHealth(raw);
-    for (const h of parsed) {
-      ins.run(
-        h.date, `${h.date.slice(0, 4)}-${h.date.slice(4, 6)}-${h.date.slice(6, 8)}`,
-        h.steps, h.calories, h.exerciseMin, h.stressAvg, h.restingHr, h.hrvBaseline,
-      );
-    }
+    sqlite.transaction(() => {
+      for (const h of parsed) {
+        ins.run(
+          h.date, `${h.date.slice(0, 4)}-${h.date.slice(4, 6)}-${h.date.slice(6, 8)}`,
+          h.steps, h.calories, h.exerciseMin, h.stressAvg, h.restingHr, h.hrvBaseline,
+        );
+      }
+    })();
     healthDays = parsed.length;
   } catch (e) {
     errors.push(`queryDailyHealthData: ${(e as Error).message}`);
@@ -258,7 +267,9 @@ export async function syncAll(opts: { days?: number; withLaps?: boolean } = {}):
       ON CONFLICT(date) DO UPDATE SET score=excluded.score, available=excluded.available, raw=excluded.raw
     `);
     const parsed = parseSleep(raw);
-    for (const s of parsed) ins.run(s.date, s.sleepScore, s.available ? 1 : 0, s.raw);
+    sqlite.transaction(() => {
+      for (const s of parsed) ins.run(s.date, s.sleepScore, s.available ? 1 : 0, s.raw);
+    })();
     sleepDays = parsed.length;
   } catch (e) {
     errors.push(`querySleepOverview: ${(e as Error).message}`);
@@ -270,12 +281,14 @@ export async function syncAll(opts: { days?: number; withLaps?: boolean } = {}):
   // 所以这里只拉平均心率，静息心率退回到 queryDailyHealthData 头部带的单点值。
   try {
     const raw = await callTool("queryAvgHeartRate", { days: Math.min(days, 60) });
-    for (const r of parseAvgHeartRate(raw)) {
-      sqlite.query(`
-        INSERT INTO heart_rate (date, avg_hr, min_hr, max_hr) VALUES (?,?,?,?)
-        ON CONFLICT(date) DO UPDATE SET avg_hr=excluded.avg_hr, min_hr=excluded.min_hr, max_hr=excluded.max_hr
-      `).run(r.date, r.avgHr, r.minHr, r.maxHr);
-    }
+    const rows = parseAvgHeartRate(raw);
+    const ins = sqlite.query(`
+      INSERT INTO heart_rate (date, avg_hr, min_hr, max_hr) VALUES (?,?,?,?)
+      ON CONFLICT(date) DO UPDATE SET avg_hr=excluded.avg_hr, min_hr=excluded.min_hr, max_hr=excluded.max_hr
+    `);
+    sqlite.transaction(() => {
+      for (const r of rows) ins.run(r.date, r.avgHr, r.minHr, r.maxHr);
+    })();
   } catch (e) {
     errors.push(`queryAvgHeartRate: ${(e as Error).message}`);
   }
@@ -283,12 +296,14 @@ export async function syncAll(opts: { days?: number; withLaps?: boolean } = {}):
 
   try {
     const raw = await callTool("queryStressLevel", { days: Math.min(days, 60) });
-    for (const r of parseStressLevel(raw)) {
-      sqlite.query(`
-        INSERT INTO stress (date, avg_stress, level) VALUES (?,?,?)
-        ON CONFLICT(date) DO UPDATE SET avg_stress=excluded.avg_stress, level=excluded.level
-      `).run(r.date, r.avgStress, r.level);
-    }
+    const rows = parseStressLevel(raw);
+    const ins = sqlite.query(`
+      INSERT INTO stress (date, avg_stress, level) VALUES (?,?,?)
+      ON CONFLICT(date) DO UPDATE SET avg_stress=excluded.avg_stress, level=excluded.level
+    `);
+    sqlite.transaction(() => {
+      for (const r of rows) ins.run(r.date, r.avgStress, r.level);
+    })();
   } catch (e) {
     errors.push(`queryStressLevel: ${(e as Error).message}`);
   }
@@ -365,24 +380,12 @@ export async function syncAll(opts: { days?: number; withLaps?: boolean } = {}):
   // max_hr / resting_hr 是用户手动填的，不能被 COROS 同步覆盖，所以不在更新列里。
   try {
     const raw = await callTool("queryUserInfo", {});
-    const num = (re: RegExp) => Number(raw.match(re)?.[1] ?? NaN);
-    sqlite.query(`
-      INSERT INTO users (height_cm, weight_kg, birthday, gender, nickname, raw)
-      VALUES (?,?,?,?,?,?)
-      ON CONFLICT(nickname) DO UPDATE SET
-        height_cm = excluded.height_cm,
-        weight_kg = excluded.weight_kg,
-        birthday  = excluded.birthday,
-        gender    = excluded.gender,
-        raw       = excluded.raw
-    `).run(
-      num(/Height:\s*([\d.]+)/), num(/Weight:\s*([\d.]+)/),
-      raw.match(/Birthday:\s*(\S+)/)?.[1] ?? null,
-      raw.match(/Gender:\s*(\w+)/)?.[1] ?? null,
-      // queryUserInfo 的返回是 JSON 转义过的文本，Nickname 末尾会残留一个引号
-      (raw.match(/Nickname:\s*(.+)/)?.[1] ?? "").replace(/["'\s]+"?\s*$/, "") || null,
-      raw,
-    );
+    const nick = upsertUserProfile(raw);
+    if (nick) {
+      try {
+        updateProfileMeta(getActiveProfileId(), { nickname: nick });
+      } catch {}
+    }
   } catch (e) {
     errors.push(`queryUserInfo: ${(e as Error).message}`);
   }
