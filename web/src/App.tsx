@@ -633,7 +633,7 @@ export default function App() {
                   ? <span className="pill good">AI 已配置</span>
                   : <span className="pill warn">AI 未配置</span>}
               </div>
-              <div style={{ marginTop: 8, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+              <div style={{ marginTop: 8, display: "flex", alignItems: "center", gap: 6 }}>
                 <button
                   type="button"
                   onClick={() => setShowUpdateModal(true)}
@@ -644,44 +644,17 @@ export default function App() {
                   <span className="dot" />
                   <span>{appVersion}</span>
                 </button>
-                {hasNewUpdate ? (
-                  <button
-                    type="button"
-                    onClick={() => setShowUpdateModal(true)}
+                {hasNewUpdate && (
+                  <span
                     style={{
-                      display: "inline-flex",
-                      alignItems: "center",
-                      gap: 4,
-                      padding: "2px 7px",
-                      borderRadius: 10,
-                      background: "rgba(255, 107, 0, 0.2)",
-                      border: "1px solid rgba(255, 107, 0, 0.4)",
-                      color: "#ff8c3a",
-                      fontSize: 11,
-                      cursor: "pointer",
-                      fontWeight: 600,
+                      width: 6,
+                      height: 6,
+                      borderRadius: "50%",
+                      background: "var(--accent)",
+                      display: "inline-block",
                     }}
-                    title="发现新版本，点击立即升级"
-                  >
-                    <span>新版可用</span>
-                    <span style={{ fontSize: 9 }}>▲</span>
-                  </button>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={() => setShowUpdateModal(true)}
-                    style={{
-                      background: "none",
-                      border: "none",
-                      color: "var(--text-dim, #777)",
-                      fontSize: 11,
-                      cursor: "pointer",
-                      padding: "2px 4px",
-                    }}
-                    title="检查最新版本"
-                  >
-                    检查更新
-                  </button>
+                    title="发现新版本，点击查看"
+                  />
                 )}
               </div>
             </>

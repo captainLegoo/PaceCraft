@@ -7,14 +7,6 @@ export function isTauriEnv(): boolean {
   return typeof window !== "undefined" && Boolean((window as any).__TAURI_INTERNALS__);
 }
 
-export type NetworkInfo = {
-  region: "CN" | "GLOBAL";
-  country: string;
-  ip: string;
-  route: "proxy" | "direct";
-  preferredRoute: "auto" | "proxy" | "direct";
-};
-
 export type ReleaseCheckResponse = {
   hasUpdate: boolean;
   latestVersion: string;
@@ -38,8 +30,6 @@ export default function UpdateModal({
   const [updateObj, setUpdateObj] = useState<Update | null>(null);
   const [newVersion, setNewVersion] = useState<string | null>(null);
   const [notes, setNotes] = useState<string | null>(null);
-  const [networkInfo, setNetworkInfo] = useState<NetworkInfo | null>(null);
-  const [selectedRoute, setSelectedRoute] = useState<"auto" | "proxy" | "direct">("auto");
   const [status, setStatus] = useState<
     "idle" | "checking" | "up-to-date" | "available" | "downloading" | "ready" | "error"
   >("idle");
@@ -54,93 +44,74 @@ export default function UpdateModal({
   const totalRef = useRef(0);
   const inFlightRef = useRef(false);
 
-  // 执行版本检测：统一请求本地后端代理，彻底避免浏览器直接打 GitHub API 触发 403 限流
-  const executeCheck = useCallback(
-    async (routeToUse?: "auto" | "proxy" | "direct") => {
-      if (inFlightRef.current) return;
-      inFlightRef.current = true;
-      setChecking(true);
-      setStatus("checking");
-      setErrorMsg(null);
-      setUpdateObj(null);
-      setNewVersion(null);
-      setNotes(null);
+  const executeCheck = useCallback(async () => {
+    if (inFlightRef.current) return;
+    inFlightRef.current = true;
+    setChecking(true);
+    setStatus("checking");
+    setErrorMsg(null);
+    setUpdateObj(null);
+    setNewVersion(null);
+    setNotes(null);
 
-      const route = routeToUse || selectedRoute;
-
-      try {
-        // 1. 获取网络区域与设置路线
-        let currentRegion = networkInfo;
-        try {
-          const regRes = await fetch("/api/updater/region");
-          if (regRes.ok) {
-            currentRegion = await regRes.json();
-            setNetworkInfo(currentRegion);
-          }
-          await fetch("/api/updater/route", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ route }),
-          });
-        } catch {}
-
-        // 2. 通过本地服务安全探测版本（带服务端缓存与合法 Header，无 403 风险）
-        const checkRes = await fetch(
-          `/api/updater/check?currentVersion=${encodeURIComponent(currentAppVersion)}&channel=${route}`
-        );
-        if (!checkRes.ok) {
-          throw new Error(`检测服务响应异常 (HTTP ${checkRes.status})`);
-        }
-        const data: ReleaseCheckResponse = await checkRes.json();
-
-        if (data.hasUpdate && data.latestVersion) {
-          setNewVersion(data.latestVersion);
-          setNotes(data.releaseNotes || "包含稳定性提升与功能改进。");
-
-          // 如果是在桌面应用环境，预初始化 Tauri Updater 对象供静默安装
-          if (isTauriEnv()) {
-            try {
-              const tauriUpdate = await check();
-              if (tauriUpdate) {
-                setUpdateObj(tauriUpdate);
-              }
-            } catch (e) {
-              console.warn("Tauri check background init notice:", e);
-            }
-          }
-
-          setStatus("available");
-        } else {
-          setStatus("up-to-date");
-        }
-      } catch (err: any) {
-        console.warn("Check update failed:", err);
-        setStatus("error");
-        setErrorMsg(err?.message || "检测更新失败，请检查网络连接或稍后重试。");
-      } finally {
-        inFlightRef.current = false;
-        setChecking(false);
+    try {
+      const startTime = Date.now();
+      // 手动触发检查时携带 force=true，强制穿透后端缓存重新向远端获取
+      const checkRes = await fetch(
+        `/api/updater/check?currentVersion=${encodeURIComponent(currentAppVersion)}&channel=auto&force=true&_t=${Date.now()}`
+      );
+      if (!checkRes.ok) {
+        throw new Error(`无法获取更新信息 (${checkRes.status})`);
       }
-    },
-    [currentAppVersion, selectedRoute, networkInfo]
-  );
+      const data: ReleaseCheckResponse = await checkRes.json();
 
-  // 仅在弹窗打开时触发一次检测，绝不循环
+      // 保证至少展示 450ms 的检查动效，给用户明确的“正在实时联网探测”的视觉反馈
+      const elapsed = Date.now() - startTime;
+      if (elapsed < 450) {
+        await new Promise((r) => setTimeout(r, 450 - elapsed));
+      }
+
+      if (data.hasUpdate && data.latestVersion) {
+        setNewVersion(data.latestVersion);
+        setNotes(data.releaseNotes || "");
+
+        if (isTauriEnv()) {
+          try {
+            const tauriUpdate = await check();
+            if (tauriUpdate) {
+              setUpdateObj(tauriUpdate);
+            }
+          } catch (e) {
+            console.warn("Tauri updater check background notice:", e);
+          }
+        }
+
+        setStatus("available");
+      } else {
+        setStatus("up-to-date");
+      }
+    } catch (err: any) {
+      console.warn("Check update failed:", err);
+      setStatus("error");
+      setErrorMsg(err?.message || "网络连接异常，暂时无法连接更新服务器");
+    } finally {
+      inFlightRef.current = false;
+      setChecking(false);
+    }
+  }, [currentAppVersion]);
+
   useEffect(() => {
     if (open) {
       executeCheck();
+    } else {
+      setStatus("idle");
+      setUpdateObj(null);
+      setNewVersion(null);
+      setNotes(null);
+      setErrorMsg(null);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open]);
+  }, [open, executeCheck]);
 
-  // 手动切换线路
-  const handleRouteChange = async (newRoute: "auto" | "proxy" | "direct") => {
-    if (checking || status === "downloading") return;
-    setSelectedRoute(newRoute);
-    await executeCheck(newRoute);
-  };
-
-  // 开始下载并安装
   const handleStartUpdate = async () => {
     if (!isTauriEnv() || !updateObj) {
       window.open("https://github.com/captainLegoo/PaceCraft/releases/latest", "_blank");
@@ -180,11 +151,10 @@ export default function UpdateModal({
     } catch (err: any) {
       console.error("Download/Install update failed:", err);
       setStatus("error");
-      setErrorMsg(err?.message || "下载或解压更新包失败，请尝试切换线路后重试。");
+      setErrorMsg(err?.message || "安装包下载中断或签名校验未通过");
     }
   };
 
-  // 重启应用
   const handleRestart = async () => {
     try {
       await relaunch();
@@ -201,15 +171,7 @@ export default function UpdateModal({
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
   };
 
-  const isChina = networkInfo?.region === "CN";
-  const activeRouteLabel =
-    selectedRoute === "auto"
-      ? isChina
-        ? "智能匹配：中国大陆（多路加速）"
-        : "智能匹配：海外/代理（直连官方）"
-      : selectedRoute === "proxy"
-      ? "国内加速镜像线路"
-      : "海外/GitHub 官方直连";
+  const cleanCurrent = currentAppVersion.replace(/^v/, "");
 
   const modalDom = (
     <div
@@ -222,14 +184,15 @@ export default function UpdateModal({
         width: "100vw",
         height: "100vh",
         zIndex: 999999,
-        background: "rgba(0, 0, 0, 0.72)",
-        backdropFilter: "blur(6px)",
-        WebkitBackdropFilter: "blur(6px)",
+        background: "rgba(0, 0, 0, 0.45)",
+        backdropFilter: "blur(3px)",
+        WebkitBackdropFilter: "blur(3px)",
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
-        padding: 16,
+        padding: 20,
         boxSizing: "border-box",
+        overscrollBehavior: "contain",
       }}
       onClick={(e) => {
         if (e.target === e.currentTarget && status !== "downloading") {
@@ -240,195 +203,139 @@ export default function UpdateModal({
       <div
         style={{
           width: "100%",
-          maxWidth: 500,
-          background: "var(--card-bg, #1e1e24)",
-          color: "var(--text-primary, #ffffff)",
-          border: "1px solid var(--border-color, #2a2a36)",
-          borderRadius: 16,
-          boxShadow: "0 20px 40px rgba(0,0,0,0.4)",
-          padding: 24,
+          maxWidth: 420,
+          background: "var(--surface)",
+          color: "var(--text)",
+          border: "1px solid var(--border)",
+          borderRadius: "var(--radius, 10px)",
+          boxShadow: "0 12px 32px -4px rgba(0, 0, 0, 0.35)",
           boxSizing: "border-box",
+          padding: "20px 22px",
+          fontFamily: "var(--font)",
         }}
       >
-        {/* 顶部标题与线路标签 */}
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 14 }}>
-          <div>
-            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-              <span style={{ fontSize: 22 }}>🚀</span>
-              <h3 style={{ margin: 0, fontSize: 18, fontWeight: 600 }}>软件更新检测</h3>
-            </div>
-            {/* 智能网络线路识别提示 */}
+        {/* 顶部产品标志与标题 */}
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            {/* 项目原生 SVG Brand Mark */}
             <div
               style={{
-                display: "inline-flex",
+                width: 28,
+                height: 28,
+                borderRadius: 7,
+                background: "var(--surface-2)",
+                border: "1px solid var(--border)",
+                display: "flex",
                 alignItems: "center",
-                gap: 6,
-                marginTop: 6,
-                padding: "2px 8px",
-                borderRadius: 6,
-                background: "rgba(255, 255, 255, 0.06)",
-                fontSize: 11,
-                color: "var(--text-dim, #999)",
+                justifyContent: "center",
+                flexShrink: 0,
               }}
             >
-              <span>🌐</span>
-              <span>{activeRouteLabel}</span>
-              {networkInfo?.country && <span>({networkInfo.country})</span>}
+              <svg viewBox="0 0 120 120" fill="none" style={{ width: 17, height: 17 }}>
+                <path
+                  d="M34 94 V26 H64 C79 26 88 35 88 48 C88 61 79 70 64 70 H48"
+                  stroke="var(--accent)"
+                  strokeWidth="11"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+                <path
+                  d="M68 41 H55 C50.5 41 47 44 47 48 C47 52 50.5 55 55 55 H68"
+                  stroke="var(--hr, #f43f5e)"
+                  strokeWidth="7"
+                  strokeLinecap="round"
+                />
+                <circle cx="56" cy="48" r="3.2" fill="var(--accent)" />
+              </svg>
+            </div>
+            <div>
+              <div style={{ fontSize: 14, fontWeight: 600, letterSpacing: "-0.01em" }}>PaceCraft</div>
+              <div style={{ fontSize: 11, color: "var(--text-dim)" }}>跑者 AI 训练中心</div>
             </div>
           </div>
 
           {status !== "downloading" && (
             <button
+              type="button"
               onClick={onClose}
               style={{
                 background: "transparent",
                 border: "none",
-                color: "var(--text-sub, #888)",
-                fontSize: 20,
+                color: "var(--text-dim)",
                 cursor: "pointer",
-                padding: "2px 8px",
+                padding: "4px 6px",
+                borderRadius: 4,
+                fontSize: 14,
+                lineHeight: 1,
               }}
+              title="关闭"
             >
               ✕
             </button>
           )}
         </div>
 
-        {/* 线路手动切换快捷标签 */}
-        {status !== "downloading" && (
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 6,
-              marginBottom: 16,
-              fontSize: 11,
-              padding: "6px 10px",
-              borderRadius: 8,
-              background: "rgba(0,0,0,0.2)",
-            }}
-          >
-            <span style={{ color: "var(--text-dim, #777)" }}>路线:</span>
-            <button
-              type="button"
-              disabled={checking}
-              onClick={() => handleRouteChange("auto")}
-              style={{
-                background: selectedRoute === "auto" ? "rgba(255, 107, 0, 0.25)" : "transparent",
-                color: selectedRoute === "auto" ? "#ff8c3a" : "var(--text-dim, #888)",
-                border: selectedRoute === "auto" ? "1px solid rgba(255, 107, 0, 0.5)" : "1px solid transparent",
-                borderRadius: 4,
-                padding: "2px 6px",
-                fontSize: 11,
-                cursor: checking ? "not-allowed" : "pointer",
-              }}
-            >
-              ⚡️ 自动识别
-            </button>
-            <button
-              type="button"
-              disabled={checking}
-              onClick={() => handleRouteChange("proxy")}
-              style={{
-                background: selectedRoute === "proxy" ? "rgba(255, 107, 0, 0.25)" : "transparent",
-                color: selectedRoute === "proxy" ? "#ff8c3a" : "var(--text-dim, #888)",
-                border: selectedRoute === "proxy" ? "1px solid rgba(255, 107, 0, 0.5)" : "1px solid transparent",
-                borderRadius: 4,
-                padding: "2px 6px",
-                fontSize: 11,
-                cursor: checking ? "not-allowed" : "pointer",
-              }}
-            >
-              🇨🇳 国内加速
-            </button>
-            <button
-              type="button"
-              disabled={checking}
-              onClick={() => handleRouteChange("direct")}
-              style={{
-                background: selectedRoute === "direct" ? "rgba(255, 107, 0, 0.25)" : "transparent",
-                color: selectedRoute === "direct" ? "#ff8c3a" : "var(--text-dim, #888)",
-                border: selectedRoute === "direct" ? "1px solid rgba(255, 107, 0, 0.5)" : "1px solid transparent",
-                borderRadius: 4,
-                padding: "2px 6px",
-                fontSize: 11,
-                cursor: checking ? "not-allowed" : "pointer",
-              }}
-            >
-              🌍 海外直连
-            </button>
-          </div>
-        )}
-
-        {/* 主体状态内容 */}
-        <div style={{ minHeight: 120 }}>
+        {/* 核心信息卡片 */}
+        <div style={{ minHeight: 90, display: "flex", flexDirection: "column", justifyContent: "center" }}>
           {status === "checking" && (
-            <div style={{ textAlign: "center", padding: "26px 0" }}>
-              <div
-                style={{
-                  width: 32,
-                  height: 32,
-                  border: "3px solid rgba(255, 107, 0, 0.2)",
-                  borderTopColor: "#ff6b00",
-                  borderRadius: "50%",
-                  margin: "0 auto 14px",
-                  animation: "spin 1s linear infinite",
-                }}
-              />
-              <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
-              <div style={{ fontSize: 13, color: "var(--text-sub, #aaa)" }}>
-                正在安全检测最新版本...
-              </div>
+            <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "12px 0" }}>
+              <span className="spin" style={{ width: 14, height: 14, borderWidth: 2 }} />
+              <span style={{ fontSize: 13, color: "var(--text-dim)" }}>正在检查可用更新…</span>
             </div>
           )}
 
           {status === "up-to-date" && (
-            <div style={{ textAlign: "center", padding: "22px 0" }}>
-              <div style={{ fontSize: 36, marginBottom: 12 }}>✨</div>
-              <div style={{ fontSize: 16, fontWeight: 500, marginBottom: 6 }}>当前已是最新版本</div>
-              <div style={{ fontSize: 13, color: "var(--text-sub, #aaa)" }}>
-                当前运行版本：v{currentAppVersion.replace(/^v/, "")}
+            <div style={{ padding: "6px 0" }}>
+              <div style={{ fontSize: 13.5, fontWeight: 500, color: "var(--text)", marginBottom: 6 }}>
+                当前已是最新版本
+              </div>
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <span className="version-tag">
+                  <span className="dot" />
+                  <span>v{cleanCurrent}</span>
+                </span>
+                <span style={{ fontSize: 12, color: "var(--text-dim)" }}>PaceCraft 目前无需更新。</span>
               </div>
             </div>
           )}
 
           {status === "available" && (
             <div>
-              <div
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "space-between",
-                  padding: "10px 14px",
-                  background: "rgba(255, 107, 0, 0.08)",
-                  border: "1px solid rgba(255, 107, 0, 0.25)",
-                  borderRadius: 10,
-                  marginBottom: 14,
-                }}
-              >
-                <div>
-                  <div style={{ fontSize: 12, color: "#ff8c3a" }}>发现新版本</div>
-                  <div style={{ fontSize: 16, fontWeight: 600 }}>v{newVersion}</div>
-                </div>
-                <div style={{ fontSize: 12, color: "var(--text-sub, #888)" }}>
-                  当前版本：v{currentAppVersion.replace(/^v/, "")}
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+                <span style={{ fontSize: 13.5, fontWeight: 600, color: "var(--text)" }}>
+                  发现新版本
+                </span>
+                <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                  <span style={{ fontSize: 11, color: "var(--text-dim)" }}>v{cleanCurrent} →</span>
+                  <span
+                    className="version-tag"
+                    style={{
+                      color: "var(--accent)",
+                      borderColor: "var(--accent)",
+                      background: "var(--surface-2)",
+                      fontWeight: 600,
+                    }}
+                  >
+                    v{newVersion}
+                  </span>
                 </div>
               </div>
 
               {notes && (
-                <div style={{ marginBottom: 16 }}>
-                  <div style={{ fontSize: 12, color: "var(--text-sub, #888)", marginBottom: 6 }}>更新说明：</div>
+                <div style={{ marginBottom: 10 }}>
                   <div
                     style={{
                       maxHeight: 140,
                       overflowY: "auto",
-                      fontSize: 13,
+                      fontSize: 12,
                       lineHeight: 1.6,
-                      background: "rgba(0,0,0,0.15)",
-                      padding: "10px 12px",
-                      borderRadius: 8,
+                      color: "var(--text)",
+                      background: "var(--surface-2)",
+                      border: "1px solid var(--border)",
+                      borderRadius: 6,
+                      padding: "8px 10px",
                       whiteSpace: "pre-wrap",
-                      color: "var(--text-secondary, #ddd)",
+                      wordBreak: "break-word",
                     }}
                   >
                     {notes}
@@ -437,96 +344,66 @@ export default function UpdateModal({
               )}
 
               {!isTauriEnv() && (
-                <div
-                  style={{
-                    fontSize: 12,
-                    color: "#f59e0b",
-                    marginBottom: 14,
-                    padding: "8px 10px",
-                    background: "rgba(245, 158, 11, 0.1)",
-                    borderRadius: 6,
-                  }}
-                >
-                  💡 检测到你当前在浏览器中运行，点击下方按钮前往 Release 页面下载客户端安装包升级。
+                <div style={{ fontSize: 11.5, color: "var(--text-dim)", lineHeight: 1.5 }}>
+                  当前在网页端运行，请前往 Release 页面获取桌面安装包。
                 </div>
               )}
             </div>
           )}
 
           {status === "downloading" && (
-            <div style={{ padding: "16px 0" }}>
-              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, marginBottom: 8 }}>
-                <span>正在下载新版本...</span>
-                <span>{progress.percent}%</span>
+            <div style={{ padding: "8px 0" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, marginBottom: 6, color: "var(--text)" }}>
+                <span>正在下载…</span>
+                <span style={{ fontVariantNumeric: "tabular-nums", fontFamily: "var(--mono)" }}>
+                  {progress.percent}%
+                </span>
               </div>
               <div
                 style={{
                   width: "100%",
-                  height: 8,
-                  background: "rgba(255, 255, 255, 0.1)",
-                  borderRadius: 4,
+                  height: 3,
+                  background: "var(--border)",
+                  borderRadius: 2,
                   overflow: "hidden",
-                  marginBottom: 10,
+                  marginBottom: 6,
                 }}
               >
                 <div
                   style={{
                     width: `${progress.percent}%`,
                     height: "100%",
-                    background: "linear-gradient(90deg, #ff6b00, #ff8c3a)",
-                    transition: "width 0.2s ease",
+                    background: "var(--accent)",
+                    transition: "width 0.2s linear",
                   }}
                 />
               </div>
-              <div
-                style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  fontSize: 12,
-                  color: "var(--text-sub, #888)",
-                }}
-              >
-                <span>已下载: {formatSize(progress.downloaded)}</span>
-                {progress.total > 0 && <span>总大小: {formatSize(progress.total)}</span>}
-              </div>
-              <div style={{ fontSize: 11, color: "var(--text-sub, #666)", marginTop: 12, textAlign: "center" }}>
-                正在通过【{activeRouteLabel}】下载并自动校验，请勿关闭程序...
+              <div style={{ fontSize: 11, color: "var(--text-dim)", fontVariantNumeric: "tabular-nums" }}>
+                {progress.total > 0
+                  ? `${formatSize(progress.downloaded)} / ${formatSize(progress.total)}`
+                  : "正在连接服务器…"}
               </div>
             </div>
           )}
 
           {status === "ready" && (
-            <div style={{ textAlign: "center", padding: "20px 0" }}>
-              <div style={{ fontSize: 40, marginBottom: 12 }}>🎉</div>
-              <div style={{ fontSize: 16, fontWeight: 600, color: "#10b981", marginBottom: 6 }}>
-                新版本已成功就绪！
+            <div style={{ padding: "6px 0" }}>
+              <div style={{ fontSize: 13.5, fontWeight: 500, color: "var(--text)", marginBottom: 4 }}>
+                更新已准备就绪
               </div>
-              <div style={{ fontSize: 13, color: "var(--text-sub, #aaa)" }}>
-                安装包已解压替换完毕，点击下方按钮立即重启应用即可体验最新功能。
+              <div style={{ fontSize: 12, color: "var(--text-dim)" }}>
+                安装包已校验完成，重启应用即可升级到最新版本。
               </div>
             </div>
           )}
 
           {status === "error" && (
-            <div style={{ padding: "14px 0" }}>
-              <div style={{ fontSize: 14, color: "#ef4444", marginBottom: 8, fontWeight: 500 }}>
-                ⚠️ 检测出现异常
+            <div style={{ padding: "6px 0" }}>
+              <div style={{ fontSize: 13, fontWeight: 500, color: "var(--bad, #ef4444)", marginBottom: 4 }}>
+                检查更新未成功
               </div>
-              <div
-                style={{
-                  fontSize: 12,
-                  color: "var(--text-sub, #aaa)",
-                  background: "rgba(239, 68, 68, 0.1)",
-                  padding: "8px 12px",
-                  borderRadius: 6,
-                  marginBottom: 14,
-                  wordBreak: "break-all",
-                }}
-              >
+              <div style={{ fontSize: 11.5, color: "var(--text-dim)", lineHeight: 1.5 }}>
                 {errorMsg}
-              </div>
-              <div style={{ fontSize: 12, color: "var(--text-sub, #888)", lineHeight: 1.5 }}>
-                💡 提示：可尝试切换线路为【国内加速】重新测试，亦可直接前往 GitHub 手动下载。
               </div>
             </div>
           )}
@@ -537,128 +414,87 @@ export default function UpdateModal({
           style={{
             display: "flex",
             justifyContent: "flex-end",
-            gap: 10,
-            marginTop: 18,
-            borderTop: "1px solid var(--border-color, #2a2a36)",
-            paddingTop: 16,
+            alignItems: "center",
+            gap: 8,
+            marginTop: 16,
+            paddingTop: 14,
+            borderTop: "1px solid var(--border)",
           }}
         >
           {status === "up-to-date" && (
             <button
+              type="button"
+              className="btn"
               onClick={onClose}
-              style={{
-                padding: "8px 18px",
-                background: "var(--accent-color, #ff6b00)",
-                color: "#fff",
-                border: "none",
-                borderRadius: 8,
-                fontSize: 13,
-                cursor: "pointer",
-                fontWeight: 500,
-              }}
+              style={{ padding: "5px 14px", fontSize: 12 }}
             >
-              我知道了
+              确定
             </button>
           )}
 
           {status === "available" && (
             <>
               <button
+                type="button"
+                className="btn btn-subtle"
                 onClick={onClose}
-                style={{
-                  padding: "8px 16px",
-                  background: "transparent",
-                  color: "var(--text-sub, #aaa)",
-                  border: "1px solid var(--border-color, #333)",
-                  borderRadius: 8,
-                  fontSize: 13,
-                  cursor: "pointer",
-                }}
+                style={{ padding: "5px 12px", fontSize: 12 }}
               >
-                稍后提醒
+                稍后
               </button>
               <button
+                type="button"
+                className="btn"
                 onClick={handleStartUpdate}
                 style={{
-                  padding: "8px 20px",
-                  background: "var(--accent-color, #ff6b00)",
-                  color: "#fff",
-                  border: "none",
-                  borderRadius: 8,
-                  fontSize: 13,
-                  cursor: "pointer",
+                  padding: "5px 14px",
+                  fontSize: 12,
+                  background: "var(--accent)",
+                  color: "#1a1d23",
                   fontWeight: 600,
+                  borderColor: "transparent",
                 }}
               >
-                {isTauriEnv() && updateObj ? "立即自动更新" : "前往 Release 下载"}
+                {isTauriEnv() && updateObj ? "立即更新" : "下载更新"}
               </button>
             </>
           )}
 
           {status === "ready" && (
             <button
+              type="button"
+              className="btn"
               onClick={handleRestart}
               style={{
-                padding: "8px 22px",
-                background: "#10b981",
-                color: "#fff",
-                border: "none",
-                borderRadius: 8,
-                fontSize: 14,
-                cursor: "pointer",
+                padding: "5px 14px",
+                fontSize: 12,
+                background: "var(--accent)",
+                color: "#1a1d23",
                 fontWeight: 600,
+                borderColor: "transparent",
               }}
             >
-              立即重启生效
+              重启应用
             </button>
           )}
 
           {status === "error" && (
             <>
               <button
+                type="button"
+                className="btn btn-subtle"
                 onClick={onClose}
-                style={{
-                  padding: "8px 16px",
-                  background: "transparent",
-                  color: "var(--text-sub, #aaa)",
-                  border: "1px solid var(--border-color, #333)",
-                  borderRadius: 8,
-                  fontSize: 13,
-                  cursor: "pointer",
-                }}
+                style={{ padding: "5px 12px", fontSize: 12 }}
               >
                 关闭
               </button>
               <button
-                onClick={() => {
-                  window.open("https://github.com/captainLegoo/PaceCraft/releases", "_blank");
-                }}
-                style={{
-                  padding: "8px 16px",
-                  background: "transparent",
-                  color: "#ff8c3a",
-                  border: "1px solid rgba(255, 140, 58, 0.4)",
-                  borderRadius: 8,
-                  fontSize: 13,
-                  cursor: "pointer",
-                }}
-              >
-                手动网页下载
-              </button>
-              <button
+                type="button"
+                className="btn"
                 onClick={() => executeCheck()}
-                style={{
-                  padding: "8px 18px",
-                  background: "var(--accent-color, #ff6b00)",
-                  color: "#fff",
-                  border: "none",
-                  borderRadius: 8,
-                  fontSize: 13,
-                  cursor: "pointer",
-                  fontWeight: 500,
-                }}
+                style={{ padding: "5px 14px", fontSize: 12 }}
               >
-                重试检测
+                重试
               </button>
             </>
           )}
