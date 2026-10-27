@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from "react";
+import { createPortal } from "react-dom";
 import { check, type Update } from "@tauri-apps/plugin-updater";
 import { relaunch } from "@tauri-apps/plugin-process";
 
@@ -210,18 +211,25 @@ export default function UpdateModal({
       ? "国内加速镜像线路"
       : "海外/GitHub 官方直连";
 
-  return (
+  const modalDom = (
     <div
       style={{
         position: "fixed",
-        inset: 0,
-        zIndex: 9999,
-        background: "rgba(0, 0, 0, 0.65)",
-        backdropFilter: "blur(4px)",
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        width: "100vw",
+        height: "100vh",
+        zIndex: 999999,
+        background: "rgba(0, 0, 0, 0.72)",
+        backdropFilter: "blur(6px)",
+        WebkitBackdropFilter: "blur(6px)",
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
         padding: 16,
+        boxSizing: "border-box",
       }}
       onClick={(e) => {
         if (e.target === e.currentTarget && status !== "downloading") {
@@ -658,4 +666,6 @@ export default function UpdateModal({
       </div>
     </div>
   );
+
+  return typeof document !== "undefined" ? createPortal(modalDom, document.body) : modalDom;
 }
