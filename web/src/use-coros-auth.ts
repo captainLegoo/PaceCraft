@@ -92,7 +92,7 @@ export function useCorosAuth(onSuccess?: () => void, onDisconnect?: () => void) 
       let attempts = 0;
       timerRef.current = setInterval(async () => {
         attempts++;
-        if (popup?.closed || attempts > 150) {
+        if ((popup as Window | null)?.closed || attempts > 150) {
           cleanupListeners();
           setConnecting(false);
           setAuthUrl(null);

@@ -209,6 +209,6 @@ export function wipeAllLocalData(): { ok: boolean } {
   if (existsSync(ROOT_DATA_DIR)) {
     rmSync(ROOT_DATA_DIR, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
   }
-  ensureProfileSystem();
+  checkLegacyMigration();
   return { ok: true };
 }

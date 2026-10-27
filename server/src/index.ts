@@ -3,7 +3,7 @@ import { Elysia } from "elysia";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { and, asc, desc, eq, gte, inArray, lte } from "drizzle-orm";
-import { db } from "./db/client.ts";
+import { db, sqlite } from "./db/client.ts";
 import {
   aiReports, aiSessionReports, aiSettings, aiWeekReports, activities, activityDetails, dailyHealth, fitness,
   heartRate, laps, races, recovery, sleep, stress, syncLog, trainingLoad, users,
