@@ -921,7 +921,11 @@ export default function App() {
                 <div className="sub">配置 AI 模型、同步数据</div>
               </div>
             </div>
-            <Settings onStatus={refresh} />
+            <Settings
+              onStatus={refresh}
+              hasNewUpdate={hasNewUpdate}
+              onCheckUpdate={() => setShowUpdateModal(true)}
+            />
           </>
         )}
       </main>

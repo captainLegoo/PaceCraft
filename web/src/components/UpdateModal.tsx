@@ -112,6 +112,18 @@ export default function UpdateModal({
     }
   }, [open, executeCheck]);
 
+  // 桌面端快捷键：按 ESC 键优雅关闭弹窗（下载中禁止）
+  useEffect(() => {
+    if (!open || status === "downloading") return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        onClose();
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [open, status, onClose]);
+
   const handleStartUpdate = async () => {
     if (!isTauriEnv() || !updateObj) {
       window.open("https://github.com/captainLegoo/PaceCraft/releases/latest", "_blank");
@@ -151,7 +163,12 @@ export default function UpdateModal({
     } catch (err: any) {
       console.error("Download/Install update failed:", err);
       setStatus("error");
-      setErrorMsg(err?.message || "安装包下载中断或签名校验未通过");
+      const raw = String(err?.message || err || "");
+      if (/Operation not permitted|Read-only|Permission denied|os error 1/i.test(raw)) {
+        setErrorMsg("更新写入受限：若在 macOS 上运行，请确保已将应用移入「应用程序」文件夹，而非直接在 DMG 挂载盘中运行。");
+      } else {
+        setErrorMsg(raw || "安装包下载中断或签名校验未通过");
+      }
     }
   };
 

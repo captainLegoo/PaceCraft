@@ -5,7 +5,6 @@ import { IconDatabase, IconGear, IconHeart, IconSync } from "../icons";
 import WorkflowPanel from "./WorkflowPanel";
 import { useCorosAuth } from "../use-coros-auth";
 import { DEFAULT_APP_VERSION } from "../version";
-import UpdateModal from "../components/UpdateModal";
 
 export type PopularModel = {
   model: string;
@@ -364,7 +363,15 @@ function detectProviderId(baseUrl: string, provider: string): string {
   return "custom";
 }
 
-export default function Settings({ onStatus }: { onStatus: () => void }) {
+export default function Settings({
+  onStatus,
+  hasNewUpdate = false,
+  onCheckUpdate,
+}: {
+  onStatus: () => void;
+  hasNewUpdate?: boolean;
+  onCheckUpdate?: () => void;
+}) {
   const {
     auth,
     loading: authLoading,
@@ -395,7 +402,6 @@ export default function Settings({ onStatus }: { onStatus: () => void }) {
   const [selectedProviderId, setSelectedProviderId] = useState<string>("deepseek");
   const [status, setStatus] = useState<any>(null);
   const appVersion = status?.version || DEFAULT_APP_VERSION;
-  const [showUpdateModal, setShowUpdateModal] = useState(false);
   const [msg, setMsg] = useState<{ kind: "ok" | "error"; text: string } | null>(null);
   const [aiMsg, setAiMsg] = useState<{ kind: "ok" | "error"; text: string } | null>(null);
   const [saving, setSaving] = useState(false);
@@ -1628,10 +1634,28 @@ export default function Settings({ onStatus }: { onStatus: () => void }) {
                       <button
                         type="button"
                         className="btn"
-                        style={{ padding: "3px 10px", fontSize: 12, height: "auto" }}
-                        onClick={() => setShowUpdateModal(true)}
+                        style={{
+                          padding: "3px 10px",
+                          fontSize: 12,
+                          height: "auto",
+                          ...(hasNewUpdate
+                            ? { color: "var(--accent)", borderColor: "var(--accent)" }
+                            : {}),
+                        }}
+                        onClick={onCheckUpdate}
                       >
-                        检查更新
+                        {hasNewUpdate && (
+                          <span
+                            style={{
+                              width: 5,
+                              height: 5,
+                              borderRadius: "50%",
+                              background: "var(--accent)",
+                              display: "inline-block",
+                            }}
+                          />
+                        )}
+                        <span>{hasNewUpdate ? "发现新版本" : "检查更新"}</span>
                       </button>
                     </td>
                   </tr>
@@ -1760,12 +1784,6 @@ export default function Settings({ onStatus }: { onStatus: () => void }) {
           </div>
         )}
       </div>
-
-      <UpdateModal
-        open={showUpdateModal}
-        onClose={() => setShowUpdateModal(false)}
-        currentAppVersion={appVersion}
-      />
     </>
   );
 }
