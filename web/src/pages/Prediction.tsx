@@ -132,7 +132,7 @@ export default function Prediction() {
             由三项合成：<strong>负荷累积</strong>（7 天指数加权 vs 28 天基线）、
             <strong>恢复不足</strong>（静息心率相对基线的抬升）、
             <strong>累积压力</strong>（连续高负荷天数）。
-            只用每天都有的数据 —— 你的睡眠评分在库里 60 天只有 1 天有效，所以没进模型。
+            仅纳入具备生理区分度与连续性的指标动态加权；若夜间佩戴天数较少（如静息心率/睡眠不连续），模型会自动降权并平滑补偿，确保疲劳评分不失真。
           </p>
 
           <div style={{ display: "flex", gap: 22, alignItems: "center", flexWrap: "wrap", marginTop: 14 }}>

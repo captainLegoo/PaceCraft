@@ -102,7 +102,18 @@ export default function Training({
       >
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 14 }}>
           {/* 目标赛事倒计时与信息 */}
-          <div style={{ display: "flex", alignItems: "center", gap: 14, minWidth: 260, flex: "1 1 280px" }}>
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 14,
+              minWidth: 260,
+              flex: "1 1 280px",
+              cursor: onGoRace ? "pointer" : "default",
+            }}
+            onClick={() => onGoRace?.()}
+            title={targetRace ? "点击查看目标赛事与备战简报" : "点击前往赛事中心配置目标比赛与 GPX 路线"}
+          >
             <div
               style={{
                 width: 44,
@@ -134,7 +145,7 @@ export default function Training({
               <div style={{ fontSize: 12, color: "var(--text-faint)", marginTop: 2 }}>
                 {targetRace
                   ? `${targetRace.distanceKm} km · ${targetRace.city ?? "城市待定"}${targetRace.goalSec ? ` · 目标 ${fmtDur(targetRace.goalSec)}` : ""}`
-                  : "前往「赛事中心」上传 GPX 路线并设定目标成绩"}
+                  : "点击前往「赛事中心」上传 GPX 路线并设定目标成绩 →"}
               </div>
             </div>
           </div>

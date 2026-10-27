@@ -55,17 +55,21 @@ export function openExternalUrl(url: string) {
   }
 }
 
-export function cancelAuthFlow(): { ok: boolean } {
+export async function cancelAuthFlow(): Promise<{ ok: boolean }> {
   if (activeTimer) {
     clearTimeout(activeTimer);
     activeTimer = null;
   }
   if (activeServer) {
-    try {
-      activeServer.closeAllConnections?.();
-      activeServer.close();
-    } catch {}
+    const s = activeServer;
     activeServer = null;
+    try {
+      s.closeAllConnections?.();
+      await new Promise<void>((resolve) => {
+        s.close(() => resolve());
+        setTimeout(resolve, 300);
+      });
+    } catch {}
   }
   return { ok: true };
 }
@@ -115,9 +119,9 @@ export function getAuthStatus(): AuthStatus {
   };
 }
 
-export function disconnectAuth(): { ok: boolean } {
+export async function disconnectAuth(): Promise<{ ok: boolean }> {
   clearTokens();
-  cancelAuthFlow();
+  await cancelAuthFlow();
   try {
     updateProfileMeta(getActiveProfileId(), { nickname: null });
   } catch {}
@@ -126,20 +130,7 @@ export function disconnectAuth(): { ok: boolean } {
 
 export async function startAuthFlow(): Promise<{ authorizeUrl: string }> {
   // 1. 如果已有等待中的回调服务，先行清理并等待彻底释放端口
-  if (activeTimer) {
-    clearTimeout(activeTimer);
-    activeTimer = null;
-  }
-  if (activeServer) {
-    try {
-      activeServer.closeAllConnections?.();
-      await new Promise<void>((resolve) => {
-        activeServer!.close(() => resolve());
-        setTimeout(resolve, 300);
-      });
-    } catch {}
-    activeServer = null;
-  }
+  await cancelAuthFlow();
 
   // 2. 动态注册客户端与准备 PKCE
   const { clientId } = await registerClient();
@@ -294,8 +285,12 @@ export async function startAuthFlow(): Promise<{ authorizeUrl: string }> {
       if (activeTimer) clearTimeout(activeTimer);
       activeTimer = null;
       if (activeServer) {
-        activeServer.close();
+        const s = activeServer;
         activeServer = null;
+        try {
+          s.closeAllConnections?.();
+          s.close();
+        } catch {}
       }
     }
   });
@@ -306,7 +301,7 @@ export async function startAuthFlow(): Promise<{ authorizeUrl: string }> {
 
   // 带重试机制的端口监听（防止系统 socket 处于 TIME_WAIT 状态时偶发 EADDRINUSE）
   let lastErr: any = null;
-  for (let attempt = 0; attempt < 3; attempt++) {
+  for (let attempt = 0; attempt < 5; attempt++) {
     try {
       await new Promise<void>((resolve, reject) => {
         const onErr = (e: any) => reject(e);
@@ -320,7 +315,10 @@ export async function startAuthFlow(): Promise<{ authorizeUrl: string }> {
       break;
     } catch (e: any) {
       lastErr = e;
-      if (e.code === "EADDRINUSE" && attempt < 2) {
+      const isPortInUse =
+        e.code === "EADDRINUSE" ||
+        (typeof e.message === "string" && e.message.includes("in use"));
+      if (isPortInUse && attempt < 4) {
         await new Promise((r) => setTimeout(r, 400));
         continue;
       }

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { api, type SyncSportsPayload } from "../api";
+import { api, type SyncProgress, type SyncSportsPayload } from "../api";
 import { IconDatabase, IconGear, IconHeart, IconSync } from "../icons";
 import WorkflowPanel from "./WorkflowPanel";
 import { useCorosAuth } from "../use-coros-auth";
@@ -372,10 +372,16 @@ export default function Settings({ onStatus }: { onStatus: () => void }) {
     disconnect: disconnectCoros,
     cancel: cancelCoros,
     openBrowser: openCorosBrowser,
-  } = useCorosAuth(() => {
-    onStatus();
-    api.status().then(setStatus).catch(() => {});
-  });
+  } = useCorosAuth(
+    () => {
+      onStatus();
+      api.status().then(setStatus).catch(() => {});
+    },
+    () => {
+      onStatus();
+      api.status().then(setStatus).catch(() => {});
+    }
+  );
 
   const [cfg, setCfg] = useState<any>({
     provider: "openai", baseUrl: "https://api.openai.com/v1", apiKey: "",
@@ -390,7 +396,8 @@ export default function Settings({ onStatus }: { onStatus: () => void }) {
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
   const [syncing, setSyncing] = useState(false);
-  const [syncDays, setSyncDays] = useState(120);
+  const [syncProgress, setSyncProgress] = useState<SyncProgress | null>(null);
+  const [syncDays, setSyncDays] = useState(365);
   const [dataDir, setDataDir] = useState<string>("");
   const [wiping, setWiping] = useState(false);
   const [showWipeBox, setShowWipeBox] = useState(false);
@@ -622,6 +629,16 @@ export default function Settings({ onStatus }: { onStatus: () => void }) {
 
   const doSync = async () => {
     setSyncing(true); setMsg(null);
+    const timer = setInterval(async () => {
+      try {
+        const p = await api.syncProgress();
+        setSyncProgress(p);
+        if (!p.active) {
+          clearInterval(timer);
+        }
+      } catch {}
+    }, 500);
+
     try {
       const r = await api.sync(syncDays);
       setMsg({
@@ -634,7 +651,11 @@ export default function Settings({ onStatus }: { onStatus: () => void }) {
       onStatus();
     } catch (e) {
       setMsg({ kind: "error", text: (e as Error).message });
-    } finally { setSyncing(false); }
+    } finally {
+      clearInterval(timer);
+      setSyncing(false);
+      setTimeout(() => setSyncProgress(null), 3000);
+    }
   };
 
   const onSelectProvider = (pid: string) => {
@@ -1512,12 +1533,54 @@ export default function Settings({ onStatus }: { onStatus: () => void }) {
             )}
 
             <div className="hint" style={{ margin: "18px 0 6px" }}>回溯天数</div>
+            <div style={{ display: "flex", gap: 8, marginBottom: 8, flexWrap: "wrap" }}>
+              {[
+                { label: "近 90 天", days: 90 },
+                { label: "近 1 年 (推荐)", days: 365 },
+                { label: "近 2 年", days: 730 },
+              ].map((b) => (
+                <button
+                  key={b.days}
+                  type="button"
+                  className="btn btn-subtle"
+                  style={{
+                    fontSize: 12,
+                    padding: "4px 10px",
+                    background: syncDays === b.days ? "var(--accent)" : "var(--surface-2)",
+                    color: syncDays === b.days ? "#fff" : "var(--text)",
+                    border: `1px solid ${syncDays === b.days ? "var(--accent)" : "var(--border)"}`,
+                    fontWeight: syncDays === b.days ? 600 : 400,
+                  }}
+                  onClick={() => setSyncDays(b.days)}
+                >
+                  {b.label}
+                </button>
+              ))}
+            </div>
             <label className="field">
               <input type="number" value={syncDays} onChange={(e) => setSyncDays(Number(e.target.value))} />
-              <div className="hint">活动多时同步耗时较长（拉取分圈是主要开销），首次建议设小一点。</div>
+              <div className="hint">
+                <strong>推荐回溯 365 天（1 年）</strong>：长周期训练数据能自动提取半马、全马等真实比赛作为基准锚点，大幅提升马拉松完赛预测准确度。已存在的训练会自动跳过分圈，不会重复消耗耗时。
+              </div>
             </label>
+
+            {syncProgress?.active && (
+              <div style={{ margin: "14px 0", padding: "12px 14px", background: "var(--surface-2)", borderRadius: 8, border: "1px solid var(--border)" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 12, marginBottom: 6 }}>
+                  <span style={{ fontWeight: 500, color: "var(--text)", display: "inline-flex", alignItems: "center", gap: 6 }}>
+                    <span className="spin" style={{ width: 12, height: 12, borderColor: "var(--accent)" }} />
+                    {syncProgress.message}
+                  </span>
+                  <span style={{ color: "var(--accent)", fontWeight: 600 }}>{syncProgress.percent}%</span>
+                </div>
+                <div style={{ height: 6, background: "var(--surface-3)", borderRadius: 3, overflow: "hidden" }}>
+                  <div style={{ height: "100%", width: `${Math.max(5, syncProgress.percent)}%`, background: "var(--accent)", transition: "width 0.3s ease" }} />
+                </div>
+              </div>
+            )}
+
             <button className="btn" onClick={doSync} disabled={syncing || !auth?.connected} title={!auth?.connected ? "请先连接 COROS 账号" : undefined}>
-              {syncing ? <><span className="spin" /> 同步中，约需 1–2 分钟…</> : !auth?.connected ? "请先连接 COROS 账号" : "立即同步"}
+              {syncing ? <><span className="spin" /> 同步中 {syncProgress ? `(${syncProgress.percent}%)` : "..."}</> : !auth?.connected ? "请先连接 COROS 账号" : "立即同步"}
             </button>
             {msg && (
               <div className={`banner ${msg.kind === "ok" ? "info" : "error"}`} style={{ marginTop: 14, marginBottom: 0 }}>

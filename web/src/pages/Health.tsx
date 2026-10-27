@@ -21,6 +21,13 @@ export default function Health() {
   const sleepAvailable = sleep.filter((s: any) => Number(s.available) === 1 && Number(s.score) > 0);
   const sleepMissing = sleep.length - sleepAvailable.length;
   const latest = health[health.length - 1];
+  const lastSleep = sleepAvailable.length > 0 ? sleepAvailable[sleepAvailable.length - 1] : null;
+  const isYesterday = lastSleep ? (() => {
+    const yesterday = new Date();
+    yesterday.setDate(yesterday.getDate() - 1);
+    const yStr = `${yesterday.getFullYear()}-${String(yesterday.getMonth() + 1).padStart(2, "0")}-${String(yesterday.getDate()).padStart(2, "0")}`;
+    return lastSleep.date === yStr;
+  })() : false;
 
   // 静息心率只有一个当前值（queryDailyHealthData 头部），不是序列
   const restingHr = latest?.restingHr ?? null;
@@ -33,11 +40,9 @@ export default function Health() {
   return (
     <>
       {sleepMissing > sleepAvailable.length && (
-        <div className="banner warn">
-          近 {sleep.length} 天里有 <strong>{sleepMissing}</strong> 天没有睡眠数据。
-          原因是手表没有在夜间佩戴记录 —— COROS 的静息心率序列、睡眠 HRV、压力分区也全部返回 No data。
-          <br />
-          连续戴表睡觉 3–5 天后重新同步，这几项会自动出现。
+        <div className="banner info" style={{ borderColor: "rgba(59, 130, 246, 0.3)" }}>
+          近 {sleep.length} 天中记录到 <strong>{sleepAvailable.length}</strong> 天夜间入睡佩戴。
+          高驰睡眠评分与夜间心率需入睡时佩戴腕表；未佩戴的天数官方云端标记为未入睡，不影响白天的跑步与训练负荷分析。
         </div>
       )}
 
@@ -67,9 +72,9 @@ export default function Health() {
         </div>
         <div className="card stat-card">
           <div className="stat">
-            <span className="label"><IconMoon size={15} />昨日睡眠评分</span>
-            <span className="value num">{sleepAvailable.length ? (sleepAvailable.length ? sleepAvailable[sleepAvailable.length - 1].score : "—") : "—"}</span>
-            <span className="hint">{sleepAvailable.length} / {sleep.length} 天有数据</span>
+            <span className="label"><IconMoon size={15} />{isYesterday ? "昨日睡眠评分" : lastSleep ? `最近睡眠 (${lastSleep.date.slice(5)})` : "睡眠评分"}</span>
+            <span className="value num">{lastSleep?.score ?? "—"}</span>
+            <span className="hint">{sleepAvailable.length} / {sleep.length} 天有夜间佩戴</span>
           </div>
         </div>
       </div>

@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { api, type AuthStatus } from "./api";
 
-export function useCorosAuth(onSuccess?: () => void) {
+export function useCorosAuth(onSuccess?: () => void, onDisconnect?: () => void) {
   const [auth, setAuth] = useState<AuthStatus | null>(null);
   const [loading, setLoading] = useState(false);
   const [connecting, setConnecting] = useState(false);
@@ -9,6 +9,8 @@ export function useCorosAuth(onSuccess?: () => void) {
   const [msg, setMsg] = useState<{ text: string; kind: "ok" | "err" } | null>(null);
   const onSuccessRef = useRef(onSuccess);
   onSuccessRef.current = onSuccess;
+  const onDisconnectRef = useRef(onDisconnect);
+  onDisconnectRef.current = onDisconnect;
 
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const handlerRef = useRef<((e: MessageEvent) => void) | null>(null);
@@ -90,7 +92,7 @@ export function useCorosAuth(onSuccess?: () => void) {
       let attempts = 0;
       timerRef.current = setInterval(async () => {
         attempts++;
-        if (popup?.closed || attempts > 150) {
+        if ((popup as Window | null)?.closed || attempts > 150) {
           cleanupListeners();
           setConnecting(false);
           setAuthUrl(null);
@@ -132,7 +134,7 @@ export function useCorosAuth(onSuccess?: () => void) {
       await api.disconnectAuth();
       await refreshAuth();
       setMsg({ text: "已解除 COROS 账号绑定", kind: "ok" });
-      onSuccessRef.current?.();
+      onDisconnectRef.current?.();
     } catch (e) {
       setMsg({ text: `解绑失败：${(e as Error).message}`, kind: "err" });
     } finally {
