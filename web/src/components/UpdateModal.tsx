@@ -6,29 +6,29 @@ export function isTauriEnv(): boolean {
   return typeof window !== "undefined" && Boolean((window as any).__TAURI_INTERNALS__);
 }
 
-export type UpdateCheckResult = {
-  hasUpdate: boolean;
-  version?: string;
-  currentVersion?: string;
-  body?: string;
-  date?: string;
+export type NetworkInfo = {
+  region: "CN" | "GLOBAL";
+  country: string;
+  ip: string;
+  route: "proxy" | "direct";
+  preferredRoute: "auto" | "proxy" | "direct";
 };
 
 export default function UpdateModal({
   open,
   onClose,
-  autoCheck = false,
   currentAppVersion,
 }: {
   open: boolean;
   onClose: () => void;
-  autoCheck?: boolean;
   currentAppVersion: string;
 }) {
   const [checking, setChecking] = useState(false);
   const [updateObj, setUpdateObj] = useState<Update | null>(null);
   const [newVersion, setNewVersion] = useState<string | null>(null);
   const [notes, setNotes] = useState<string | null>(null);
+  const [networkInfo, setNetworkInfo] = useState<NetworkInfo | null>(null);
+  const [selectedRoute, setSelectedRoute] = useState<"auto" | "proxy" | "direct">("auto");
   const [status, setStatus] = useState<
     "idle" | "checking" | "up-to-date" | "available" | "downloading" | "ready" | "error"
   >("idle");
@@ -42,7 +42,23 @@ export default function UpdateModal({
   const downloadedRef = useRef(0);
   const totalRef = useRef(0);
 
-  const runCheck = useCallback(async () => {
+  // 获取当前 IP 地区与网络线路
+  const loadNetworkRegion = useCallback(async () => {
+    try {
+      const res = await fetch("/api/updater/region");
+      if (res.ok) {
+        const info = (await res.json()) as NetworkInfo;
+        setNetworkInfo(info);
+        setSelectedRoute(info.preferredRoute || "auto");
+        return info;
+      }
+    } catch {
+      // 容错忽略
+    }
+    return null;
+  }, []);
+
+  const runCheck = useCallback(async (routeOverride?: "auto" | "proxy" | "direct") => {
     setChecking(true);
     setStatus("checking");
     setErrorMsg(null);
@@ -51,6 +67,17 @@ export default function UpdateModal({
     setNotes(null);
 
     try {
+      // 1. 同步当前路线设置至本地后端服务
+      const activeRoute = routeOverride || selectedRoute;
+      try {
+        await fetch("/api/updater/route", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ route: activeRoute }),
+        });
+      } catch {}
+
+      // 2. 检测更新
       if (isTauriEnv()) {
         const update = await check();
         if (update && update.available) {
@@ -62,8 +89,13 @@ export default function UpdateModal({
           setStatus("up-to-date");
         }
       } else {
-        // 非桌面环境：通过 GitHub API 探测最新 release
-        const res = await fetch("https://api.github.com/repos/captainLegoo/PaceCraft/releases/latest", {
+        // 非桌面环境（纯浏览器访问）：根据路线选择请求源
+        const isDomestic = activeRoute === "proxy" || (activeRoute === "auto" && networkInfo?.region === "CN");
+        const apiUrl = isDomestic
+          ? "https://ghproxy.net/https://api.github.com/repos/captainLegoo/PaceCraft/releases/latest"
+          : "https://api.github.com/repos/captainLegoo/PaceCraft/releases/latest";
+
+        const res = await fetch(apiUrl, {
           headers: { Accept: "application/vnd.github.v3+json" },
         });
         if (!res.ok) throw new Error(`查询版本失败 (HTTP ${res.status})`);
@@ -87,16 +119,24 @@ export default function UpdateModal({
     } finally {
       setChecking(false);
     }
-  }, [currentAppVersion]);
+  }, [currentAppVersion, selectedRoute, networkInfo]);
 
-  // 当弹窗打开或指定 autoCheck 时触发检测
+  // 弹窗打开时加载网络状态并执行检测
   useEffect(() => {
     if (open) {
-      runCheck();
+      loadNetworkRegion().then(() => {
+        runCheck();
+      });
     }
-  }, [open, runCheck]);
+  }, [open, loadNetworkRegion, runCheck]);
 
-  // 开始执行下载并自动安装
+  // 切换线路
+  const handleRouteChange = async (newRoute: "auto" | "proxy" | "direct") => {
+    setSelectedRoute(newRoute);
+    await runCheck(newRoute);
+  };
+
+  // 开始下载安装
   const handleStartUpdate = async () => {
     if (!isTauriEnv()) {
       window.open("https://github.com/captainLegoo/PaceCraft/releases/latest", "_blank");
@@ -138,7 +178,7 @@ export default function UpdateModal({
     } catch (err: any) {
       console.error("Download/Install update failed:", err);
       setStatus("error");
-      setErrorMsg(err?.message || "下载或解压更新包失败，请检查网络后重试。");
+      setErrorMsg(err?.message || "下载或解压更新包失败，请尝试切换线路后重试。");
     }
   };
 
@@ -158,6 +198,16 @@ export default function UpdateModal({
     if (!bytes || bytes <= 0) return "";
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
   };
+
+  const isChina = networkInfo?.region === "CN";
+  const activeRouteLabel =
+    selectedRoute === "auto"
+      ? isChina
+        ? "智能匹配：中国大陆（多路加速）"
+        : "智能匹配：海外/代理（直连官方）"
+      : selectedRoute === "proxy"
+      ? "国内加速镜像线路"
+      : "海外/GitHub 官方直连";
 
   return (
     <div
@@ -181,7 +231,7 @@ export default function UpdateModal({
       <div
         style={{
           width: "100%",
-          maxWidth: 480,
+          maxWidth: 500,
           background: "var(--card-bg, #1e1e24)",
           color: "var(--text-primary, #ffffff)",
           border: "1px solid var(--border-color, #2a2a36)",
@@ -191,12 +241,33 @@ export default function UpdateModal({
           boxSizing: "border-box",
         }}
       >
-        {/* 顶部标题栏 */}
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <span style={{ fontSize: 22 }}>🚀</span>
-            <h3 style={{ margin: 0, fontSize: 18, fontWeight: 600 }}>软件更新检测</h3>
+        {/* 顶部标题与线路标签 */}
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 14 }}>
+          <div>
+            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              <span style={{ fontSize: 22 }}>🚀</span>
+              <h3 style={{ margin: 0, fontSize: 18, fontWeight: 600 }}>软件更新检测</h3>
+            </div>
+            {/* 智能网络线路识别提示 */}
+            <div
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 6,
+                marginTop: 6,
+                padding: "2px 8px",
+                borderRadius: 6,
+                background: "rgba(255, 255, 255, 0.06)",
+                fontSize: 11,
+                color: "var(--text-dim, #999)",
+              }}
+            >
+              <span>🌐</span>
+              <span>{activeRouteLabel}</span>
+              {networkInfo?.country && <span>({networkInfo.country})</span>}
+            </div>
           </div>
+
           {status !== "downloading" && (
             <button
               onClick={onClose}
@@ -214,10 +285,73 @@ export default function UpdateModal({
           )}
         </div>
 
+        {/* 线路手动切换快捷标签 */}
+        {status !== "downloading" && (
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 6,
+              marginBottom: 16,
+              fontSize: 11,
+              padding: "6px 10px",
+              borderRadius: 8,
+              background: "rgba(0,0,0,0.2)",
+            }}
+          >
+            <span style={{ color: "var(--text-dim, #777)" }}>路线:</span>
+            <button
+              type="button"
+              onClick={() => handleRouteChange("auto")}
+              style={{
+                background: selectedRoute === "auto" ? "rgba(255, 107, 0, 0.25)" : "transparent",
+                color: selectedRoute === "auto" ? "#ff8c3a" : "var(--text-dim, #888)",
+                border: selectedRoute === "auto" ? "1px solid rgba(255, 107, 0, 0.5)" : "1px solid transparent",
+                borderRadius: 4,
+                padding: "2px 6px",
+                fontSize: 11,
+                cursor: "pointer",
+              }}
+            >
+              ⚡️ 自动识别
+            </button>
+            <button
+              type="button"
+              onClick={() => handleRouteChange("proxy")}
+              style={{
+                background: selectedRoute === "proxy" ? "rgba(255, 107, 0, 0.25)" : "transparent",
+                color: selectedRoute === "proxy" ? "#ff8c3a" : "var(--text-dim, #888)",
+                border: selectedRoute === "proxy" ? "1px solid rgba(255, 107, 0, 0.5)" : "1px solid transparent",
+                borderRadius: 4,
+                padding: "2px 6px",
+                fontSize: 11,
+                cursor: "pointer",
+              }}
+            >
+              🇨🇳 国内加速
+            </button>
+            <button
+              type="button"
+              onClick={() => handleRouteChange("direct")}
+              style={{
+                background: selectedRoute === "direct" ? "rgba(255, 107, 0, 0.25)" : "transparent",
+                color: selectedRoute === "direct" ? "#ff8c3a" : "var(--text-dim, #888)",
+                border: selectedRoute === "direct" ? "1px solid rgba(255, 107, 0, 0.5)" : "1px solid transparent",
+                borderRadius: 4,
+                padding: "2px 6px",
+                fontSize: 11,
+                cursor: "pointer",
+              }}
+            >
+              🌍 海外直连
+            </button>
+          </div>
+        )}
+
         {/* 主体状态内容 */}
         <div style={{ minHeight: 120 }}>
           {status === "checking" && (
-            <div style={{ textAlign: "center", padding: "30px 0" }}>
+            <div style={{ textAlign: "center", padding: "26px 0" }}>
               <div
                 style={{
                   width: 32,
@@ -225,19 +359,19 @@ export default function UpdateModal({
                   border: "3px solid rgba(255, 107, 0, 0.2)",
                   borderTopColor: "#ff6b00",
                   borderRadius: "50%",
-                  margin: "0 auto 16px",
+                  margin: "0 auto 14px",
                   animation: "spin 1s linear infinite",
                 }}
               />
               <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
-              <div style={{ fontSize: 14, color: "var(--text-sub, #aaa)" }}>
-                正在通过加速镜像检测新版本...
+              <div style={{ fontSize: 13, color: "var(--text-sub, #aaa)" }}>
+                正在通过【{activeRouteLabel}】检测新版本...
               </div>
             </div>
           )}
 
           {status === "up-to-date" && (
-            <div style={{ textAlign: "center", padding: "24px 0" }}>
+            <div style={{ textAlign: "center", padding: "22px 0" }}>
               <div style={{ fontSize: 36, marginBottom: 12 }}>✨</div>
               <div style={{ fontSize: 16, fontWeight: 500, marginBottom: 6 }}>当前已是最新版本</div>
               <div style={{ fontSize: 13, color: "var(--text-sub, #aaa)" }}>
@@ -274,7 +408,7 @@ export default function UpdateModal({
                   <div style={{ fontSize: 12, color: "var(--text-sub, #888)", marginBottom: 6 }}>更新说明：</div>
                   <div
                     style={{
-                      maxHeight: 150,
+                      maxHeight: 140,
                       overflowY: "auto",
                       fontSize: 13,
                       lineHeight: 1.6,
@@ -344,7 +478,7 @@ export default function UpdateModal({
                 {progress.total > 0 && <span>总大小: {formatSize(progress.total)}</span>}
               </div>
               <div style={{ fontSize: 11, color: "var(--text-sub, #666)", marginTop: 12, textAlign: "center" }}>
-                正在通过多路加速通道下载并自动解压校验，请勿关闭程序...
+                正在通过【{activeRouteLabel}】下载并自动校验，请勿关闭程序...
               </div>
             </div>
           )}
@@ -362,8 +496,8 @@ export default function UpdateModal({
           )}
 
           {status === "error" && (
-            <div style={{ padding: "16px 0" }}>
-              <div style={{ fontSize: 14, color: "#ef4444", marginBottom: 10, fontWeight: 500 }}>
+            <div style={{ padding: "14px 0" }}>
+              <div style={{ fontSize: 14, color: "#ef4444", marginBottom: 8, fontWeight: 500 }}>
                 ⚠️ 更新过程出现异常
               </div>
               <div
@@ -373,14 +507,14 @@ export default function UpdateModal({
                   background: "rgba(239, 68, 68, 0.1)",
                   padding: "8px 12px",
                   borderRadius: 6,
-                  marginBottom: 16,
+                  marginBottom: 14,
                   wordBreak: "break-all",
                 }}
               >
                 {errorMsg}
               </div>
               <div style={{ fontSize: 12, color: "var(--text-sub, #888)", lineHeight: 1.5 }}>
-                若网络多次受阻，你可以直接前往 GitHub Releases 页面或国内加速镜像手动下载最新安装包。
+                💡 提示：如果当前线路较慢，可点击上方切换为【国内加速】或【海外直连】重新测试，亦可直接前往 GitHub 手动下载。
               </div>
             </div>
           )}
@@ -392,7 +526,7 @@ export default function UpdateModal({
             display: "flex",
             justifyContent: "flex-end",
             gap: 10,
-            marginTop: 20,
+            marginTop: 18,
             borderTop: "1px solid var(--border-color, #2a2a36)",
             paddingTop: 16,
           }}
@@ -406,7 +540,7 @@ export default function UpdateModal({
                 color: "#fff",
                 border: "none",
                 borderRadius: 8,
-                fontSize: 14,
+                fontSize: 13,
                 cursor: "pointer",
                 fontWeight: 500,
               }}
@@ -500,7 +634,7 @@ export default function UpdateModal({
                 手动网页下载
               </button>
               <button
-                onClick={runCheck}
+                onClick={() => runCheck()}
                 style={{
                   padding: "8px 18px",
                   background: "var(--accent-color, #ff6b00)",
@@ -512,7 +646,7 @@ export default function UpdateModal({
                   fontWeight: 500,
                 }}
               >
-                重新检测
+                重试检测
               </button>
             </>
           )}

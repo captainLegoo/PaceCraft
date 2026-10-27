@@ -48,6 +48,7 @@ import {
   startAuthFlow,
 } from "./coros/auth-service.ts";
 import { closeCurrentDatabase, switchProfileDatabase } from "./db/client.ts";
+import { detectRegion, fetchUpdateManifest, getPreferredRoute, setPreferredRoute } from "./updater.ts";
 import {
   createNewProfile,
   deleteProfile,
@@ -106,6 +107,34 @@ const app = new Elysia()
         },
       });
     }
+  })
+  /** 软件自动更新与网络线路检测 */
+  .get("/api/updater/region", async () => {
+    const region = await detectRegion();
+    return {
+      ...region,
+      preferredRoute: getPreferredRoute(),
+    };
+  })
+  .post("/api/updater/route", ({ body }) => {
+    const route = (body as any)?.route;
+    if (route === "auto" || route === "proxy" || route === "direct") {
+      setPreferredRoute(route);
+      return { ok: true, preferredRoute: route };
+    }
+    return new Response(JSON.stringify({ error: "无效的线路选项" }), { status: 400 });
+  })
+  .get("/api/updater/latest.json", async ({ query }) => {
+    const channel = (query as any)?.channel;
+    const res = await fetchUpdateManifest(channel);
+    if (res.status === 200 && res.data) {
+      return new Response(JSON.stringify(res.data), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+    // 尚未发布带签名的 Release 时优雅返回 204 No Content
+    return new Response(null, { status: 204 });
   })
   .get("/api/status", () => {
     const activeId = getActiveProfileId();
