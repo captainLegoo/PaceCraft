@@ -5,6 +5,7 @@ import { IconDatabase, IconGear, IconHeart, IconSync } from "../icons";
 import WorkflowPanel from "./WorkflowPanel";
 import { useCorosAuth } from "../use-coros-auth";
 import { DEFAULT_APP_VERSION } from "../version";
+import UpdateModal from "../components/UpdateModal";
 
 export type PopularModel = {
   model: string;
@@ -394,6 +395,7 @@ export default function Settings({ onStatus }: { onStatus: () => void }) {
   const [selectedProviderId, setSelectedProviderId] = useState<string>("deepseek");
   const [status, setStatus] = useState<any>(null);
   const appVersion = status?.version || DEFAULT_APP_VERSION;
+  const [showUpdateModal, setShowUpdateModal] = useState(false);
   const [msg, setMsg] = useState<{ kind: "ok" | "error"; text: string } | null>(null);
   const [aiMsg, setAiMsg] = useState<{ kind: "ok" | "error"; text: string } | null>(null);
   const [saving, setSaving] = useState(false);
@@ -1612,7 +1614,7 @@ export default function Settings({ onStatus }: { onStatus: () => void }) {
                   <tr><td>AI 模型</td><td>{status.aiConfigured ? <span className="pill good">已配置</span> : <span className="pill">未配置</span>}</td></tr>
                   <tr>
                     <td>当前版本</td>
-                    <td>
+                    <td style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
                       <a
                         href="https://github.com/captainLegoo/PaceCraft/releases"
                         target="_blank"
@@ -1623,6 +1625,14 @@ export default function Settings({ onStatus }: { onStatus: () => void }) {
                         <span className="dot" />
                         <span>{appVersion}</span>
                       </a>
+                      <button
+                        type="button"
+                        className="btn"
+                        style={{ padding: "3px 10px", fontSize: 12, height: "auto" }}
+                        onClick={() => setShowUpdateModal(true)}
+                      >
+                        检查更新
+                      </button>
                     </td>
                   </tr>
                 </tbody>
@@ -1750,6 +1760,12 @@ export default function Settings({ onStatus }: { onStatus: () => void }) {
           </div>
         )}
       </div>
+
+      <UpdateModal
+        open={showUpdateModal}
+        onClose={() => setShowUpdateModal(false)}
+        currentAppVersion={appVersion}
+      />
     </>
   );
 }

@@ -65,5 +65,15 @@
         "installerHooks": "./windows/hooks.nsh"
       }
     }
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEQ0QjJGMTdFMkZEQkM3MUQKUldRZHg5c3Zmdkd5MUM3VUhiUzk1c3Z6bk9GZ1FaUUlDdDZEeVMzYy95cWRUS3AzdTlhNmVzVUQK",
+      "endpoints": [
+        "https://ghproxy.net/https://github.com/captainLegoo/PaceCraft/releases/latest/download/latest.json",
+        "https://mirror.ghproxy.com/https://github.com/captainLegoo/PaceCraft/releases/latest/download/latest.json",
+        "https://github.com/captainLegoo/PaceCraft/releases/latest/download/latest.json"
+      ]
+    }
   }
 }

@@ -14,6 +14,8 @@ import Readiness, { type ReadinessTab } from "./pages/Readiness";
 import { useCorosAuth } from "./use-coros-auth";
 import ProfileSwitcher from "./components/ProfileSwitcher";
 import { DEFAULT_APP_VERSION } from "./version";
+import UpdateModal, { isTauriEnv } from "./components/UpdateModal";
+import { check } from "@tauri-apps/plugin-updater";
 
 export function formatElapsed(startedAt: number): string {
   const totalSeconds = Math.max(0, Math.round((Date.now() - startedAt) / 1000));
@@ -147,6 +149,24 @@ export default function App() {
   const historyDepth = useRef(0);
   const [status, setStatus] = useState<any>(null);
   const appVersion = status?.version || DEFAULT_APP_VERSION;
+  const [showUpdateModal, setShowUpdateModal] = useState(false);
+  const [hasNewUpdate, setHasNewUpdate] = useState(false);
+
+  // 桌面应用启动 3 秒后静默检测是否有新更新
+  useEffect(() => {
+    if (!isTauriEnv()) return;
+    const timer = setTimeout(async () => {
+      try {
+        const update = await check();
+        if (update && update.available) {
+          setHasNewUpdate(true);
+        }
+      } catch {
+        // 静默检查忽略错误
+      }
+    }, 3000);
+    return () => clearTimeout(timer);
+  }, []);
   const { theme, toggle } = useTheme();
 
   /** 窄屏下侧边栏变成抽屉，默认收起 */
@@ -613,17 +633,56 @@ export default function App() {
                   ? <span className="pill good">AI 已配置</span>
                   : <span className="pill warn">AI 未配置</span>}
               </div>
-              <div style={{ marginTop: 8, display: "flex", alignItems: "center" }}>
-                <a
-                  href="https://github.com/captainLegoo/PaceCraft/releases"
-                  target="_blank"
-                  rel="noopener noreferrer"
+              <div style={{ marginTop: 8, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                <button
+                  type="button"
+                  onClick={() => setShowUpdateModal(true)}
                   className="version-tag"
-                  title={`当前版本：${appVersion}（点击查看 Release 记录）`}
+                  style={{ background: "none", border: "none", cursor: "pointer", padding: 0 }}
+                  title={`当前版本：${appVersion}（点击检查更新）`}
                 >
                   <span className="dot" />
                   <span>{appVersion}</span>
-                </a>
+                </button>
+                {hasNewUpdate ? (
+                  <button
+                    type="button"
+                    onClick={() => setShowUpdateModal(true)}
+                    style={{
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: 4,
+                      padding: "2px 7px",
+                      borderRadius: 10,
+                      background: "rgba(255, 107, 0, 0.2)",
+                      border: "1px solid rgba(255, 107, 0, 0.4)",
+                      color: "#ff8c3a",
+                      fontSize: 11,
+                      cursor: "pointer",
+                      fontWeight: 600,
+                    }}
+                    title="发现新版本，点击立即升级"
+                  >
+                    <span>新版可用</span>
+                    <span style={{ fontSize: 9 }}>▲</span>
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setShowUpdateModal(true)}
+                    style={{
+                      background: "none",
+                      border: "none",
+                      color: "var(--text-dim, #777)",
+                      fontSize: 11,
+                      cursor: "pointer",
+                      padding: "2px 4px",
+                    }}
+                    title="检查最新版本"
+                  >
+                    检查更新
+                  </button>
+                )}
               </div>
             </>
           ) : (
@@ -1051,6 +1110,12 @@ export default function App() {
           );
         })}
       </nav>
+
+      <UpdateModal
+        open={showUpdateModal}
+        onClose={() => setShowUpdateModal(false)}
+        currentAppVersion={appVersion}
+      />
     </div>
   );
 }
