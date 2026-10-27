@@ -1,8 +1,10 @@
 import { useEffect, useState } from "react";
 import { api, type SyncProgress, type SyncSportsPayload } from "../api";
+import { formatElapsed } from "../App";
 import { IconDatabase, IconGear, IconHeart, IconSync } from "../icons";
 import WorkflowPanel from "./WorkflowPanel";
 import { useCorosAuth } from "../use-coros-auth";
+import { DEFAULT_APP_VERSION } from "../version";
 
 export type PopularModel = {
   model: string;
@@ -391,6 +393,7 @@ export default function Settings({ onStatus }: { onStatus: () => void }) {
   const [providerTab, setProviderTab] = useState<"featured" | "domestic" | "global" | "local">("featured");
   const [selectedProviderId, setSelectedProviderId] = useState<string>("deepseek");
   const [status, setStatus] = useState<any>(null);
+  const appVersion = status?.version || DEFAULT_APP_VERSION;
   const [msg, setMsg] = useState<{ kind: "ok" | "error"; text: string } | null>(null);
   const [aiMsg, setAiMsg] = useState<{ kind: "ok" | "error"; text: string } | null>(null);
   const [saving, setSaving] = useState(false);
@@ -1570,6 +1573,7 @@ export default function Settings({ onStatus }: { onStatus: () => void }) {
                   <span style={{ fontWeight: 500, color: "var(--text)", display: "inline-flex", alignItems: "center", gap: 6 }}>
                     <span className="spin" style={{ width: 12, height: 12, borderColor: "var(--accent)" }} />
                     {syncProgress.message}
+                    {syncProgress.startedAt && <span style={{ color: "var(--text-dim)", marginLeft: 4 }}>（已用时 {formatElapsed(syncProgress.startedAt)}）</span>}
                   </span>
                   <span style={{ color: "var(--accent)", fontWeight: 600 }}>{syncProgress.percent}%</span>
                 </div>
@@ -1606,6 +1610,21 @@ export default function Settings({ onStatus }: { onStatus: () => void }) {
                   <tr><td>睡眠记录</td><td className="num">{status.counts.sleepDays} 天</td></tr>
                   <tr><td>最近训练</td><td className="num">{status.latestActivityDate ?? "—"}</td></tr>
                   <tr><td>AI 模型</td><td>{status.aiConfigured ? <span className="pill good">已配置</span> : <span className="pill">未配置</span>}</td></tr>
+                  <tr>
+                    <td>当前版本</td>
+                    <td>
+                      <a
+                        href="https://github.com/captainLegoo/PaceCraft/releases"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="version-tag"
+                        title={`当前版本：${appVersion}（点击查看 Release 记录）`}
+                      >
+                        <span className="dot" />
+                        <span>{appVersion}</span>
+                      </a>
+                    </td>
+                  </tr>
                 </tbody>
               </table>
             )}
@@ -1614,7 +1633,19 @@ export default function Settings({ onStatus }: { onStatus: () => void }) {
       </div>
 
       <div className="card">
-        <h3 className="card-title">关于数据来源</h3>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 8, marginBottom: 4 }}>
+          <h3 className="card-title" style={{ margin: 0 }}>关于数据来源与系统</h3>
+          <a
+            href="https://github.com/captainLegoo/PaceCraft/releases"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="version-tag"
+            title="查看所有发布版本"
+          >
+            <span className="dot" />
+            <span>PaceCraft {appVersion}</span>
+          </a>
+        </div>
         <p className="card-sub">本看板所有数据均来自 COROS 官方 MCP（mcp.coros.com，中国区），未使用任何非官方接口。</p>
         <ul style={{ color: "var(--text-dim)", fontSize: 12.5, lineHeight: 1.9, paddingLeft: 18, margin: 0 }}>
           <li>授权通过 OAuth 2.0 动态客户端注册 + PKCE 完成，无需审批，token 仅存本机。</li>

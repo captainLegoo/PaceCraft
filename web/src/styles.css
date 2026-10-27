@@ -226,6 +226,35 @@ body {
 
 .sidebar-foot { margin-top: auto; padding: 12px 10px 0; border-top: 1px solid var(--border); font-size: 11px; color: var(--text-faint); }
 
+.version-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 10.5px;
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace);
+  color: var(--text-dim);
+  text-decoration: none;
+  padding: 1.5px 7px;
+  border-radius: 4px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  transition: all 0.15s ease;
+  user-select: none;
+}
+.version-tag:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: var(--surface-3);
+  text-decoration: none;
+}
+.version-tag .dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--accent);
+  opacity: 0.85;
+}
+
 /* ---------- 一键同步 ---------- */
 .sync-btn {
   display: flex; align-items: center; justify-content: center; gap: 6px;

@@ -13,6 +13,22 @@ import RaceHub, { type RaceTab } from "./pages/RaceHub";
 import Readiness, { type ReadinessTab } from "./pages/Readiness";
 import { useCorosAuth } from "./use-coros-auth";
 import ProfileSwitcher from "./components/ProfileSwitcher";
+import { DEFAULT_APP_VERSION } from "./version";
+
+export function formatElapsed(startedAt: number): string {
+  const totalSeconds = Math.max(0, Math.round((Date.now() - startedAt) / 1000));
+  if (totalSeconds < 60) {
+    return `${totalSeconds} 秒`;
+  }
+  const m = Math.floor(totalSeconds / 60);
+  const s = totalSeconds % 60;
+  if (m < 60) {
+    return `${m} 分钟 ${s} 秒`;
+  }
+  const h = Math.floor(m / 60);
+  const remM = m % 60;
+  return `${h} 小时 ${remM} 分钟 ${s} 秒`;
+}
 
 type Route = {
   page:
@@ -130,6 +146,7 @@ export default function App() {
 
   const historyDepth = useRef(0);
   const [status, setStatus] = useState<any>(null);
+  const appVersion = status?.version || DEFAULT_APP_VERSION;
   const { theme, toggle } = useTheme();
 
   /** 窄屏下侧边栏变成抽屉，默认收起 */
@@ -519,7 +536,10 @@ export default function App() {
               }}
             >
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 11.5, marginBottom: 4 }}>
-                <span style={{ fontWeight: 600, color: "var(--text)", display: "inline-flex", alignItems: "center", gap: 5, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                <span
+                  style={{ fontWeight: 600, color: "var(--text)", display: "inline-flex", alignItems: "center", gap: 5, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
+                  title={syncProgress.startedAt ? `${syncProgress.message}（已用时 ${formatElapsed(syncProgress.startedAt)}）` : syncProgress.message}
+                >
                   <span className="spin" style={{ width: 10, height: 10, borderColor: "var(--accent)" }} />
                   {syncProgress.message}
                 </span>
@@ -593,6 +613,18 @@ export default function App() {
                   ? <span className="pill good">AI 已配置</span>
                   : <span className="pill warn">AI 未配置</span>}
               </div>
+              <div style={{ marginTop: 8, display: "flex", alignItems: "center" }}>
+                <a
+                  href="https://github.com/captainLegoo/PaceCraft/releases"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="version-tag"
+                  title={`当前版本：${appVersion}（点击查看 Release 记录）`}
+                >
+                  <span className="dot" />
+                  <span>{appVersion}</span>
+                </a>
+              </div>
             </>
           ) : (
             <span className="spin" />
@@ -650,7 +682,7 @@ export default function App() {
                 </div>
                 <div style={{ fontSize: 12, color: "var(--text-dim)", marginTop: 2 }}>
                   {syncProgress.message}
-                  {syncProgress.startedAt && `（已用时 ${Math.round((Date.now() - syncProgress.startedAt) / 1000)} 秒）`}
+                  {syncProgress.startedAt && `（已用时 ${formatElapsed(syncProgress.startedAt)}）`}
                 </div>
               </div>
             </div>

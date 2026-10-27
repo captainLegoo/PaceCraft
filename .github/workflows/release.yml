@@ -67,18 +67,29 @@ jobs:
             const pkg = JSON.parse(await Bun.file('package.json').text());
             pkg.version = '$VER';
             await Bun.write('package.json', JSON.stringify(pkg, null, 2));
+            const webPkg = JSON.parse(await Bun.file('web/package.json').text());
+            webPkg.version = '$VER';
+            await Bun.write('web/package.json', JSON.stringify(webPkg, null, 2));
+            const serverPkg = JSON.parse(await Bun.file('server/package.json').text());
+            serverPkg.version = '$VER';
+            await Bun.write('server/package.json', JSON.stringify(serverPkg, null, 2));
             let cargo = await Bun.file('src-tauri/Cargo.toml').text();
             cargo = cargo.replace(/^version = \".*\"/m, 'version = \"' + '$VER' + '\"');
             await Bun.write('src-tauri/Cargo.toml', cargo);
           "
 
       - name: Build web frontend
+        env:
+          VITE_APP_VERSION: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || inputs.version || 'v0.1.0' }}
+          APP_VERSION: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || inputs.version || 'v0.1.0' }}
         run: bun run build:web
 
       - name: Embed frontend assets into backend
         run: bun run scripts/bundle-dist.ts
 
       - name: Build backend sidecar binary
+        env:
+          APP_VERSION: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || inputs.version || 'v0.1.0' }}
         shell: bash
         run: |
           mkdir -p src-tauri/binaries
