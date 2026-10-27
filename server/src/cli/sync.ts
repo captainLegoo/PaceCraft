@@ -1,7 +1,7 @@
 import { syncAll } from "../coros/sync.ts";
 
 const daysArg = process.argv.find((a) => a.startsWith("--days="));
-const days = daysArg ? Number(daysArg.split("=")[1]) : 120;
+const days = daysArg ? Number(daysArg.split("=")[1]) : 365;
 const noLaps = process.argv.includes("--no-laps");
 
 console.log(`→ 开始同步（最近 ${days} 天${noLaps ? "，跳过分圈" : ""}）…`);

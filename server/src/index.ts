@@ -10,7 +10,7 @@ import {
 } from "./db/schema.ts";
 import { SERVER_HOST, SERVER_PORT, WEB_ORIGIN } from "./config.ts";
 import { ageFromBirthday, buildSessions, hrZoneOptions, hrZones, loadSeries, monthlyVolume, paceHrScatter, sessionLaps, weeklyVolume } from "./analytics.ts";
-import { syncAll } from "./coros/sync.ts";
+import { syncAll, type SyncProgress } from "./coros/sync.ts";
 import { saveSportTypeCodes, sportSettingsPayload } from "./coros/sport-types.ts";
 import { backfillAltitude, fitQuotaStatus, followState, startFollow, stopFollow } from "./auto-sync.ts";
 import {
@@ -62,10 +62,27 @@ import {
 const one = <T>(rows: T[]) => rows[0] ?? null;
 
 /**
- * 快速同步的并发锁。
+ * 快速同步的并发锁与全局进度跟踪。
  * 用模块级变量而不是 Elysia 的 state：单进程够用，且不依赖框架内部 API。
  */
 let syncInFlight = false;
+let activeSyncProgress: SyncProgress = {
+  active: false,
+  phase: "idle",
+  current: 0,
+  total: 0,
+  percent: 0,
+  message: "空闲",
+  updatedAt: Date.now(),
+};
+
+function updateSyncProgress(patch: Partial<SyncProgress>) {
+  activeSyncProgress = {
+    ...activeSyncProgress,
+    ...patch,
+    updatedAt: Date.now(),
+  };
+}
 
 const app = new Elysia()
   .onError(({ code, error, path }) => {
@@ -257,9 +274,57 @@ const app = new Elysia()
     if (auth.mismatch) {
       return new Response(JSON.stringify({ error: "检测到高驰账号不一致，请先确认处理方式" }), { status: 409 });
     }
-    const days = Number((query as any).days ?? 120);
+    if (syncInFlight) {
+      return new Response(JSON.stringify({ error: activeSyncProgress.message || "同步正在进行中，请稍候" }), { status: 429 });
+    }
+    syncInFlight = true;
+    const startedAt = Date.now();
+    updateSyncProgress({
+      active: true,
+      phase: "records",
+      current: 0,
+      total: 100,
+      percent: 2,
+      message: "正在连接高驰服务...",
+      startedAt,
+      error: null,
+    });
+    const days = Number((query as any).days ?? 365);
     const withLaps = (query as any).laps !== "false";
-    return await syncAll({ days, withLaps });
+    try {
+      const res = await syncAll({
+        days,
+        withLaps,
+        onProgress: (p) => updateSyncProgress({ active: true, ...p }),
+      });
+      updateSyncProgress({
+        active: false,
+        phase: "done",
+        percent: 100,
+        message: `同步完成：${res.activities} 次活动、${res.details} 条详情`,
+      });
+      return res;
+    } catch (e) {
+      const errMsg = `同步失败：${(e as Error).message}`;
+      updateSyncProgress({
+        active: false,
+        phase: "error",
+        percent: 100,
+        message: errMsg,
+        error: errMsg,
+      });
+      throw e;
+    } finally {
+      syncInFlight = false;
+    }
+  })
+
+  /** 获取当前同步实时进度与状态（供前端进度条轮询） */
+  .get("/api/sync/progress", () => {
+    return {
+      ...activeSyncProgress,
+      elapsedSec: activeSyncProgress.startedAt ? Math.round((Date.now() - activeSyncProgress.startedAt) / 1000) : 0,
+    };
   })
 
   /**
@@ -299,8 +364,8 @@ const app = new Elysia()
    * 快速同步 —— 给前端按钮用。
    *
    * 与 /api/sync 的区别：
-   *  - 只回溯 3 天而不是 120 天：刚跑完的那次训练在 3 天内就够了，快得多
-   *  - 加了并发锁：连点两下会同时发起两次全量拉取，把 COROS 的接口打爆
+   *  - 智能自适应增量窗口：如果是新跑友无记录，默认拉取 365 天（1年）；若已有数据，则自动按距今日期增量回溯
+   *  - 加了并发锁与全局进度广播：连点两下会友好报告当前正在进行的进度，不会造成二次冲击
    *  - 返回结构化结果（含新增了多少条），前端可以明确告诉用户"同步到了"
    */
   .post("/api/sync/quick", async ({ query }) => {
@@ -312,10 +377,20 @@ const app = new Elysia()
       return { ok: false, message: "检测到高驰账号不一致，请先在看板中确认处理方式" };
     }
     if (syncInFlight) {
-      return { ok: false, busy: true, message: "同步正在进行中，请稍候" };
+      return { ok: false, busy: true, message: activeSyncProgress.message || "同步正在进行中，请稍候" };
     }
     syncInFlight = true;
     const startedAt = Date.now();
+    updateSyncProgress({
+      active: true,
+      phase: "records",
+      current: 0,
+      total: 100,
+      percent: 2,
+      message: "正在连接高驰服务...",
+      startedAt,
+      error: null,
+    });
     try {
       const before = db
         .select({ labelId: activities.labelId })
@@ -323,21 +398,33 @@ const app = new Elysia()
         .all().length;
 
       // 智能自适应同步窗口：
-      // 1. 如果本地没有任何活动记录（新跑友档案），默认完整拉取 120 天历史数据；
-      // 2. 如果已有活动，找出最新一条活动日期（如 2026-10-20），计算距今缺失天数 + 1 天余量；
-      // 3. 至少回溯 3 天（确保覆盖今天），上限 180 天。
+      // 1. 检查当前档案是否曾成功完成过至少一次 365 天的历史全量回溯（确保算法具备 1 年基线锚点）
+      const hasFullSync = (sqlite.query(
+        "SELECT 1 FROM sync_log WHERE status = 'ok' AND detail LIKE '%\"days\":365%' LIMIT 1"
+      ).get() as { 1: number } | undefined) !== undefined;
+
       let syncDays = 3;
       const latest = one(db.select({ d: activities.dateLabel }).from(activities).orderBy(desc(activities.date)).limit(1).all())?.d;
-      if (!latest) {
-        syncDays = 120;
+      if (!latest || !hasFullSync) {
+        // 无数据或尚未建立 1 年全量基线：自动拉取 365 天历史训练与比赛锚点
+        syncDays = 365;
       } else {
         const lastDate = new Date(latest);
         if (!isNaN(lastDate.getTime())) {
           const diffDays = Math.ceil((Date.now() - lastDate.getTime()) / (1000 * 60 * 60 * 24));
-          syncDays = Math.max(3, Math.min(180, diffDays + 1));
+          syncDays = Math.max(3, Math.min(365, diffDays + 1));
         }
       }
-      const result = await syncAll({ days: syncDays, withLaps: true });
+      const result = await syncAll({
+        days: syncDays,
+        withLaps: true,
+        onProgress: (p) => {
+          updateSyncProgress({
+            active: true,
+            ...p,
+          });
+        },
+      });
       const after = db.select().from(activities).all().length;
 
       // 同步完成后自动跑一遍工作流：把新数据变成可用的结论
@@ -345,6 +432,14 @@ const app = new Elysia()
       let workflow: Awaited<ReturnType<typeof runWorkflow>> | null = null;
       const autoRun = query.workflow !== "false" && !isRunning();
       if (autoRun) {
+        updateSyncProgress({
+          active: true,
+          phase: "workflow",
+          current: 96,
+          total: 100,
+          percent: 96,
+          message: "正在计算疲劳指数与备赛预测模型...",
+        });
         try {
           // 把本次新增的活动 id 传下去，让各 step 只处理增量
           const newCount = after - before;
@@ -365,6 +460,23 @@ const app = new Elysia()
         }
       }
 
+      const finalMsg =
+        after > before
+          ? `同步完成，新增 ${after - before} 次训练` +
+            (workflow ? `｜${workflow.summary}` : "")
+          : workflow
+            ? `无新数据｜${workflow.summary}`
+            : "同步完成，没有新数据";
+
+      updateSyncProgress({
+        active: false,
+        phase: "done",
+        current: 100,
+        total: 100,
+        percent: 100,
+        message: finalMsg,
+      });
+
       return {
         ok: true,
         busy: false,
@@ -376,19 +488,21 @@ const app = new Elysia()
         errors: result.errors,
         fitQuotaLeft: result.fitQuotaLeft,
         elapsedSec: Math.round((Date.now() - startedAt) / 1000),
-        message:
-          after > before
-            ? `同步完成，新增 ${after - before} 次训练` +
-              (workflow ? `｜${workflow.summary}` : "")
-            : workflow
-              ? `无新数据｜${workflow.summary}`
-              : "同步完成，没有新数据",
+        message: finalMsg,
       };
     } catch (e) {
+      const errMsg = `同步失败：${e instanceof Error ? e.message : String(e)}`;
+      updateSyncProgress({
+        active: false,
+        phase: "error",
+        percent: 100,
+        message: errMsg,
+        error: errMsg,
+      });
       return {
         ok: false,
         busy: false,
-        message: `同步失败：${e instanceof Error ? e.message : String(e)}`,
+        message: errMsg,
       };
     } finally {
       syncInFlight = false;

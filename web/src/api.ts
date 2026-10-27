@@ -127,6 +127,19 @@ async function req<T>(path: string, init?: RequestInit): Promise<T> {
   return body as T;
 }
 
+export type SyncProgress = {
+  active: boolean;
+  phase: "idle" | "records" | "details" | "load" | "health" | "metrics" | "workflow" | "done" | "error";
+  current: number;
+  total: number;
+  percent: number;
+  message: string;
+  error?: string | null;
+  startedAt?: number;
+  updatedAt?: number;
+  elapsedSec?: number;
+};
+
 export type QuickSyncResult = {
   ok: boolean;
   busy?: boolean;
@@ -295,9 +308,11 @@ export const api = {
   }) => req<any>("/api/profile/hr", { method: "PUT", body: JSON.stringify(body) }),
 
   status: () => req<any>("/api/status"),
-  sync: (days = 120) => req<any>("/api/sync?days=" + days, { method: "POST" }),
-  /** 快速同步：只回溯 3 天，跑完立刻点一下就够 */
+  sync: (days = 365) => req<any>("/api/sync?days=" + days, { method: "POST" }),
+  /** 快速增量同步：智能自适应窗口，无数据时自动拉取 1 年全量 */
   quickSync: () => req<QuickSyncResult>("/api/sync/quick", { method: "POST" }),
+  /** 获取同步实时进度与状态 */
+  syncProgress: () => req<SyncProgress>("/api/sync/progress"),
 
   /** 后台跟随：手表上传后自动探测 */
   followStatus: () => req<FollowState>("/api/sync/follow"),

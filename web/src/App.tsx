@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "./api";
-import type { FollowState } from "./api";
+import type { FollowState, SyncProgress } from "./api";
 import { ThemeToggle, useTheme } from "./theme";
 import { useTableScroll } from "./table-scroll";
 import { IconBack, IconCloudSync, IconDatabase, IconFlag, IconMenu, IconPulse, IconRefresh, IconShoe, IconSync } from "./icons";
@@ -229,12 +229,49 @@ export default function App() {
   /** 让轮询回调能调用最新的 runSync，避免闭包捕获旧函数 */
   const runSyncRef = useRef<(() => Promise<void>) | null>(null);
   const [syncing, setSyncing] = useState(false);
+  const [syncProgress, setSyncProgress] = useState<SyncProgress | null>(null);
+  const progressTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [syncMsg, setSyncMsg] = useState<{ text: string; kind: "ok" | "err" } | null>(null);
   const [follow, setFollow] = useState<FollowState | null>(null);
   const [quota, setQuota] = useState<{ used: number; limit: number; exhausted: boolean } | null>(null);
 
   const refresh = () => api.status().then(setStatus).catch(() => {});
   const loadQuota = () => api.fitQuota().then(setQuota).catch(() => {});
+
+  const stopProgressPolling = useCallback(() => {
+    if (progressTimerRef.current) {
+      clearInterval(progressTimerRef.current);
+      progressTimerRef.current = null;
+    }
+  }, []);
+
+  const startProgressPolling = useCallback(() => {
+    if (progressTimerRef.current) return;
+    progressTimerRef.current = setInterval(async () => {
+      try {
+        const p = await api.syncProgress();
+        setSyncProgress(p);
+        if (p.active) {
+          setSyncing(true);
+        } else {
+          stopProgressPolling();
+          setSyncing(false);
+          if (p.phase === "done") {
+            setDataVersion((v) => v + 1);
+            refresh();
+            loadQuota();
+            setTimeout(() => setSyncProgress(null), 4000);
+          } else if (p.phase === "error") {
+            setTimeout(() => setSyncProgress(null), 6000);
+          } else {
+            setSyncProgress(null);
+          }
+        }
+      } catch {
+        // 容忍轮询偶发抖动
+      }
+    }, 600);
+  }, [stopProgressPolling]);
 
   const {
     auth,
@@ -279,6 +316,15 @@ export default function App() {
     api.followStatus().then(setFollow).catch(() => {});
     loadQuota();
 
+    // 挂载时检查后端是否已有正在进行的同步（如授权回调后自动触发），若有立刻接管进度轮询
+    api.syncProgress().then((p) => {
+      if (p.active) {
+        setSyncProgress(p);
+        setSyncing(true);
+        startProgressPolling();
+      }
+    }).catch(() => {});
+
     const handleKeyDown = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && (e.key === "r" || e.key === "R")) {
         e.preventDefault();
@@ -286,8 +332,11 @@ export default function App() {
       }
     };
     window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, []);
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+      stopProgressPolling();
+    };
+  }, [startProgressPolling, stopProgressPolling]);
 
   // 跟随开启时轮询状态；一旦服务端说有新数据待拉，提醒用户
   useEffect(() => {
@@ -306,21 +355,19 @@ export default function App() {
     return () => clearInterval(t);
   }, [follow?.active]);
 
-
-
   const isConnected = Boolean(status?.auth?.connected);
 
   const runSync = async () => {
     if (syncing) return;
     setSyncing(true);
     setSyncMsg(null);
+    startProgressPolling();
     try {
       const r = await api.quickSync();
       if (r.busy) {
         setSyncMsg({ text: r.message, kind: "err" });
       } else if (r.ok) {
         setSyncMsg({ text: r.message, kind: "ok" });
-        // 通知所有页面：重新拉数据 + 刷新侧边栏统计
         setDataVersion((v) => v + 1);
         refresh();
       } else {
@@ -331,8 +378,19 @@ export default function App() {
     } catch (e) {
       setSyncMsg({ text: `同步失败：${(e as Error).message}`, kind: "err" });
     } finally {
-      setSyncing(false);
-      // 成功提示 6 秒后自动消失，失败提示留着等人看清
+      // 保持轮询直到后端真正完成 active: false
+      try {
+        const finalP = await api.syncProgress();
+        setSyncProgress(finalP);
+        if (!finalP.active) {
+          stopProgressPolling();
+          setSyncing(false);
+          setTimeout(() => setSyncProgress(null), 4000);
+        }
+      } catch {
+        stopProgressPolling();
+        setSyncing(false);
+      }
       setTimeout(() => setSyncMsg(null), 6000);
     }
   };
@@ -450,15 +508,39 @@ export default function App() {
             <IconRefresh size={14} />
             <span>刷新页面</span>
           </button>
+          {syncProgress?.active && (
+            <div
+              style={{
+                background: "var(--surface-2)",
+                border: "1px solid var(--border)",
+                borderRadius: 8,
+                padding: "8px 10px",
+                marginBottom: 8,
+              }}
+            >
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 11.5, marginBottom: 4 }}>
+                <span style={{ fontWeight: 600, color: "var(--text)", display: "inline-flex", alignItems: "center", gap: 5, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  <span className="spin" style={{ width: 10, height: 10, borderColor: "var(--accent)" }} />
+                  {syncProgress.message}
+                </span>
+                <span style={{ color: "var(--accent)", fontWeight: 700, flexShrink: 0, marginLeft: 4 }}>
+                  {syncProgress.percent}%
+                </span>
+              </div>
+              <div style={{ height: 4, background: "var(--surface-3)", borderRadius: 2, overflow: "hidden" }}>
+                <div style={{ height: "100%", width: `${Math.max(5, syncProgress.percent)}%`, background: "var(--accent)", transition: "width 0.3s ease" }} />
+              </div>
+            </div>
+          )}
           {isConnected ? (
             <button
               className="sync-btn"
               onClick={doSync}
               disabled={syncing}
-              title="立即从 COROS 拉取最近 3 天的训练数据"
+              title="立即从 COROS 增量同步训练数据"
             >
               <IconCloudSync size={14} />
-              <span>{syncing ? "同步中…" : "立即同步"}</span>
+              <span>{syncProgress?.active ? `同步中 ${syncProgress.percent}%` : syncing ? "同步中…" : "立即同步"}</span>
             </button>
           ) : (
             <button
@@ -536,12 +618,55 @@ export default function App() {
             className="mobile-sync"
             onClick={isConnected ? doSync : connectCoros}
             disabled={syncing || authConnecting}
-            title={isConnected ? "立即从 COROS 拉取最近 3 天的训练数据" : "点击连接 COROS 账号"}
+            title={isConnected ? "增量同步训练数据" : "点击连接 COROS 账号"}
           >
             <IconCloudSync size={15} />
-            <span>{syncing ? "同步中" : isConnected ? "同步" : "连接"}</span>
+            <span>{syncProgress?.active ? `${syncProgress.percent}%` : syncing ? "同步中" : isConnected ? "同步" : "连接"}</span>
           </button>
         </div>
+
+        {/* 全局实时同步进度条（浮动提示条） */}
+        {syncProgress?.active && (
+          <div
+            style={{
+              background: "linear-gradient(135deg, rgba(37, 99, 235, 0.12) 0%, rgba(59, 130, 246, 0.06) 100%)",
+              border: "1px solid rgba(59, 130, 246, 0.35)",
+              borderRadius: 10,
+              padding: "12px 16px",
+              marginBottom: 16,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              flexWrap: "wrap",
+              gap: 12,
+              boxShadow: "0 2px 8px rgba(0, 0, 0, 0.08)",
+            }}
+          >
+            <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 260 }}>
+              <span className="spin" style={{ width: 15, height: 15, borderColor: "var(--accent)" }} />
+              <div>
+                <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text)" }}>
+                  高驰训练数据同步中 · {syncProgress.percent}%
+                </div>
+                <div style={{ fontSize: 12, color: "var(--text-dim)", marginTop: 2 }}>
+                  {syncProgress.message}
+                  {syncProgress.startedAt && `（已用时 ${Math.round((Date.now() - syncProgress.startedAt) / 1000)} 秒）`}
+                </div>
+              </div>
+            </div>
+            <div style={{ width: 180, height: 6, background: "var(--surface-3)", borderRadius: 3, overflow: "hidden" }}>
+              <div
+                style={{
+                  height: "100%",
+                  width: `${Math.max(5, syncProgress.percent)}%`,
+                  background: "var(--accent)",
+                  borderRadius: 3,
+                  transition: "width 0.3s ease",
+                }}
+              />
+            </div>
+          </div>
+        )}
 
         {/* 同步结果提示。桌面版它在侧边栏底部，窄屏侧边栏收着看不见，
             所以在正文里再挂一份 —— 宽屏 display:none，不会重复显示。 */}

@@ -41,14 +41,38 @@ import { getActiveProfileId, updateProfileMeta } from "../profile-manager.ts";
  * 以前这里是写死的 RUN_SPORT_CODES / RUN_CODES 两份数组，
  * 结果室内有氧（400）这类训练在过滤环节就被丢掉了，
  * 而 COROS 那边其实一直有数据。
+ *
+ * ⚠️ 高驰 MCP 的 querySportRecords 单次查询硬上限为 20 条，传 limit:300 也会被截断。
+ * 因此这里窗口必须设为 10 天切片，避免月跑量较大（>20 次/月）的跑友被静默丢单。
  */
-const WINDOW_DAYS = 30;
+const WINDOW_DAYS = 10;
 
 const sleepMs = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 function ymd(d: Date) {
   return d.toISOString().slice(0, 10).replace(/-/g, "");
 }
+
+export type SyncProgress = {
+  active: boolean;
+  phase: "idle" | "records" | "details" | "load" | "health" | "metrics" | "workflow" | "done" | "error";
+  current: number;
+  total: number;
+  percent: number;
+  message: string;
+  error?: string | null;
+  startedAt?: number;
+  updatedAt?: number;
+  elapsedSec?: number;
+};
+
+export type ProgressCallback = (p: {
+  phase: SyncProgress["phase"];
+  current: number;
+  total: number;
+  percent: number;
+  message: string;
+}) => void;
 
 export type SyncResult = {
   startedAt: number;
@@ -64,9 +88,13 @@ export type SyncResult = {
   fitQuotaLeft: number;
 };
 
-export async function syncAll(opts: { days?: number; withLaps?: boolean } = {}): Promise<SyncResult> {
-  const days = opts.days ?? 120;
+export async function syncAll(
+  opts: { days?: number; withLaps?: boolean; onProgress?: ProgressCallback } = {},
+): Promise<SyncResult> {
+  // 默认回溯 365 天（1 年），保证有完整的历史训练与比赛锚点支撑精准成绩预测
+  const days = opts.days ?? 365;
   const withLaps = opts.withLaps ?? true;
+  const onProgress = opts.onProgress;
   const startedAt = Math.floor(Date.now() / 1000);
   const errors: string[] = [];
 
@@ -92,7 +120,15 @@ export async function syncAll(opts: { days?: number; withLaps?: boolean } = {}):
   // 在循环外读一次：读的是本机 SQLite 的单行配置，不存在循环内变化的可能，
   // 而且万一读失败也不至于让整个同步在中途分叉成两种白名单。
   const sportTypeCodes = loadSportTypeCodes();
-  for (const w of windows) {
+  onProgress?.({
+    phase: "records",
+    current: 0,
+    total: windows.length,
+    percent: 3,
+    message: `正在扫描历史训练列表（共 ${windows.length} 个时间窗口）...`,
+  });
+
+  for (const [wIdx, w] of windows.entries()) {
     try {
       const raw = await callTool("querySportRecords", {
         startDate: ymd(w.from),
@@ -108,7 +144,13 @@ export async function syncAll(opts: { days?: number; withLaps?: boolean } = {}):
       });
       const parsed = parseSportRecords(raw);
       records.push(...parsed);
-      console.log(`    窗口 ${ymd(w.from)}~${ymd(w.to)} → ${parsed.length} 条`);
+      onProgress?.({
+        phase: "records",
+        current: wIdx + 1,
+        total: windows.length,
+        percent: Math.min(20, Math.round(((wIdx + 1) / windows.length) * 20)),
+        message: `正在扫描训练记录 (${wIdx + 1}/${windows.length} 时间段) · 已发现 ${records.length} 条...`,
+      });
     } catch (e) {
       errors.push(`querySportRecords ${ymd(w.from)}~${ymd(w.to)}: ${(e as Error).message}`);
     }
@@ -147,7 +189,35 @@ export async function syncAll(opts: { days?: number; withLaps?: boolean } = {}):
     (sqlite.query("SELECT label_id FROM activity_details").all() as { label_id: string }[]).map((r) => r.label_id),
   );
 
+  const needDetailList = [...byId.values()].filter((r) => {
+    const needDet = !haveDetail.has(r.labelId);
+    const needLap = withLaps && !sqlite.query("SELECT 1 FROM laps WHERE label_id = ? LIMIT 1").get(r.labelId);
+    return needDet || needLap;
+  });
+
+  if (needDetailList.length === 0) {
+    onProgress?.({
+      phase: "details",
+      current: 0,
+      total: 0,
+      percent: 75,
+      message: "已有训练详情与逐圈数据全部最新，跳过拉取",
+    });
+  }
+
+  let processedCount = 0;
   for (const r of byId.values()) {
+    const isTarget = needDetailList.some((item) => item.labelId === r.labelId);
+    if (isTarget) {
+      processedCount++;
+      onProgress?.({
+        phase: "details",
+        current: processedCount,
+        total: needDetailList.length,
+        percent: Math.min(75, Math.round(20 + (processedCount / needDetailList.length) * 55)),
+        message: `正在拉取训练详情与逐圈数据 (${processedCount}/${needDetailList.length})...`,
+      });
+    }
     // 这里曾经有一道 RUN_CODES 白名单，只给跑步类拉详情和分圈。
     // 去掉是有意的：既然用户勾选的就是「我要同步的运动类型」，
     // 详情和分圈理应对所有勾选的类型一视同仁。
@@ -214,6 +284,13 @@ export async function syncAll(opts: { days?: number; withLaps?: boolean } = {}):
   }
 
   // ---- 3. 训练负荷 ----
+  onProgress?.({
+    phase: "load",
+    current: 1,
+    total: 1,
+    percent: 78,
+    message: "正在同步训练负荷与 ACWR 指标...",
+  });
   let loadDays = 0;
   try {
     const raw = await callTool("queryTrainingLoadAssessment", { days: Math.min(days, 90) });
@@ -233,6 +310,13 @@ export async function syncAll(opts: { days?: number; withLaps?: boolean } = {}):
   await sleepMs(150);
 
   // ---- 4. 每日健康 ----
+  onProgress?.({
+    phase: "health",
+    current: 1,
+    total: 2,
+    percent: 83,
+    message: "正在同步每日健康与睡眠数据...",
+  });
   let healthDays = 0;
   try {
     const raw = await callTool("queryDailyHealthData", { days: Math.min(days, 60) });
@@ -309,6 +393,13 @@ export async function syncAll(opts: { days?: number; withLaps?: boolean } = {}):
   }
 
   // ---- 7. 体能 + 恢复快照（每天只留最后一条）----
+  onProgress?.({
+    phase: "metrics",
+    current: 1,
+    total: 2,
+    percent: 89,
+    message: "正在同步体能状态与恢复快照...",
+  });
   try {
     const f = parseFitness(await callTool("queryFitnessAssessmentOverview", {}));
     const sameDay = sqlite
@@ -393,12 +484,20 @@ export async function syncAll(opts: { days?: number; withLaps?: boolean } = {}):
   const finishedAt = Math.floor(Date.now() / 1000);
   sqlite.query("UPDATE sync_log SET finished_at=?, status=?, detail=? WHERE started_at=? AND finished_at IS NULL").run(
     finishedAt, errors.length === 0 ? "ok" : "error",
-    JSON.stringify({ activities: byId.size, details: detailCount, laps: lapRowCount, errors }),
+    JSON.stringify({ activities: byId.size, details: detailCount, laps: lapRowCount, days, errors }),
     startedAt,
   );
 
   const today = new Date().toISOString().slice(0, 10);
   const quota = sqlite.query("SELECT used FROM fit_quota WHERE day=?").get(today) as { used: number } | undefined;
+
+  onProgress?.({
+    phase: "done",
+    current: byId.size,
+    total: byId.size,
+    percent: 94,
+    message: `高驰云端数据拉取完毕，共 ${byId.size} 次训练`,
+  });
 
   return {
     startedAt, finishedAt,
