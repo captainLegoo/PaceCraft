@@ -112,7 +112,8 @@ const app = new Elysia()
   .get("/api/updater/check", async ({ query }) => {
     const curVer = (query as any)?.currentVersion || APP_VERSION;
     const channel = (query as any)?.channel;
-    const result = await checkLatestRelease(curVer, channel);
+    const force = (query as any)?.force === "true" || (query as any)?.force === "1";
+    const result = await checkLatestRelease(curVer, channel, force);
     return result;
   })
   .get("/api/updater/region", async () => {

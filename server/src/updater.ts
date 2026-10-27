@@ -94,9 +94,13 @@ const PROXY_MIRRORS = [
 // 版本检测缓存，缓存 3 分钟，防止短时间内高频重复请求 GitHub API
 let cachedReleaseCheck: { data: CheckReleaseResult; expiresAt: number } | null = null;
 
-export async function checkLatestRelease(currentVersion: string, preferred?: string): Promise<CheckReleaseResult> {
+export async function checkLatestRelease(
+  currentVersion: string,
+  preferred?: string,
+  force = false
+): Promise<CheckReleaseResult> {
   const now = Date.now();
-  if (cachedReleaseCheck && cachedReleaseCheck.expiresAt > now) {
+  if (!force && cachedReleaseCheck && cachedReleaseCheck.expiresAt > now) {
     return cachedReleaseCheck.data;
   }
 
