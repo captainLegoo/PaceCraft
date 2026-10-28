@@ -5,6 +5,7 @@ import { IconDatabase, IconGear, IconHeart, IconSync } from "../icons";
 import WorkflowPanel from "./WorkflowPanel";
 import { useCorosAuth } from "../use-coros-auth";
 import { DEFAULT_APP_VERSION } from "../version";
+import { openExternal } from "../openExternal";
 
 export type PopularModel = {
   model: string;
@@ -695,9 +696,7 @@ export default function Settings({
   const currentProviderId = selectedProviderId;
   const handleOpenReleasePage = (e: React.MouseEvent) => {
     e.preventDefault();
-    api.openExternal("https://github.com/captainLegoo/PaceCraft/releases").catch(() => {
-      window.open("https://github.com/captainLegoo/PaceCraft/releases", "_blank");
-    });
+    openExternal("https://github.com/captainLegoo/PaceCraft/releases");
   };
 
   const currentProvider = PROVIDERS.find((p) => p.id === currentProviderId) || PROVIDERS[PROVIDERS.length - 1];
@@ -939,9 +938,7 @@ export default function Settings({
                     rel="noopener noreferrer"
                     onClick={(e) => {
                       e.preventDefault();
-                      api.openExternal(currentProvider.docUrl!).catch(() => {
-                        window.open(currentProvider.docUrl!, "_blank");
-                      });
+                      openExternal(currentProvider.docUrl!);
                     }}
                     style={{ color: "var(--accent)", textDecoration: "none", fontWeight: 500 }}
                   >
