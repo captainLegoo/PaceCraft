@@ -5,6 +5,7 @@ import { IconDatabase, IconGear, IconHeart, IconSync } from "../icons";
 import WorkflowPanel from "./WorkflowPanel";
 import { useCorosAuth } from "../use-coros-auth";
 import { DEFAULT_APP_VERSION } from "../version";
+import { openExternal } from "../openExternal";
 
 export type PopularModel = {
   model: string;
@@ -693,6 +694,11 @@ export default function Settings({
   };
 
   const currentProviderId = selectedProviderId;
+  const handleOpenReleasePage = (e: React.MouseEvent) => {
+    e.preventDefault();
+    openExternal("https://github.com/captainLegoo/PaceCraft/releases");
+  };
+
   const currentProvider = PROVIDERS.find((p) => p.id === currentProviderId) || PROVIDERS[PROVIDERS.length - 1];
   const isLocalEndpoint = /localhost|127\.0\.0\.1|11434/.test(cfg.baseUrl || "");
   const canSubmit = !saving && !testing && (cfg.apiKey || status?.aiConfigured || isLocalEndpoint) && !!cfg.baseUrl && !!cfg.model;
@@ -930,6 +936,10 @@ export default function Settings({
                     href={currentProvider.docUrl}
                     target="_blank"
                     rel="noopener noreferrer"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      openExternal(currentProvider.docUrl!);
+                    }}
                     style={{ color: "var(--accent)", textDecoration: "none", fontWeight: 500 }}
                   >
                     🔗 获取 API Key（{currentProvider.docLabel || "平台控制台"}）↗
@@ -1627,6 +1637,7 @@ export default function Settings({
                         rel="noopener noreferrer"
                         className="version-tag"
                         title={`当前版本：${appVersion}（点击查看 Release 记录）`}
+                        onClick={handleOpenReleasePage}
                       >
                         <span className="dot" />
                         <span>{appVersion}</span>
@@ -1675,6 +1686,7 @@ export default function Settings({
             rel="noopener noreferrer"
             className="version-tag"
             title="查看所有发布版本"
+            onClick={handleOpenReleasePage}
           >
             <span className="dot" />
             <span>PaceCraft {appVersion}</span>

@@ -1,7 +1,7 @@
 import { createServer, type Server } from "node:http";
 import { randomBytes } from "node:crypto";
 import { execFile } from "node:child_process";
-import { writeFileSync } from "node:fs";
+import { writeFileSync, existsSync } from "node:fs";
 import { REDIRECT_PORT } from "../config.ts";
 import {
   buildAuthorizeUrl,
@@ -32,7 +32,10 @@ let activeTimer: Timer | null = null;
 export function openExternalUrl(url: string) {
   try {
     if (process.platform === "darwin") {
-      execFile("open", [url]);
+      const openBin = existsSync("/usr/bin/open") ? "/usr/bin/open" : "open";
+      execFile(openBin, [url], (err) => {
+        if (err) console.warn("macOS openExternalUrl error:", err);
+      });
     } else if (process.platform === "win32") {
       // 在 Windows 下避免使用 cmd /c（cmd 会把 & 识别为命令分隔符导致 URL 查询参数被截断）
       // 使用 PowerShell 的 Start-Process，用单引号字面量传参，100% 完整保留所有 query 参数

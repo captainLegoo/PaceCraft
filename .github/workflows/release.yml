@@ -35,6 +35,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
@@ -59,6 +61,10 @@ jobs:
         run: |
           RAW_VER="${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || inputs.version || '0.1.0' }}"
           VER="${RAW_VER#v}"
+          # 强制标准化为合法 SemVer (X.Y.Z)，若为四段式 x.y.z.w 则自动转换为 x.y.z-w 防止 Tauri 解析报错
+          if [[ "$VER" =~ ^([0-9]+)\.([0-9]+)\.([0-9]+)\.([0-9]+)$ ]]; then
+            VER="${BASH_REMATCH[1]}.${BASH_REMATCH[2]}.${BASH_REMATCH[3]}-${BASH_REMATCH[4]}"
+          fi
           echo "Syncing app version to $VER..."
           bun -e "
             const tauri = JSON.parse(await Bun.file('src-tauri/tauri.conf.json').text());
@@ -97,6 +103,17 @@ jobs:
           bun build --compile --minify --target=${{ matrix.bun_target }} ./server/src/index.ts --outfile src-tauri/binaries/${{ matrix.sidecar_name }}
           ls -lh src-tauri/binaries/
 
+      - name: Generate Release Notes
+        id: notes
+        shell: bash
+        run: |
+          CURRENT_TAG="${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || inputs.version || 'v0.1.0' }}"
+          {
+            echo "body<<EOF"
+            bun run scripts/generate-release-notes.ts "$CURRENT_TAG"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
       - name: Build Tauri Desktop App
         uses: tauri-apps/tauri-action@v0
         env:
@@ -106,22 +123,7 @@ jobs:
         with:
           tagName: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || inputs.version || 'v0.1.0' }}
           releaseName: "PaceCraft ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || inputs.version || 'v0.1.0' }}"
-          releaseBody: |
-            ## PaceCraft 跑者 AI 训练中心桌面客户端
-
-            - **Windows**: 下载 `*.exe` 安装包安装运行
-            - **macOS**: 下载 `*.dmg` 拖入 Applications 运行
-
-            > **🍎 macOS 首次打开提示「已损坏，无法打开」？**
-            > 打开 Mac「终端」执行 `xattr -cr /Applications/PaceCraft.app`，或在「系统设置」➔「隐私与安全性」中点击「仍要打开」。
-            > 
-            > **🪟 Windows 提示「Windows 已保护你的电脑 (SmartScreen)」？**
-            > 点击弹窗中的「更多信息 (More info)」➔ 点击「仍要运行 (Run anyway)」即可正常安装。
-
-            ### 特性说明
-            - 跨手表生态数据聚合与 AI 训练助理，开箱即用，无需配置终端与 Node/Bun 环境
-            - 数据全量仅持久化存储在个人电脑本地 (`~/.coros-dashboard`)，安全隐私绝对隔离
-            - 支持多跑友独立档案共存切换与智能增量同步
+          releaseBody: ${{ steps.notes.outputs.body }}
           releaseDraft: false
           prerelease: ${{ contains(github.ref_name, 'alpha') || contains(github.ref_name, 'beta') || contains(github.ref_name, 'rc') || contains(github.ref_name, 'test') }}
           args: --target ${{ matrix.target }}
