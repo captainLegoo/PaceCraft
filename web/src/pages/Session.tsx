@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { api, type Session, type SessionDetail } from "../api";
-import { AerobicDecouplingCard, AiDisclaimerNotice, LineChart, Markdown, ZoneBar, fmtDur, fmtPace, paceColor } from "../charts";
+import { AerobicDecouplingCard, AiDisclaimerNotice, LineChart, Markdown, ZoneBar, fmtDur, fmtPace, formatPace, paceColor } from "../charts";
 import { IconBack, IconHeart, IconLoad, IconRoute, IconStopwatch as IconStopwatch2 } from "../icons";
 
 export default function SessionView({
@@ -166,7 +166,7 @@ export default function SessionView({
             <LineChart
               labels={chartLabels}
               xValues={chartX}
-              xFmt={(n) => `${Math.floor(n / 60)}′${String(Math.round(n % 60)).padStart(2, "0")}″`}
+              xFmt={(n) => formatPace(n, "quote")}
               series={[
                 { key: "pace", label: "配速（左轴）", color: "var(--chart-accent)", values: paceSeries },
                 { key: "hr", label: "平均心率（右轴）", color: "var(--chart-hr)", axis: "right", values: hrSeries },

@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { api, type SyncProgress, type SyncSportsPayload } from "../api";
-import { formatElapsed } from "../App";
+import { formatElapsed } from "../utils/format";
+import { useClipboard } from "../utils/clipboard";
 import { IconDatabase, IconGear, IconHeart, IconSync } from "../icons";
 import WorkflowPanel from "./WorkflowPanel";
 import { useCorosAuth } from "../use-coros-auth";
@@ -402,6 +403,7 @@ export default function Settings({
   const [providerTab, setProviderTab] = useState<"featured" | "domestic" | "global" | "local">("featured");
   const [selectedProviderId, setSelectedProviderId] = useState<string>("deepseek");
   const [status, setStatus] = useState<any>(null);
+  const { copy: copyAuthUrl, copied: copiedAuthUrl } = useClipboard();
   const appVersion = status?.version || DEFAULT_APP_VERSION;
   const [msg, setMsg] = useState<{ kind: "ok" | "error"; text: string } | null>(null);
   const [aiMsg, setAiMsg] = useState<{ kind: "ok" | "error"; text: string } | null>(null);
@@ -1447,13 +1449,19 @@ export default function Settings({
                       {authUrl && (
                         <button
                           type="button"
-                          onClick={() => {
-                            navigator.clipboard.writeText(authUrl);
-                            alert("授权链接已复制到剪贴板，请直接粘贴至浏览器地址栏打开。");
+                          onClick={() => copyAuthUrl(authUrl)}
+                          style={{
+                            fontSize: 12,
+                            padding: "4px 10px",
+                            background: copiedAuthUrl ? "rgba(34, 197, 94, 0.15)" : "var(--surface-2)",
+                            color: copiedAuthUrl ? "var(--good)" : "var(--fg)",
+                            border: `1px solid ${copiedAuthUrl ? "var(--good)" : "var(--border)"}`,
+                            borderRadius: 4,
+                            cursor: "pointer",
+                            transition: "all 0.2s ease",
                           }}
-                          style={{ fontSize: 12, padding: "4px 10px", background: "var(--surface-2)", color: "var(--fg)", border: "1px solid var(--border)", borderRadius: 4, cursor: "pointer" }}
                         >
-                          📋 复制授权链接
+                          {copiedAuthUrl ? "✓ 授权链接已复制" : "📋 复制授权链接"}
                         </button>
                       )}
                       <button

@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { api, type RaceDetail, type RouteFilePreview, type Race } from "../api";
 import RouteProfileCard from "./RaceRouteProfile";
 import RaceBriefingCard, { type RaceBriefing } from "./RaceBriefing";
-import { fmtPace } from "../charts";
+import { fmtPace, formatDuration as fmtDurInput } from "../utils/format";
 
 /**
  * 距离预设。
@@ -104,17 +104,6 @@ const fileNameFromNote = (note: string | null | undefined): string | null => {
   return m ? m[1] : null;
 };
 
-/** 秒 → h:mm:ss 或 m:ss。必须处理秒的进位（见 format.ts 的说明）。 */
-const fmtDurInput = (s: number) => {
-  let h = Math.floor(s / 3600);
-  let m = Math.floor((s % 3600) / 60);
-  let sec = Math.round(s % 60);
-  if (sec >= 60) { m += 1; sec -= 60; }
-  if (m >= 60) { h += 1; m -= 60; }
-  return h > 0
-    ? `${h}:${String(m).padStart(2, "0")}:${String(sec).padStart(2, "0")}`
-    : `${m}:${String(sec).padStart(2, "0")}`;
-};
 
 /**
  * 解析用户输入的目标成绩。

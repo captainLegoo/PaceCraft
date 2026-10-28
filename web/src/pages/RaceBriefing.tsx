@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { api, type RaceDetail } from "../api";
+import { formatDuration as fDur, formatPace as fPace } from "../utils/format";
 
 export type RaceAnchor = {
   /** 训练 id —— 人工排除/纳入时用它定位这一场 */
@@ -79,13 +80,6 @@ export type Briefing = {
 
 export type RaceBriefing = RaceDetail & { briefing: Briefing };
 
-const fDur = (s: number) => {
-  const h = Math.floor(s / 3600);
-  const m = Math.floor((s % 3600) / 60);
-  const sec = Math.round(s % 60);
-  return `${h}:${String(m).padStart(2, "0")}:${String(sec).padStart(2, "0")}`;
-};
-const fPace = (s: number) => `${Math.floor(s / 60)}:${String(Math.round(s % 60)).padStart(2, "0")}`;
 
 const TONE_COLOR: Record<string, string> = {
   good: "var(--good)",
