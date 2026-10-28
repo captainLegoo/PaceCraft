@@ -694,9 +694,10 @@ export default function Settings({
   };
 
   const currentProviderId = selectedProviderId;
-  const handleOpenReleasePage = (e: React.MouseEvent) => {
+  const handleOpenRepoPage = (e: React.MouseEvent) => {
     e.preventDefault();
-    openExternal("https://github.com/captainLegoo/PaceCraft/releases");
+    e.stopPropagation();
+    openExternal("https://github.com/captainLegoo/PaceCraft");
   };
 
   const currentProvider = PROVIDERS.find((p) => p.id === currentProviderId) || PROVIDERS[PROVIDERS.length - 1];
@@ -1632,12 +1633,12 @@ export default function Settings({
                     <td>当前版本</td>
                     <td style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
                       <a
-                        href="https://github.com/captainLegoo/PaceCraft/releases"
+                        href="https://github.com/captainLegoo/PaceCraft"
                         target="_blank"
                         rel="noopener noreferrer"
                         className="version-tag"
-                        title={`当前版本：${appVersion}（点击查看 Release 记录）`}
-                        onClick={handleOpenReleasePage}
+                        title={`当前版本：${appVersion}（访问 GitHub 仓库）`}
+                        onClick={handleOpenRepoPage}
                       >
                         <span className="dot" />
                         <span>{appVersion}</span>
@@ -1681,12 +1682,12 @@ export default function Settings({
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 8, marginBottom: 4 }}>
           <h3 className="card-title" style={{ margin: 0 }}>关于数据来源与系统</h3>
           <a
-            href="https://github.com/captainLegoo/PaceCraft/releases"
+            href="https://github.com/captainLegoo/PaceCraft"
             target="_blank"
             rel="noopener noreferrer"
             className="version-tag"
-            title="查看所有发布版本"
-            onClick={handleOpenReleasePage}
+            title="访问 GitHub 仓库"
+            onClick={handleOpenRepoPage}
           >
             <span className="dot" />
             <span>PaceCraft {appVersion}</span>

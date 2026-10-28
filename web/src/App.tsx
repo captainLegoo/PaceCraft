@@ -634,16 +634,14 @@ export default function App() {
                   : <span className="pill warn">AI 未配置</span>}
               </div>
               <div style={{ marginTop: 8, display: "flex", alignItems: "center", gap: 6 }}>
-                <button
-                  type="button"
-                  onClick={() => setShowUpdateModal(true)}
+                <span
                   className="version-tag"
-                  style={{ background: "none", border: "none", cursor: "pointer", padding: 0 }}
-                  title={`当前版本：${appVersion}（点击检查更新）`}
+                  style={{ cursor: "default", userSelect: "none" }}
+                  title={`当前版本：${appVersion}`}
                 >
                   <span className="dot" />
                   <span>{appVersion}</span>
-                </button>
+                </span>
                 {hasNewUpdate && (
                   <span
                     style={{
@@ -653,7 +651,7 @@ export default function App() {
                       background: "var(--accent)",
                       display: "inline-block",
                     }}
-                    title="发现新版本，点击查看"
+                    title="发现新版本，可在「设置」中检查更新"
                   />
                 )}
               </div>
