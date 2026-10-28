@@ -28,8 +28,18 @@ import {
 
 let activeServer: Server | null = null;
 let activeTimer: Timer | null = null;
+let lastBackendOpenTime = 0;
+let lastBackendOpenUrl = "";
 
 export function openExternalUrl(url: string) {
+  if (!url) return;
+  const now = Date.now();
+  if (url === lastBackendOpenUrl && now - lastBackendOpenTime < 1200) {
+    return;
+  }
+  lastBackendOpenTime = now;
+  lastBackendOpenUrl = url;
+
   try {
     if (process.platform === "darwin") {
       const openBin = existsSync("/usr/bin/open") ? "/usr/bin/open" : "open";

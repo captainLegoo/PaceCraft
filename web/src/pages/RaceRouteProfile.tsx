@@ -1,14 +1,6 @@
 import { useMemo } from "react";
 import type { RaceDetail, RouteSegment } from "../api";
-
-const fmtP = (sec: number) =>
-  `${Math.floor(sec / 60)}:${String(Math.round(sec % 60)).padStart(2, "0")}`;
-const fmtDur = (sec: number) => {
-  const h = Math.floor(sec / 3600);
-  const m = Math.floor((sec % 3600) / 60);
-  const s = Math.round(sec % 60);
-  return h > 0 ? `${h}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}` : `${m}:${String(s).padStart(2, "0")}`;
-};
+import { formatDuration as fmtDur, formatPace as fmtP } from "../utils/format";
 
 /**
  * 爬升剖面图。

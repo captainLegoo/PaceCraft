@@ -1,31 +1,29 @@
 import { useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import {
+  formatPace,
+  formatDuration,
+  formatDistance,
+  formatDateShort,
+  formatElapsed,
+  fmtPace,
+  fmtDur,
+  fmtDate,
+  fmtT,
+  fmtP,
+} from "./utils/format";
 
-export const fmtPace = (sec: number | null | undefined) => {
-  if (sec == null || !Number.isFinite(sec)) return "—";
-  // 先四舍五入秒，再处理进位，否则 299.6s 会显示成非法的 "4:60"
-  let m = Math.floor(sec / 60);
-  let s = Math.round(sec % 60);
-  if (s === 60) { m += 1; s = 0; }
-  return `${m}:${String(s).padStart(2, "0")}`;
+export {
+  formatPace,
+  formatDuration,
+  formatDistance,
+  formatDateShort,
+  formatElapsed,
+  fmtPace,
+  fmtDur,
+  fmtDate,
+  fmtT,
+  fmtP,
 };
-
-export const fmtDur = (sec: number | null | undefined) => {
-  if (sec == null || !Number.isFinite(sec)) return "—";
-  let h = Math.floor(sec / 3600);
-  let m = Math.floor((sec % 3600) / 60);
-  let s = Math.round(sec % 60);
-  if (s === 60) { m += 1; s = 0; }
-  if (m === 60) { h += 1; m = 0; }
-  return h > 0
-    ? `${h}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`
-    : `${m}:${String(s).padStart(2, "0")}`;
-};
-
-export const fmtDate = (d: string) => (d ? d.slice(5) : "—");
-
-/** 与服务端 prediction/engine.ts 同名的别名，方便对照阅读 */
-export const fmtT = fmtDur;
-export const fmtP = fmtPace;
 
 /**
  * 配速 → 颜色：越快越偏青，越慢越偏红。

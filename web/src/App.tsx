@@ -16,21 +16,10 @@ import ProfileSwitcher from "./components/ProfileSwitcher";
 import { DEFAULT_APP_VERSION } from "./version";
 import UpdateModal, { isTauriEnv } from "./components/UpdateModal";
 import { check } from "@tauri-apps/plugin-updater";
+import { formatElapsed } from "./utils/format";
+import { useClipboard } from "./utils/clipboard";
 
-export function formatElapsed(startedAt: number): string {
-  const totalSeconds = Math.max(0, Math.round((Date.now() - startedAt) / 1000));
-  if (totalSeconds < 60) {
-    return `${totalSeconds} 秒`;
-  }
-  const m = Math.floor(totalSeconds / 60);
-  const s = totalSeconds % 60;
-  if (m < 60) {
-    return `${m} 分钟 ${s} 秒`;
-  }
-  const h = Math.floor(m / 60);
-  const remM = m % 60;
-  return `${h} 小时 ${remM} 分钟 ${s} 秒`;
-}
+export { formatElapsed };
 
 type Route = {
   page:
@@ -332,7 +321,7 @@ export default function App() {
 
   const [resolvingMismatch, setResolvingMismatch] = useState(false);
   const [mismatchError, setMismatchError] = useState<string | null>(null);
-  const [copiedAuthUrl, setCopiedAuthUrl] = useState(false);
+  const { copy: copyAuthUrl, copied: copiedAuthUrl } = useClipboard();
 
   const handleResolveMismatch = async (action: "create_new" | "overwrite" | "merge") => {
     setResolvingMismatch(true);
@@ -790,11 +779,7 @@ export default function App() {
                 {authUrl && (
                   <button
                     type="button"
-                    onClick={() => {
-                      navigator.clipboard.writeText(authUrl);
-                      setCopiedAuthUrl(true);
-                      setTimeout(() => setCopiedAuthUrl(false), 3000);
-                    }}
+                    onClick={() => copyAuthUrl(authUrl)}
                     style={{ fontSize: 12, padding: "5px 10px", background: "rgba(255,255,255,0.1)", color: "#fff", border: "1px solid rgba(255,255,255,0.2)", borderRadius: 6, cursor: "pointer" }}
                   >
                     {copiedAuthUrl ? "✓ 已复制" : "📋 复制链接"}

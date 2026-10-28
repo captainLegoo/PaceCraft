@@ -1,5 +1,5 @@
 import React from "react";
-import { openExternal } from "../openExternal";
+import ExternalLink from "./ExternalLink";
 
 interface MarkdownViewProps {
   content: string;
@@ -206,13 +206,9 @@ function renderInline(text: string): React.ReactNode[] {
       const label = linkMatch[1];
       const href = linkMatch[2];
       return (
-        <a
+        <ExternalLink
           key={index}
           href={href}
-          onClick={(e) => {
-            e.preventDefault();
-            openExternal(href);
-          }}
           style={{
             color: "var(--accent)",
             textDecoration: "underline",
@@ -220,7 +216,7 @@ function renderInline(text: string): React.ReactNode[] {
           }}
         >
           {label}
-        </a>
+        </ExternalLink>
       );
     }
 
