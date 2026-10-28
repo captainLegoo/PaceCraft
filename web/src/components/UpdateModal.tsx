@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import { check, type Update } from "@tauri-apps/plugin-updater";
 import { relaunch } from "@tauri-apps/plugin-process";
 import { openExternal } from "../openExternal";
+import MarkdownView from "./MarkdownView";
 
 export function isTauriEnv(): boolean {
   return typeof window !== "undefined" && Boolean((window as any).__TAURI_INTERNALS__);
@@ -221,7 +222,7 @@ export default function UpdateModal({
       <div
         style={{
           width: "100%",
-          maxWidth: 420,
+          maxWidth: 460,
           background: "var(--surface)",
           color: "var(--text)",
           border: "1px solid var(--border)",
@@ -340,23 +341,19 @@ export default function UpdateModal({
               </div>
 
               {notes && (
-                <div style={{ marginBottom: 10 }}>
+                <div style={{ marginBottom: 12 }}>
                   <div
                     style={{
-                      maxHeight: 140,
+                      maxHeight: 210,
                       overflowY: "auto",
-                      fontSize: 12,
-                      lineHeight: 1.6,
-                      color: "var(--text)",
                       background: "var(--surface-2)",
                       border: "1px solid var(--border)",
-                      borderRadius: 6,
-                      padding: "8px 10px",
-                      whiteSpace: "pre-wrap",
-                      wordBreak: "break-word",
+                      borderRadius: 8,
+                      padding: "10px 12px",
+                      overscrollBehavior: "contain",
                     }}
                   >
-                    {notes}
+                    <MarkdownView content={notes} />
                   </div>
                 </div>
               )}
