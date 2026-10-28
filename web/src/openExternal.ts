@@ -10,7 +10,7 @@ let lastOpenUrl = "";
 
 /**
  * 跨端统一唤起系统默认浏览器打开外部网页。
- * 1. 防抖/防双击：同一 URL 1 秒内禁止重复触发，杜绝多标签页并发弹出；
+ * 1. 防抖/防双击：同一 URL 1.2 秒内禁止重复触发，杜绝多标签页并发弹出；
  * 2. 桌面端 (Tauri)：优先通过 Tauri 原生 Shell 插件 open 打开，失败则由后端命令 /usr/bin/open 兜底；
  * 3. 网页模式 (Browser)：直接由浏览器原生打开新标签页，严禁触发后端系统级 open 命令（避免网页与系统双重打开）。
  */
@@ -18,7 +18,7 @@ export async function openExternal(url: string): Promise<void> {
   if (!url) return;
 
   const now = Date.now();
-  if (url === lastOpenUrl && now - lastOpenTime < 1000) {
+  if (url === lastOpenUrl && now - lastOpenTime < 1200) {
     return;
   }
   lastOpenTime = now;
@@ -49,3 +49,5 @@ export async function openExternal(url: string): Promise<void> {
     console.error("Failed to open external url in browser:", e);
   }
 }
+
+export { default as ExternalLink } from "./components/ExternalLink";

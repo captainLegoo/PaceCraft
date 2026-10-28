@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { api, type AuthStatus } from "./api";
+import { openExternal } from "./openExternal";
 
 export function useCorosAuth(onSuccess?: () => void, onDisconnect?: () => void) {
   const [auth, setAuth] = useState<AuthStatus | null>(null);
@@ -144,7 +145,7 @@ export function useCorosAuth(onSuccess?: () => void, onDisconnect?: () => void) 
 
   const openBrowser = useCallback(() => {
     if (authUrl) {
-      api.openExternal(authUrl).catch(() => {});
+      openExternal(authUrl);
     }
   }, [authUrl]);
 

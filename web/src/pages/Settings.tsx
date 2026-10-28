@@ -5,7 +5,7 @@ import { IconDatabase, IconGear, IconHeart, IconSync } from "../icons";
 import WorkflowPanel from "./WorkflowPanel";
 import { useCorosAuth } from "../use-coros-auth";
 import { DEFAULT_APP_VERSION } from "../version";
-import { openExternal } from "../openExternal";
+import { openExternal, ExternalLink } from "../openExternal";
 
 export type PopularModel = {
   model: string;
@@ -694,12 +694,6 @@ export default function Settings({
   };
 
   const currentProviderId = selectedProviderId;
-  const handleOpenRepoPage = (e: React.MouseEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    openExternal("https://github.com/captainLegoo/PaceCraft");
-  };
-
   const currentProvider = PROVIDERS.find((p) => p.id === currentProviderId) || PROVIDERS[PROVIDERS.length - 1];
   const isLocalEndpoint = /localhost|127\.0\.0\.1|11434/.test(cfg.baseUrl || "");
   const canSubmit = !saving && !testing && (cfg.apiKey || status?.aiConfigured || isLocalEndpoint) && !!cfg.baseUrl && !!cfg.model;
@@ -933,18 +927,12 @@ export default function Settings({
                 }}
               >
                 {currentProvider.docUrl && (
-                  <a
+                  <ExternalLink
                     href={currentProvider.docUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    onClick={(e) => {
-                      e.preventDefault();
-                      openExternal(currentProvider.docUrl!);
-                    }}
                     style={{ color: "var(--accent)", textDecoration: "none", fontWeight: 500 }}
                   >
                     🔗 获取 API Key（{currentProvider.docLabel || "平台控制台"}）↗
-                  </a>
+                  </ExternalLink>
                 )}
                 {currentProvider.apiKeyHint && (
                   <span>· {currentProvider.apiKeyHint}</span>
@@ -1632,17 +1620,14 @@ export default function Settings({
                   <tr>
                     <td>当前版本</td>
                     <td style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-                      <a
+                      <ExternalLink
                         href="https://github.com/captainLegoo/PaceCraft"
-                        target="_blank"
-                        rel="noopener noreferrer"
                         className="version-tag"
                         title={`当前版本：${appVersion}（访问 GitHub 仓库）`}
-                        onClick={handleOpenRepoPage}
                       >
                         <span className="dot" />
                         <span>{appVersion}</span>
-                      </a>
+                      </ExternalLink>
                       <button
                         type="button"
                         className="btn"
@@ -1681,17 +1666,14 @@ export default function Settings({
       <div className="card">
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 8, marginBottom: 4 }}>
           <h3 className="card-title" style={{ margin: 0 }}>关于数据来源与系统</h3>
-          <a
+          <ExternalLink
             href="https://github.com/captainLegoo/PaceCraft"
-            target="_blank"
-            rel="noopener noreferrer"
             className="version-tag"
             title="访问 GitHub 仓库"
-            onClick={handleOpenRepoPage}
           >
             <span className="dot" />
             <span>PaceCraft {appVersion}</span>
-          </a>
+          </ExternalLink>
         </div>
         <p className="card-sub">本看板所有数据均来自 COROS 官方 MCP（mcp.coros.com，中国区），未使用任何非官方接口。</p>
         <ul style={{ color: "var(--text-dim)", fontSize: 12.5, lineHeight: 1.9, paddingLeft: 18, margin: 0 }}>
