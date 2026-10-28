@@ -1627,45 +1627,40 @@ export default function Settings({
                   <tr><td>AI 模型</td><td>{status.aiConfigured ? <span className="pill good">已配置</span> : <span className="pill">未配置</span>}</td></tr>
                   <tr>
                     <td>当前版本</td>
-                    <td style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 6, flexWrap: "nowrap" }}>
-                      <ExternalLink
-                        href="https://github.com/captainLegoo/PaceCraft"
-                        className="version-tag"
-                        title={`当前版本：${appVersion}（访问 GitHub 仓库）`}
-                      >
-                        <span className="dot" />
-                        <span>{appVersion}</span>
-                      </ExternalLink>
-                      <button
-                        type="button"
-                        className="btn"
-                        style={{
-                          height: 22,
-                          padding: "0 8px",
-                          fontSize: 11,
-                          lineHeight: 1,
-                          borderRadius: 4,
-                          boxSizing: "border-box",
-                          gap: 4,
-                          ...(hasNewUpdate
-                            ? { color: "var(--accent)", borderColor: "var(--accent)", background: "var(--surface-2)" }
-                            : { color: "var(--text-dim)", borderColor: "var(--border)", background: "var(--surface-2)" }),
-                        }}
-                        onClick={onCheckUpdate}
-                      >
-                        {hasNewUpdate && (
-                          <span
-                            style={{
-                              width: 5,
-                              height: 5,
-                              borderRadius: "50%",
-                              background: "var(--accent)",
-                              display: "inline-block",
-                            }}
-                          />
-                        )}
-                        <span>{hasNewUpdate ? "发现新版本" : "检查更新"}</span>
-                      </button>
+                    <td>
+                      <div style={{ display: "inline-flex", alignItems: "center", gap: 6, verticalAlign: "middle" }}>
+                        <ExternalLink
+                          href="https://github.com/captainLegoo/PaceCraft"
+                          className="version-tag"
+                          title={`当前版本：${appVersion}（访问 GitHub 仓库）`}
+                        >
+                          <span className="dot" />
+                          <span>{appVersion}</span>
+                        </ExternalLink>
+                        <button
+                          type="button"
+                          className="version-check-btn"
+                          style={
+                            hasNewUpdate
+                              ? { color: "var(--accent)", borderColor: "var(--accent)", background: "rgba(198, 242, 78, 0.12)" }
+                              : undefined
+                          }
+                          onClick={onCheckUpdate}
+                        >
+                          {hasNewUpdate && (
+                            <span
+                              style={{
+                                width: 4,
+                                height: 4,
+                                borderRadius: "50%",
+                                background: "var(--accent)",
+                                display: "inline-block",
+                              }}
+                            />
+                          )}
+                          <span>{hasNewUpdate ? "发现新版本" : "检查更新"}</span>
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 </tbody>
