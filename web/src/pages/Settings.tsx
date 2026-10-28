@@ -1627,7 +1627,7 @@ export default function Settings({
                   <tr><td>AI 模型</td><td>{status.aiConfigured ? <span className="pill good">已配置</span> : <span className="pill">未配置</span>}</td></tr>
                   <tr>
                     <td>当前版本</td>
-                    <td style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+                    <td style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 6, flexWrap: "nowrap" }}>
                       <ExternalLink
                         href="https://github.com/captainLegoo/PaceCraft"
                         className="version-tag"
@@ -1640,12 +1640,16 @@ export default function Settings({
                         type="button"
                         className="btn"
                         style={{
-                          padding: "3px 10px",
-                          fontSize: 12,
-                          height: "auto",
+                          height: 22,
+                          padding: "0 8px",
+                          fontSize: 11,
+                          lineHeight: 1,
+                          borderRadius: 4,
+                          boxSizing: "border-box",
+                          gap: 4,
                           ...(hasNewUpdate
-                            ? { color: "var(--accent)", borderColor: "var(--accent)" }
-                            : {}),
+                            ? { color: "var(--accent)", borderColor: "var(--accent)", background: "var(--surface-2)" }
+                            : { color: "var(--text-dim)", borderColor: "var(--border)", background: "var(--surface-2)" }),
                         }}
                         onClick={onCheckUpdate}
                       >
