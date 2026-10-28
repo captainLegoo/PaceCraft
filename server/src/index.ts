@@ -47,6 +47,17 @@ import {
   resolveAccountMismatch,
   startAuthFlow,
 } from "./coros/auth-service.ts";
+import {
+  connectGarmin,
+  disconnectGarmin,
+  getGarminAuthStatus,
+  getGarminMultiAuthStatus,
+} from "./garmin/auth.ts";
+import {
+  getGarminSyncProgress,
+  syncGarminActivities,
+} from "./garmin/sync.ts";
+import { registry } from "./providers/index.ts";
 import { closeCurrentDatabase, switchProfileDatabase } from "./db/client.ts";
 import { checkLatestRelease, detectRegion, fetchUpdateManifest, getPreferredRoute, setPreferredRoute } from "./updater.ts";
 import {
@@ -164,6 +175,7 @@ const app = new Elysia()
       latestActivityDate: one(db.select({ d: activities.dateLabel }).from(activities).orderBy(desc(activities.date)).limit(1).all())?.d ?? null,
       aiConfigured: getAiConfig() !== null,
       auth: getAuthStatus(),
+      garminAuth: getGarminMultiAuthStatus(),
     };
   })
 
@@ -302,6 +314,59 @@ const app = new Elysia()
       return { ok: true };
     }
     return new Response(JSON.stringify({ error: "Invalid URL" }), { status: 400 });
+  })
+
+  /** Garmin (佳明) 授权与同步 */
+  .get("/api/garmin/auth/status", () => getGarminMultiAuthStatus())
+  .post("/api/garmin/auth/connect", async ({ body }) => {
+    try {
+      const { apiKey, region } = (body || {}) as { apiKey?: string; region?: "auto" | "global" | "cn" };
+      if (!apiKey) throw new Error("请输入 Garmin Personal API Key");
+      return await connectGarmin(apiKey, region ?? "auto");
+    } catch (e) {
+      return new Response(JSON.stringify({ error: (e as Error).message }), { status: 400 });
+    }
+  })
+  .post("/api/garmin/auth/disconnect", ({ body }) => {
+    const { region } = (body || {}) as { region?: "cn" | "global" | "all" };
+    return disconnectGarmin(region);
+  })
+  .post("/api/garmin/sync", async ({ body }) => {
+    try {
+      const { limit, region } = (body || {}) as { limit?: number; region?: "cn" | "global" | "all" };
+      return await syncGarminActivities({ limit: limit ?? 100, region: region ?? "all" });
+    } catch (e) {
+      return new Response(JSON.stringify({ error: (e as Error).message }), { status: 500 });
+    }
+  })
+  .get("/api/garmin/sync/progress", () => getGarminSyncProgress())
+
+  /** 可插拔多品牌数据源（卡槽式管理） */
+  .get("/api/providers", async () => {
+    const list = registry.getAll();
+    const result = [];
+    for (const p of list) {
+      result.push({
+        id: p.id,
+        brand: p.brand,
+        name: p.name,
+        icon: p.icon,
+        connected: await p.isConnected(),
+        auth: await p.getAuthStatus(),
+      });
+    }
+    return result;
+  })
+  .post("/api/providers/sync", async ({ body }) => {
+    try {
+      const { providerId, days, limit } = (body || {}) as { providerId?: string; days?: number; limit?: number };
+      if (providerId) {
+        return await registry.syncOne(providerId, { days, limit });
+      }
+      return await registry.syncAll({ days, limit });
+    } catch (e) {
+      return new Response(JSON.stringify({ error: (e as Error).message }), { status: 500 });
+    }
   })
 
   .post("/api/sync", async ({ query }) => {

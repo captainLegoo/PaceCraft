@@ -505,7 +505,7 @@ export default function Training({
                 )}
                 {paginatedSessions.map((s) => (
                   <tr key={s.key} className="clickable" onClick={() => onOpenSession(s.key)}>
-                    <td>{s.date ? s.date.slice(5) : "—"}</td>
+                    <td>{s.date || "—"}</td>
                     <td style={{ textAlign: "left" }}>
                       <span className={`pill ${s.kind === "multi" ? "accent" : ""}`}>{s.classification}</span>
                     </td>
@@ -577,8 +577,17 @@ export default function Training({
                 )}
                 {paginatedActs.map((a) => (
                   <tr key={a.labelId} className="clickable" onClick={() => onOpen(a.labelId)}>
-                    <td>{a.dateLabel ? a.dateLabel.slice(5) : "—"}</td>
-                    <td style={{ textAlign: "left", color: "var(--text-dim)" }}>{a.sportName}</td>
+                    <td>{a.dateLabel || "—"}</td>
+                    <td style={{ textAlign: "left", color: "var(--text-dim)" }}>
+                      <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                        {a.source === "garmin" ? (
+                          <span style={{ fontSize: 10, padding: "1px 5px", borderRadius: 4, background: "rgba(16, 185, 129, 0.12)", color: "#10b981", fontWeight: 600 }}>佳明</span>
+                        ) : (
+                          <span style={{ fontSize: 10, padding: "1px 5px", borderRadius: 4, background: "rgba(59, 130, 246, 0.12)", color: "#3b82f6", fontWeight: 600 }}>高驰</span>
+                        )}
+                        <span>{a.sportName}</span>
+                      </span>
+                    </td>
                     <td className="num">{a.distanceKm ?? "—"}</td>
                     <td className="num">{fmtDur(a.durationSec)}</td>
                     <td className="num">{fmtPace(a.avgPaceSec)}</td>

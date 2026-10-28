@@ -162,14 +162,14 @@ export async function syncAll(
 
   const upsertActivity = sqlite.query(`
     INSERT INTO activities (label_id, sport_type, sport_name, date, date_label, start_ts, end_ts,
-      location, lat, lon, duration_sec, distance_km, avg_pace_sec, avg_hr, calories, raw, synced_at)
-    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?, unixepoch())
+      location, lat, lon, duration_sec, distance_km, avg_pace_sec, avg_hr, calories, raw, source, synced_at)
+    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?, 'coros', unixepoch())
     ON CONFLICT(label_id) DO UPDATE SET
       sport_type=excluded.sport_type, sport_name=excluded.sport_name, date=excluded.date,
       date_label=excluded.date_label, start_ts=excluded.start_ts, end_ts=excluded.end_ts,
       location=excluded.location, lat=excluded.lat, lon=excluded.lon, duration_sec=excluded.duration_sec,
       distance_km=excluded.distance_km, avg_pace_sec=excluded.avg_pace_sec, avg_hr=excluded.avg_hr,
-      calories=excluded.calories, raw=excluded.raw, synced_at=unixepoch()
+      calories=excluded.calories, raw=excluded.raw, source='coros', synced_at=unixepoch()
   `);
 
   sqlite.transaction(() => {

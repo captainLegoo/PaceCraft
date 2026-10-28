@@ -817,26 +817,40 @@ export function sessionLaps(labelIds: string[]) {
     .where(inArray(laps.labelId, labelIds))
     .all();
 
-  return rows
-    .map((r) => {
-      const offsetSec = offsetOf.get(r.labelId) ?? 0;
-      return {
-        labelId: r.labelId,
-        lapIndex: r.lapIndex,
-        offsetSec,
-        elapsedSec: offsetSec + Math.round(r.totalLengthSec ?? r.timeSec ?? 0),
-        distanceM: r.distanceM,
-        timeSec: r.timeSec,
-        avgPaceSec: r.avgPaceSec,
-        avgHr: r.avgHr,
-        maxHr: r.maxHr,
-        avgCadence: r.avgCadence,
-        avgStrideM: r.avgStrideM,
-        // 爬升必须在映射里显式带出：漏掉它，逐段表就只有配速心率，
-        // AI 无法区分「上坡导致的慢」和「体能退步」，会一律判成掉速。
-        elevGain: r.elevGain,
-        totalDescent: r.totalDescent,
-      };
-    })
-    .sort((a, b) => (a.offsetSec - b.offsetSec) || (a.labelId.localeCompare(b.labelId)) || (a.lapIndex - b.lapIndex));
+  const sorted = rows.sort(
+    (a, b) =>
+      (offsetOf.get(a.labelId) ?? 0) - (offsetOf.get(b.labelId) ?? 0) ||
+      a.labelId.localeCompare(b.labelId) ||
+      a.lapIndex - b.lapIndex,
+  );
+
+  const cumByLabel = new Map<string, number>();
+
+  return sorted.map((r) => {
+    const offsetSec = offsetOf.get(r.labelId) ?? 0;
+    const prevCum = cumByLabel.get(r.labelId) ?? 0;
+    // 如果 totalLengthSec 已经单调递增则使用，否则按 timeSec 累加自愈
+    const lapTime = Math.round(r.timeSec ?? 0);
+    const candidate = Math.round(r.totalLengthSec ?? 0);
+    const cumSec = candidate > prevCum ? candidate : prevCum + lapTime;
+    cumByLabel.set(r.labelId, cumSec);
+
+    return {
+      labelId: r.labelId,
+      lapIndex: r.lapIndex,
+      offsetSec,
+      elapsedSec: offsetSec + cumSec,
+      distanceM: r.distanceM,
+      timeSec: r.timeSec,
+      avgPaceSec: r.avgPaceSec,
+      avgHr: r.avgHr,
+      maxHr: r.maxHr,
+      avgCadence: r.avgCadence,
+      avgStrideM: r.avgStrideM,
+      // 爬升必须在映射里显式带出：漏掉它，逐段表就只有配速心率，
+      // AI 无法区分「上坡导致的慢」和「体能退步」，会一律判成掉速。
+      elevGain: r.elevGain,
+      totalDescent: r.totalDescent,
+    };
+  });
 }

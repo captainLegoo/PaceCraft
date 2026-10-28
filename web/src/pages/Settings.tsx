@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import { api, type SyncProgress, type SyncSportsPayload } from "../api";
+import { useEffect, useState, useCallback } from "react";
+import { api, type GarminMultiAuthStatus, type GarminSyncProgress, type SyncProgress, type SyncSportsPayload } from "../api";
 import { formatElapsed } from "../utils/format";
 import { useClipboard } from "../utils/clipboard";
 import { IconDatabase, IconGear, IconHeart, IconSync } from "../icons";
@@ -419,6 +419,99 @@ export default function Settings({
   const [wipeError, setWipeError] = useState<string | null>(null);
   const [confirmingDisconnect, setConfirmingDisconnect] = useState(false);
 
+  // Garmin 状态
+  const [garminAuth, setGarminAuth] = useState<GarminMultiAuthStatus | null>(null);
+  const [garminCnKey, setGarminCnKey] = useState("");
+  const [garminGlobalKey, setGarminGlobalKey] = useState("");
+  const [connectingRegion, setConnectingRegion] = useState<"cn" | "global" | null>(null);
+  const [garminDisconnecting, setGarminDisconnecting] = useState<"cn" | "global" | null>(null);
+  const [confirmingGarminDisconnect, setConfirmingGarminDisconnect] = useState<"cn" | "global" | null>(null);
+  const [garminMsg, setGarminMsg] = useState<{ kind: "ok" | "error"; text: string } | null>(null);
+  const [garminSyncing, setGarminSyncing] = useState(false);
+  const [garminSyncProgress, setGarminSyncProgress] = useState<GarminSyncProgress | null>(null);
+
+  const refreshGarminAuth = useCallback(async () => {
+    try {
+      const res = await api.garminAuthStatus();
+      setGarminAuth(res);
+      return res;
+    } catch {
+      return null;
+    }
+  }, []);
+
+  const handleConnectGarminRegion = async (region: "cn" | "global") => {
+    const key = region === "cn" ? garminCnKey.trim() : garminGlobalKey.trim();
+    if (!key) {
+      setGarminMsg({ kind: "error", text: `请输入 Garmin (${region === "cn" ? "中国区" : "国际区"}) Personal API Key` });
+      return;
+    }
+    setConnectingRegion(region);
+    setGarminMsg(null);
+    try {
+      const res = await api.connectGarmin(key, region);
+      await refreshGarminAuth();
+      setGarminMsg({
+        kind: "ok",
+        text: `Garmin (${region === "cn" ? "中国区" : "国际区"}) 账号连接成功！`,
+      });
+      if (region === "cn") setGarminCnKey("");
+      else setGarminGlobalKey("");
+      onStatus();
+    } catch (e) {
+      setGarminMsg({ kind: "error", text: (e as Error).message });
+    } finally {
+      setConnectingRegion(null);
+    }
+  };
+
+  const handleDisconnectGarminRegion = async (region: "cn" | "global") => {
+    setGarminDisconnecting(region);
+    try {
+      await api.disconnectGarmin(region);
+      await refreshGarminAuth();
+      setGarminMsg({ kind: "ok", text: `Garmin (${region === "cn" ? "中国区" : "国际区"}) 账号已解除绑定` });
+      setConfirmingGarminDisconnect(null);
+      onStatus();
+    } catch (e) {
+      setGarminMsg({ kind: "error", text: (e as Error).message });
+    } finally {
+      setGarminDisconnecting(null);
+    }
+  };
+
+  const handleSyncGarmin = async (region?: "cn" | "global" | "all") => {
+    setGarminSyncing(true);
+    setGarminMsg(null);
+    const pollTimer = setInterval(async () => {
+      try {
+        const p = await api.garminSyncProgress();
+        setGarminSyncProgress(p);
+        if (!p.active) {
+          clearInterval(pollTimer);
+        }
+      } catch {}
+    }, 800);
+
+    try {
+      const res = await api.syncGarmin(100, region);
+      setGarminMsg({
+        kind: "ok",
+        text: `Garmin 同步成功！共拉取 ${res.syncedCount} 条记录，新增 ${res.newActivities} 条，下载 .FIT ${res.fitDownloaded} 份。`,
+      });
+      onStatus();
+    } catch (e) {
+      setGarminMsg({ kind: "error", text: `同步失败: ${(e as Error).message}` });
+    } finally {
+      clearInterval(pollTimer);
+      setGarminSyncing(false);
+      try {
+        const p = await api.garminSyncProgress();
+        setGarminSyncProgress(p);
+      } catch {}
+    }
+  };
+
   // 同步哪些运动类型：编码表由服务端下发，这里只存选中的 code
   const [sports, setSports] = useState<SyncSportsPayload | null>(null);
   const [picked, setPicked] = useState<number[]>([]);
@@ -573,8 +666,9 @@ export default function Settings({
       setPicked(s.selected);
     }).catch(() => {});
     loadHr();
+    refreshGarminAuth();
     api.systemDataInfo().then((info) => setDataDir(info.rootDataDir)).catch(() => {});
-  }, []);
+  }, [refreshGarminAuth]);
 
   /** 切换一个运动类型 */
   const toggleSport = (code: number) =>
@@ -1476,6 +1570,229 @@ export default function Settings({
                 )}
               </div>
             )}
+          </div>
+
+          {/* Garmin 佳明账号连接卡片（多账号/双区并存） */}
+          <div className="card">
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6, flexWrap: "wrap", gap: 8 }}>
+              <h3 className="card-title" style={{ margin: 0 }}>
+                <span style={{ fontSize: 16 }}>⌚</span> Garmin 佳明 Connect 连接
+              </h3>
+              {garminAuth?.connected && (
+                <button
+                  className="btn-secondary"
+                  onClick={() => handleSyncGarmin("all")}
+                  disabled={garminSyncing}
+                  style={{ fontSize: 12, padding: "5px 12px", background: "#2563eb", color: "#fff", border: "none", borderRadius: 6, cursor: "pointer", fontWeight: 600 }}
+                >
+                  {garminSyncing ? "正在同步…" : "🔄 一键同步全部佳明"}
+                </button>
+              )}
+            </div>
+            <p className="card-sub">
+              基于 Garmin Connect Personal API 官方接口。支持<strong>中国区与国际区同时连接</strong>，数据统一汇聚进当前档案，凭证仅保存在本地。
+            </p>
+            <div style={{ fontSize: 12, color: "var(--text-dim)", marginBottom: 12, padding: "6px 10px", background: "rgba(255,255,255,0.03)", borderRadius: 6, border: "1px dashed var(--border)" }}>
+              ℹ️ 首次同步需拉取并解析 1 年历史分圈以构建全量预测模型与体能曲线，同步时间可能较长（约 20~60 秒），请耐心等待。
+            </div>
+
+            {garminMsg && (
+              <div className={`sync-msg ${garminMsg.kind === "ok" ? "ok" : "err"}`} style={{ marginBottom: 12 }}>
+                {garminMsg.text}
+              </div>
+            )}
+
+            {garminSyncProgress?.active && (
+              <div style={{ marginBottom: 12, padding: "8px 10px", background: "rgba(37,99,235,0.08)", borderRadius: 6, border: "1px solid rgba(37,99,235,0.2)" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, marginBottom: 4 }}>
+                  <span>{garminSyncProgress.message}</span>
+                  <span>{garminSyncProgress.percent}%</span>
+                </div>
+                <div style={{ width: "100%", height: 4, background: "rgba(255,255,255,0.1)", borderRadius: 2, overflow: "hidden" }}>
+                  <div style={{ width: `${garminSyncProgress.percent}%`, height: "100%", background: "#2563eb", transition: "width 0.3s ease" }} />
+                </div>
+              </div>
+            )}
+
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 12 }}>
+              {/* 子卡片 1: 中国区 */}
+              <div style={{ background: "var(--bg-subtle, rgba(255,255,255,0.02))", padding: "12px 14px", borderRadius: 8, border: "1px solid var(--border)" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 6, fontWeight: 600, fontSize: 13 }}>
+                    <span>🇨🇳</span> 佳明 (中国区)
+                    <span style={{ fontSize: 10.5, color: "#10b981", background: "rgba(16,185,129,0.1)", padding: "1px 6px", borderRadius: 10 }}>connect.garmin.cn</span>
+                  </div>
+                  {garminAuth?.cn?.connected ? (
+                    <span style={{ fontSize: 11, color: "#10b981", background: "rgba(16,185,129,0.1)", padding: "2px 8px", borderRadius: 12, fontWeight: 500 }}>
+                      ● 已连接
+                    </span>
+                  ) : (
+                    <span style={{ fontSize: 11, color: "var(--text-dim)" }}>未连接</span>
+                  )}
+                </div>
+
+                {garminAuth?.cn?.connected ? (
+                  <div>
+                    <div style={{ fontSize: 12, marginBottom: 4 }}>
+                      账号：<strong>{garminAuth.cn.userFullName || "已连接"}</strong>
+                    </div>
+                    <div style={{ fontSize: 11.5, color: "var(--text-dim)", marginBottom: 10 }}>
+                      Token 状态：{garminAuth.cn.expired ? "已过期" : "正常（自动轮换）"}
+                    </div>
+                    <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                      <button
+                        onClick={() => handleSyncGarmin("cn")}
+                        disabled={garminSyncing}
+                        style={{ fontSize: 11.5, padding: "5px 12px", background: "var(--surface)", color: "var(--text)", border: "1px solid var(--border)", borderRadius: 6, cursor: "pointer", fontWeight: 500 }}
+                      >
+                        🔄 同步中国区
+                      </button>
+                      {confirmingGarminDisconnect !== "cn" ? (
+                        <button
+                          type="button"
+                          onClick={() => setConfirmingGarminDisconnect("cn")}
+                          disabled={garminDisconnecting === "cn"}
+                          style={{ fontSize: 11.5, padding: "5px 10px", background: "transparent", color: "#ef4444", border: "1px solid rgba(239,68,68,0.25)", borderRadius: 6, cursor: "pointer" }}
+                        >
+                          解绑
+                        </button>
+                      ) : (
+                        <div style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+                          <button
+                            type="button"
+                            onClick={() => handleDisconnectGarminRegion("cn")}
+                            disabled={garminDisconnecting === "cn"}
+                            style={{ fontSize: 11, padding: "3px 8px", background: "#ef4444", color: "#fff", border: "none", borderRadius: 4, cursor: "pointer" }}
+                          >
+                            确定解绑
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setConfirmingGarminDisconnect(null)}
+                            style={{ fontSize: 11, padding: "3px 6px", background: "transparent", color: "var(--text-dim)", border: "1px solid var(--border)", borderRadius: 4, cursor: "pointer" }}
+                          >
+                            取消
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ) : (
+                  <div>
+                    <p style={{ fontSize: 11.5, color: "var(--text-dim)", margin: "0 0 8px 0" }}>适用于国行设备、Garmin Connect 中国版 App 用户。</p>
+                    <div style={{ display: "flex", gap: 6, marginBottom: 8 }}>
+                      <input
+                        type="password"
+                        placeholder="粘贴中国区 Key (GCDC_...)"
+                        value={garminCnKey}
+                        onChange={(e) => setGarminCnKey(e.target.value)}
+                        style={{ flex: 1, minWidth: 140, padding: "6px 8px", borderRadius: 6, background: "var(--surface)", border: "1px solid var(--border)", color: "var(--text)", fontSize: 12 }}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => handleConnectGarminRegion("cn")}
+                        disabled={connectingRegion === "cn" || !garminCnKey.trim()}
+                        style={{ background: "#10b981", color: "#fff", border: "none", borderRadius: 6, padding: "6px 12px", fontSize: 12, fontWeight: 600, cursor: "pointer", opacity: connectingRegion === "cn" || !garminCnKey.trim() ? 0.6 : 1 }}
+                      >
+                        {connectingRegion === "cn" ? "验证中…" : "连接"}
+                      </button>
+                    </div>
+                    <a href="https://connect.garmin.cn/app/settings/personalApiToken" target="_blank" rel="noopener noreferrer" style={{ fontSize: 11, color: "#60a5fa", textDecoration: "underline" }}>
+                      🔗 前往中国区后台生成 Key
+                    </a>
+                  </div>
+                )}
+              </div>
+
+              {/* 子卡片 2: 国际区 */}
+              <div style={{ background: "var(--bg-subtle, rgba(255,255,255,0.02))", padding: "12px 14px", borderRadius: 8, border: "1px solid var(--border)" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 6, fontWeight: 600, fontSize: 13 }}>
+                    <span>🌐</span> 佳明 (国际区)
+                    <span style={{ fontSize: 10.5, color: "#60a5fa", background: "rgba(96,165,250,0.1)", padding: "1px 6px", borderRadius: 10 }}>connect.garmin.com</span>
+                  </div>
+                  {garminAuth?.global?.connected ? (
+                    <span style={{ fontSize: 11, color: "#10b981", background: "rgba(16,185,129,0.1)", padding: "2px 8px", borderRadius: 12, fontWeight: 500 }}>
+                      ● 已连接
+                    </span>
+                  ) : (
+                    <span style={{ fontSize: 11, color: "var(--text-dim)" }}>未连接</span>
+                  )}
+                </div>
+
+                {garminAuth?.global?.connected ? (
+                  <div>
+                    <div style={{ fontSize: 12, marginBottom: 4 }}>
+                      账号：<strong>{garminAuth.global.userFullName || "已连接"}</strong>
+                    </div>
+                    <div style={{ fontSize: 11.5, color: "var(--text-dim)", marginBottom: 10 }}>
+                      Token 状态：{garminAuth.global.expired ? "已过期" : "正常（自动轮换）"}
+                    </div>
+                    <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                      <button
+                        onClick={() => handleSyncGarmin("global")}
+                        disabled={garminSyncing}
+                        style={{ fontSize: 11.5, padding: "5px 12px", background: "var(--surface)", color: "var(--text)", border: "1px solid var(--border)", borderRadius: 6, cursor: "pointer", fontWeight: 500 }}
+                      >
+                        🔄 同步国际区
+                      </button>
+                      {confirmingGarminDisconnect !== "global" ? (
+                        <button
+                          type="button"
+                          onClick={() => setConfirmingGarminDisconnect("global")}
+                          disabled={garminDisconnecting === "global"}
+                          style={{ fontSize: 11.5, padding: "5px 10px", background: "transparent", color: "#ef4444", border: "1px solid rgba(239,68,68,0.25)", borderRadius: 6, cursor: "pointer" }}
+                        >
+                          解绑
+                        </button>
+                      ) : (
+                        <div style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+                          <button
+                            type="button"
+                            onClick={() => handleDisconnectGarminRegion("global")}
+                            disabled={garminDisconnecting === "global"}
+                            style={{ fontSize: 11, padding: "3px 8px", background: "#ef4444", color: "#fff", border: "none", borderRadius: 4, cursor: "pointer" }}
+                          >
+                            确定解绑
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setConfirmingGarminDisconnect(null)}
+                            style={{ fontSize: 11, padding: "3px 6px", background: "transparent", color: "var(--text-dim)", border: "1px solid var(--border)", borderRadius: 4, cursor: "pointer" }}
+                          >
+                            取消
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ) : (
+                  <div>
+                    <p style={{ fontSize: 11.5, color: "var(--text-dim)", margin: "0 0 8px 0" }}>适用于海外版设备、Garmin Connect 国际服 App 跑友。</p>
+                    <div style={{ display: "flex", gap: 6, marginBottom: 8 }}>
+                      <input
+                        type="password"
+                        placeholder="粘贴国际区 Key (GCDC_...)"
+                        value={garminGlobalKey}
+                        onChange={(e) => setGarminGlobalKey(e.target.value)}
+                        style={{ flex: 1, minWidth: 140, padding: "6px 8px", borderRadius: 6, background: "var(--surface)", border: "1px solid var(--border)", color: "var(--text)", fontSize: 12 }}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => handleConnectGarminRegion("global")}
+                        disabled={connectingRegion === "global" || !garminGlobalKey.trim()}
+                        style={{ background: "#2563eb", color: "#fff", border: "none", borderRadius: 6, padding: "6px 12px", fontSize: 12, fontWeight: 600, cursor: "pointer", opacity: connectingRegion === "global" || !garminGlobalKey.trim() ? 0.6 : 1 }}
+                      >
+                        {connectingRegion === "global" ? "验证中…" : "连接"}
+                      </button>
+                    </div>
+                    <a href="https://connect.garmin.com/app/settings/personalApiToken" target="_blank" rel="noopener noreferrer" style={{ fontSize: 11, color: "#60a5fa", textDecoration: "underline" }}>
+                      🔗 前往国际区后台生成 Key
+                    </a>
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
 
           <div className="card">

@@ -1,6 +1,6 @@
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { getProfileDbPath, getProfileDir, getProfileTokenPath, ROOT_DATA_DIR } from "./profile-manager.ts";
+import { getProfileDbPath, getProfileDir, getProfileGarminTokenPath, getProfileTokenPath, ROOT_DATA_DIR } from "./profile-manager.ts";
 
 /**
  * 显式锁定中国区 issuer。
@@ -22,6 +22,7 @@ export const BASE_DATA_DIR = ROOT_DATA_DIR;
 export const getDataDir = () => getProfileDir();
 export const getDbPath = () => getProfileDbPath();
 export const getTokenPath = () => getProfileTokenPath();
+export const getGarminTokenPath = () => getProfileGarminTokenPath();
 
 /** 兼容旧代码引用常量：每次访问自动动态获取当前档案路径 */
 export const DATA_DIR = {

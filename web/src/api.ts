@@ -1,6 +1,7 @@
 export type Activity = {
   labelId: string; sportType: number; sportName: string;
   date: string; dateLabel: string;
+  source?: "coros" | "garmin" | "suunto" | "fit" | string;
   startTs: number | null; endTs: number | null;
   location: string | null; lat: number | null; lon: number | null;
   durationSec: number | null; distanceKm: number | null;
@@ -185,6 +186,33 @@ export type AuthStatus = {
   expiresAt: number | null;
   expired: boolean;
   mismatch?: AccountMismatchInfo | null;
+};
+
+export type GarminRegion = "global" | "cn";
+
+export type GarminAuthStatus = {
+  connected: boolean;
+  region: GarminRegion | null;
+  userFullName: string | null;
+  garminGuid: string | null;
+  expiresAt: number | null;
+  expired: boolean;
+};
+
+export type GarminMultiAuthStatus = {
+  connected: boolean;
+  cn: GarminAuthStatus;
+  global: GarminAuthStatus;
+};
+
+export type GarminSyncProgress = {
+  active: boolean;
+  phase: "idle" | "list" | "fit" | "done" | "error";
+  current: number;
+  total: number;
+  percent: number;
+  message: string;
+  updatedAt: number;
 };
 
 /** 同步运动类型配置：编码表由服务端下发，前端不自己维护一份 */
@@ -379,6 +407,21 @@ export const api = {
     }),
   openExternal: (url: string) =>
     req<{ ok: boolean }>("/api/open-external", { method: "POST", body: JSON.stringify({ url }) }),
+
+  garminAuthStatus: () => req<GarminMultiAuthStatus>("/api/garmin/auth/status"),
+  connectGarmin: (apiKey: string, region: "auto" | "global" | "cn" = "auto") =>
+    req<GarminAuthStatus>("/api/garmin/auth/connect", {
+      method: "POST",
+      body: JSON.stringify({ apiKey, region }),
+    }),
+  disconnectGarmin: (region?: "cn" | "global" | "all") =>
+    req<{ ok: boolean }>("/api/garmin/auth/disconnect", { method: "POST", body: JSON.stringify({ region }) }),
+  syncGarmin: (limit = 100, region?: "cn" | "global" | "all") =>
+    req<{ syncedCount: number; fitDownloaded: number; newActivities: number }>("/api/garmin/sync", {
+      method: "POST",
+      body: JSON.stringify({ limit, region }),
+    }),
+  garminSyncProgress: () => req<GarminSyncProgress>("/api/garmin/sync/progress"),
 
   profiles: () => req<{ activeId: string; profiles: ProfileItem[] }>("/api/profiles"),
   switchProfile: (id: string) =>

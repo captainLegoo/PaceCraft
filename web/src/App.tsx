@@ -12,6 +12,8 @@ import Week from "./pages/Week";
 import RaceHub, { type RaceTab } from "./pages/RaceHub";
 import Readiness, { type ReadinessTab } from "./pages/Readiness";
 import { useCorosAuth } from "./use-coros-auth";
+import ConnectWatchModal from "./components/ConnectWatchModal";
+import type { GarminMultiAuthStatus } from "./api";
 import ProfileSwitcher from "./components/ProfileSwitcher";
 import { DEFAULT_APP_VERSION } from "./version";
 import UpdateModal, { isTauriEnv } from "./components/UpdateModal";
@@ -258,6 +260,7 @@ export default function App() {
   const [syncProgress, setSyncProgress] = useState<SyncProgress | null>(null);
   const progressTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [syncMsg, setSyncMsg] = useState<{ text: string; kind: "ok" | "err" } | null>(null);
+  const [showSyncDropdown, setShowSyncDropdown] = useState(false);
   const [follow, setFollow] = useState<FollowState | null>(null);
   const [quota, setQuota] = useState<{ used: number; limit: number; exhausted: boolean } | null>(null);
 
@@ -381,7 +384,37 @@ export default function App() {
     return () => clearInterval(t);
   }, [follow?.active]);
 
-  const isConnected = Boolean(status?.auth?.connected);
+  const [showConnectModal, setShowConnectModal] = useState(false);
+  const [garminAuth, setGarminAuth] = useState<GarminMultiAuthStatus | null>(null);
+
+  const refreshGarminAuth = useCallback(async () => {
+    try {
+      const res = await api.garminAuthStatus();
+      setGarminAuth(res);
+      return res;
+    } catch {
+      return null;
+    }
+  }, []);
+
+  useEffect(() => {
+    refreshGarminAuth();
+  }, [refreshGarminAuth]);
+
+  const handleConnectGarmin = async (apiKey: string, region: "auto" | "global" | "cn") => {
+    await api.connectGarmin(apiKey, region);
+    await refreshGarminAuth();
+    refresh();
+    void api.syncGarmin(100, region === "auto" ? "all" : region).then(() => refresh()).catch(() => {});
+  };
+
+  const handleDisconnectGarmin = async (region?: "cn" | "global") => {
+    await api.disconnectGarmin(region);
+    await refreshGarminAuth();
+    refresh();
+  };
+
+  const isConnected = Boolean(status?.auth?.connected || garminAuth?.connected);
 
   const runSync = async () => {
     if (syncing) return;
@@ -423,14 +456,29 @@ export default function App() {
 
   runSyncRef.current = runSync;
 
-  const doSync = async () => {
+  const doSync = async (target: "all" | "coros" | "garmin_cn" | "garmin_global" = "all") => {
     if (!isConnected) {
-      if (!authConnecting) {
-        connectCoros();
-      }
+      setShowConnectModal(true);
       return;
     }
-    await runSync();
+    const promises: Promise<any>[] = [];
+    if (target === "all" || target === "coros") {
+      if (status?.auth?.connected) {
+        promises.push(runSync());
+      }
+    }
+    if (target === "all" || target === "garmin_cn") {
+      if (garminAuth?.cn?.connected) {
+        promises.push(api.syncGarmin(100, "cn"));
+      }
+    }
+    if (target === "all" || target === "garmin_global") {
+      if (garminAuth?.global?.connected) {
+        promises.push(api.syncGarmin(100, "global"));
+      }
+    }
+    await Promise.allSettled(promises);
+    refresh();
   };
 
   const toggleFollow = async () => {
@@ -500,7 +548,7 @@ export default function App() {
             setDataVersion((v) => v + 1);
             refresh();
           }}
-          onRequireAuth={connectCoros}
+          onRequireAuth={() => setShowConnectModal(true)}
         />
         <ThemeToggle theme={theme} onToggle={toggle} />
         {NAV.map((n) => {
@@ -562,19 +610,96 @@ export default function App() {
             </div>
           )}
           {isConnected ? (
-            <button
-              className="sync-btn"
-              onClick={doSync}
-              disabled={syncing}
-              title="立即从 COROS 增量同步训练数据"
-            >
-              <IconCloudSync size={14} />
-              <span>{syncProgress?.active ? `同步中 ${syncProgress.percent}%` : syncing ? "同步中…" : "立即同步"}</span>
-            </button>
+            <div style={{ position: "relative", display: "flex", width: "100%", gap: 2 }}>
+              <button
+                className="sync-btn"
+                onClick={() => {
+                  setShowSyncDropdown(false);
+                  doSync("all");
+                }}
+                disabled={syncing}
+                style={{ flex: 1, borderTopRightRadius: 0, borderBottomRightRadius: 0 }}
+                title="立即增量同步所有已连接设备的训练数据"
+              >
+                <IconCloudSync size={14} />
+                <span>{syncProgress?.active ? `同步中 ${syncProgress.percent}%` : syncing ? "同步中…" : "立即同步"}</span>
+              </button>
+              <button
+                className="sync-btn"
+                onClick={() => setShowSyncDropdown((prev) => !prev)}
+                disabled={syncing}
+                style={{ width: 28, padding: 0, justifyContent: "center", borderTopLeftRadius: 0, borderBottomLeftRadius: 0 }}
+                title="选择仅同步特定品牌手表"
+              >
+                <span style={{ fontSize: 9 }}>▼</span>
+              </button>
+
+              {showSyncDropdown && (
+                <div
+                  style={{
+                    position: "absolute",
+                    bottom: "100%",
+                    left: 0,
+                    right: 0,
+                    marginBottom: 4,
+                    background: "var(--surface)",
+                    border: "1px solid var(--border)",
+                    borderRadius: 6,
+                    boxShadow: "0 4px 14px rgba(0,0,0,0.3)",
+                    zIndex: 100,
+                    overflow: "hidden",
+                    fontSize: 12,
+                  }}
+                >
+                  <div
+                    style={{ padding: "8px 12px", cursor: "pointer", display: "flex", alignItems: "center", gap: 6 }}
+                    onClick={() => {
+                      setShowSyncDropdown(false);
+                      doSync("all");
+                    }}
+                  >
+                    <span>🔄</span> <strong>全部已连设备</strong>
+                  </div>
+                  {status?.auth?.connected && (
+                    <div
+                      style={{ padding: "8px 12px", cursor: "pointer", display: "flex", alignItems: "center", gap: 6, borderTop: "1px solid var(--border)" }}
+                      onClick={() => {
+                        setShowSyncDropdown(false);
+                        doSync("coros");
+                      }}
+                    >
+                      <span>🏃</span> 仅同步高驰 (COROS)
+                    </div>
+                  )}
+                  {garminAuth?.cn?.connected && (
+                    <div
+                      style={{ padding: "8px 12px", cursor: "pointer", display: "flex", alignItems: "center", gap: 6, borderTop: "1px solid var(--border)" }}
+                      onClick={() => {
+                        setShowSyncDropdown(false);
+                        doSync("garmin_cn");
+                      }}
+                    >
+                      <span>🇨🇳</span> 仅同步佳明 (中国区)
+                    </div>
+                  )}
+                  {garminAuth?.global?.connected && (
+                    <div
+                      style={{ padding: "8px 12px", cursor: "pointer", display: "flex", alignItems: "center", gap: 6, borderTop: "1px solid var(--border)" }}
+                      onClick={() => {
+                        setShowSyncDropdown(false);
+                        doSync("garmin_global");
+                      }}
+                    >
+                      <span>🌐</span> 仅同步佳明 (国际区)
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
           ) : (
             <button
               className="sync-btn"
-              onClick={connectCoros}
+              onClick={() => setShowConnectModal(true)}
               disabled={authConnecting}
               style={{
                 background: "rgba(37, 99, 235, 0.12)",
@@ -582,17 +707,17 @@ export default function App() {
                 borderColor: "rgba(59, 130, 246, 0.35)",
                 fontWeight: 600,
               }}
-              title="当前尚未连接高驰账号，点击立即连接"
+              title="当前尚未连接手表设备，点击立即连接"
             >
-              <span>{authConnecting ? "正在等待授权…" : "🔗 连接 COROS 账号"}</span>
+              <span>{authConnecting ? "正在等待授权…" : "➕ 连接运动手表"}</span>
             </button>
           )}
           <button
             className={`sync-btn follow ${follow?.active ? "on" : ""}`}
             onClick={toggleFollow}
-            disabled={!isConnected}
-            style={!isConnected ? { opacity: 0.45, cursor: "not-allowed" } : undefined}
-            title={isConnected ? "手表上传后自动同步（COROS 通常有 1-4 小时延迟）" : "尚未连接 COROS 账号，请先连接"}
+            disabled={!status?.auth?.connected}
+            style={!status?.auth?.connected ? { opacity: 0.45, cursor: "not-allowed" } : undefined}
+            title={status?.auth?.connected ? "手表上传后自动同步（COROS 通常有 1-4 小时延迟）" : "COROS 账号未连接，自动跟随仅支持高驰"}
           >
             <span className="dot" />
             <span>{follow?.active ? "跟随中" : "开启自动跟随"}</span>
@@ -614,35 +739,55 @@ export default function App() {
               <div style={{ marginTop: 3 }}>
                 {status.counts.activities} 次活动 · {status.counts.laps} 行分圈
               </div>
-              <div style={{ marginTop: 6, display: "flex", gap: 6, flexWrap: "wrap" }}>
-                {status.auth?.connected
-                  ? <span className="pill good">COROS 已连接</span>
-                  : <span className="pill warn" style={{ cursor: "pointer" }} onClick={connectCoros} title="点击连接高驰账号">COROS 未连接</span>}
-                {status.aiConfigured
-                  ? <span className="pill good">AI 已配置</span>
-                  : <span className="pill warn">AI 未配置</span>}
-              </div>
-              <div style={{ marginTop: 8, display: "flex", alignItems: "center", gap: 6 }}>
-                <span
-                  className="version-tag"
-                  style={{ cursor: "default", userSelect: "none" }}
-                  title={`当前版本：${appVersion}`}
-                >
-                  <span className="dot" />
-                  <span>{appVersion}</span>
-                </span>
-                {hasNewUpdate && (
+              <div style={{ marginTop: 8, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 6, flexWrap: "wrap" }}>
+                {/* 设备来源徽标 */}
+                <div style={{ display: "flex", alignItems: "center", gap: 5, flexWrap: "wrap" }}>
+                  {status.auth?.connected && (
+                    <span className="pill good" style={{ cursor: "pointer" }} onClick={() => setShowConnectModal(true)} title="点击管理高驰连接">
+                      高驰 ●
+                    </span>
+                  )}
+                  {garminAuth?.cn?.connected && (
+                    <span className="pill good" style={{ cursor: "pointer" }} onClick={() => setShowConnectModal(true)} title="点击管理佳明中国区连接">
+                      佳明(中) ●
+                    </span>
+                  )}
+                  {garminAuth?.global?.connected && (
+                    <span className="pill good" style={{ cursor: "pointer" }} onClick={() => setShowConnectModal(true)} title="点击管理佳明国际区连接">
+                      佳明(国) ●
+                    </span>
+                  )}
+                  {!status.auth?.connected && !garminAuth?.connected && (
+                    <span className="pill warn" style={{ cursor: "pointer" }} onClick={() => setShowConnectModal(true)} title="点击连接手表设备">
+                      + 连接设备
+                    </span>
+                  )}
+                </div>
+
+                {/* 版本号与更新提示 */}
+                <div style={{ display: "flex", alignItems: "center", gap: 4, marginLeft: "auto" }}>
                   <span
-                    style={{
-                      width: 6,
-                      height: 6,
-                      borderRadius: "50%",
-                      background: "var(--accent)",
-                      display: "inline-block",
-                    }}
-                    title="发现新版本，可在「设置」中检查更新"
-                  />
-                )}
+                    className="version-tag"
+                    style={{ cursor: "pointer", userSelect: "none" }}
+                    onClick={() => setShowUpdateModal(true)}
+                    title={`当前版本：${appVersion}（点击检查更新）`}
+                  >
+                    <span className="dot" />
+                    <span>{appVersion}</span>
+                  </span>
+                  {hasNewUpdate && (
+                    <span
+                      style={{
+                        width: 6,
+                        height: 6,
+                        borderRadius: "50%",
+                        background: "var(--accent)",
+                        display: "inline-block",
+                      }}
+                      title="发现新版本，可点击版本号检查更新"
+                    />
+                  )}
+                </div>
               </div>
             </>
           ) : (
@@ -667,9 +812,9 @@ export default function App() {
           {/* 同步按钮同时常驻这里：桌面版它在侧边栏底部，手机上侧边栏是收起的 */}
           <button
             className="mobile-sync"
-            onClick={isConnected ? doSync : connectCoros}
+            onClick={isConnected ? doSync : () => setShowConnectModal(true)}
             disabled={syncing || authConnecting}
-            title={isConnected ? "增量同步训练数据" : "点击连接 COROS 账号"}
+            title={isConnected ? "增量同步训练数据" : "点击连接运动手表"}
           >
             <IconCloudSync size={15} />
             <span>{syncProgress?.active ? `${syncProgress.percent}%` : syncing ? "同步中" : isConnected ? "同步" : "连接"}</span>
@@ -723,7 +868,7 @@ export default function App() {
             所以在正文里再挂一份 —— 宽屏 display:none，不会重复显示。 */}
         {syncMsg && <div className={`sync-msg mobile-sync-msg ${syncMsg.kind}`}>{syncMsg.text}</div>}
 
-        {status?.auth && !status.auth.connected && (
+        {!isConnected && (
           <div style={{
             background: "linear-gradient(135deg, rgba(37, 99, 235, 0.15) 0%, rgba(59, 130, 246, 0.08) 100%)",
             border: "1px solid rgba(59, 130, 246, 0.3)",
@@ -738,10 +883,10 @@ export default function App() {
           }}>
             <div>
               <div style={{ fontWeight: 600, fontSize: 14, color: "#60a5fa", display: "flex", alignItems: "center", gap: 6, marginBottom: 4 }}>
-                👋 欢迎使用 COROS 训练看板！
+                👋 欢迎使用 PaceCraft 跑者训练中心！
               </div>
               <div style={{ fontSize: 13, color: "var(--text-dim)", lineHeight: 1.5 }}>
-                当前尚未绑定 COROS 高驰账号。一键授权后即可自动拉取你的跑步记录、心率与体能负荷数据。
+                当前尚未连接运动手表。支持一键接入 COROS 高驰或 Garmin 佳明（中国区 / 国际区），自动拉取跑步记录与心率负荷。
               </div>
               {authMsg && (
                 <div style={{ fontSize: 12.5, color: authMsg.kind === "err" ? "#ef4444" : "#10b981", marginTop: 6, fontWeight: 500 }}>
@@ -751,7 +896,7 @@ export default function App() {
             </div>
             {!authConnecting ? (
               <button
-                onClick={connectCoros}
+                onClick={() => setShowConnectModal(true)}
                 style={{
                   background: "#2563eb",
                   color: "#fff",
@@ -764,7 +909,7 @@ export default function App() {
                   boxShadow: "0 2px 8px rgba(37, 99, 235, 0.35)",
                 }}
               >
-                🔗 一键连接 COROS 账号
+                ⌚ 连接运动手表设备
               </button>
             ) : (
               <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
@@ -1075,6 +1220,18 @@ export default function App() {
         open={showUpdateModal}
         onClose={() => setShowUpdateModal(false)}
         currentAppVersion={appVersion}
+      />
+
+      <ConnectWatchModal
+        open={showConnectModal}
+        onClose={() => setShowConnectModal(false)}
+        corosAuth={status?.auth ?? auth}
+        corosConnecting={authConnecting}
+        onConnectCoros={connectCoros}
+        onDisconnectCoros={disconnectCoros}
+        garminAuth={garminAuth}
+        onConnectGarmin={handleConnectGarmin}
+        onDisconnectGarmin={handleDisconnectGarmin}
       />
     </div>
   );

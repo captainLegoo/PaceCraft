@@ -22,6 +22,8 @@ export const activities = sqliteTable(
     calories: integer("calories"),
     raw: text("raw"),
     syncedAt: integer("synced_at").notNull().default(sql`(unixepoch())`),
+    /** 数据来源品牌：coros / garmin / suunto / fit 等，默认 coros */
+    source: text("source").default("coros"),
     /**
      * 比赛锚点的人工覆盖标记（见 drizzle/0010_race_anchor_exclude.sql）。
      *   1  = 强制排除出能力基准

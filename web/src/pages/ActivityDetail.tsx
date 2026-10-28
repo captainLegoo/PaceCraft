@@ -38,10 +38,10 @@ export default function ActivityDetailView({
           tip: [
             [`${residual > 0 ? "+" : ""}${residual.toFixed(1)} bpm（${statusText}）`, "相对基准心率偏差"],
             [fmtPace(l.avgPaceSec) + " /km", "配速"],
-            [`${l.avgHr} bpm`, "实际平均心率"],
-            [`${l.maxHr} bpm`, "最大心率"],
-            [`${l.avgCadence} spm`, "步频"],
-            [`${l.avgStrideM.toFixed(2)} m`, "步幅"],
+            [`${l.avgHr ?? "—"} bpm`, "实际平均心率"],
+            [`${l.maxHr ?? "—"} bpm`, "最大心率"],
+            [`${l.avgCadence ?? "—"} spm`, "步频"],
+            [l.avgStrideM ? `${l.avgStrideM.toFixed(2)} m` : "—", "步幅"],
           ] as [string, string][],
         };
       })

@@ -59,6 +59,35 @@ export default function SessionView({
     } finally { setBusy(false); }
   };
 
+  const activityListCard = (
+    <div className="card">
+      <h3 className="card-title">逐条记录</h3>
+      <p className="card-sub">点单条可进入该条独立的分圈明细</p>
+      <div className="table-scroll-wrap">
+        <div className="table-scroll" style={{ maxHeight: 320, overflow: "auto" }}>
+          <table>
+            <thead>
+              <tr><th>开始</th><th>距离</th><th>用时</th><th>配速</th><th>心率</th><th>步频</th><th>负荷</th></tr>
+            </thead>
+            <tbody>
+              {activities.map((a) => (
+                <tr key={a.labelId} className="clickable" onClick={() => onOpenActivity?.(a.labelId, sessionKey)}>
+                  <td>{a.startTs ? new Date(a.startTs * 1000).toTimeString().slice(0, 5) : "—"}</td>
+                  <td className="num">{a.distanceKm}</td>
+                  <td className="num">{fmtDur(a.durationSec)}</td>
+                  <td className="num">{fmtPace(a.avgPaceSec)}</td>
+                  <td className="num">{a.avgHr ?? "—"}</td>
+                  <td className="num">{a.detail?.avgCadence ?? "—"}</td>
+                  <td className="num">{a.detail?.trainingLoad ?? "—"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+
   return (
     <>
       <div className="page-head">
@@ -166,7 +195,7 @@ export default function SessionView({
             <LineChart
               labels={chartLabels}
               xValues={chartX}
-              xFmt={(n) => formatPace(n, "quote")}
+              xFmt={fmtDur}
               series={[
                 { key: "pace", label: "配速（左轴）", color: "var(--chart-accent)", values: paceSeries },
                 { key: "hr", label: "平均心率（右轴）", color: "var(--chart-hr)", axis: "right", values: hrSeries },
@@ -204,34 +233,15 @@ export default function SessionView({
               </div>
             </div>
 
-            <div className="card">
-              <h3 className="card-title">逐条记录</h3>
-              <p className="card-sub">点单条可进入该条独立的分圈明细</p>
-              <div className="table-scroll-wrap">
-                <div className="table-scroll" style={{ maxHeight: 320, overflow: "auto" }}>
-                  <table>
-                    <thead>
-                      <tr><th>开始</th><th>距离</th><th>用时</th><th>配速</th><th>心率</th><th>步频</th><th>负荷</th></tr>
-                    </thead>
-                    <tbody>
-                      {activities.map((a) => (
-                        <tr key={a.labelId} className="clickable" onClick={() => onOpenActivity?.(a.labelId, sessionKey)}>
-                          <td>{a.startTs ? new Date(a.startTs * 1000).toTimeString().slice(0, 5) : "—"}</td>
-                          <td className="num">{a.distanceKm}</td>
-                          <td className="num">{fmtDur(a.durationSec)}</td>
-                          <td className="num">{fmtPace(a.avgPaceSec)}</td>
-                          <td className="num">{a.avgHr ?? "—"}</td>
-                          <td className="num">{a.detail?.avgCadence ?? "—"}</td>
-                          <td className="num">{a.detail?.trainingLoad ?? "—"}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            </div>
+            {activityListCard}
           </div>
         </>
+      )}
+
+      {laps.length <= 2 && (
+        <div style={{ marginBottom: 14 }}>
+          {activityListCard}
+        </div>
       )}
 
       {laps.length > 2 && (
