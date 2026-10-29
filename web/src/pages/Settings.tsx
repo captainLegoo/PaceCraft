@@ -429,6 +429,7 @@ export default function Settings({
   const hasCoros = Boolean(auth?.connected);
   const hasGarmin = Boolean(garminAuth?.cn?.connected || garminAuth?.global?.connected);
   const hasAnyWatch = hasCoros || hasGarmin;
+  const [corosQuota, setCorosQuota] = useState<{ used: number; limit: number; exhausted: boolean } | null>(null);
   const [garminCnKey, setGarminCnKey] = useState("");
   const [garminGlobalKey, setGarminGlobalKey] = useState("");
   const [connectingRegion, setConnectingRegion] = useState<"cn" | "global" | null>(null);
@@ -695,6 +696,7 @@ export default function Settings({
     refreshGarminAuth();
     loadTestDataStatus();
     api.systemDataInfo().then((info) => setDataDir(info.rootDataDir)).catch(() => {});
+    api.fitQuota().then(setCorosQuota).catch(() => {});
   }, [refreshGarminAuth, loadTestDataStatus]);
 
   /** 切换一个运动类型 */
@@ -1473,6 +1475,11 @@ export default function Settings({
                     <div style={{ fontSize: 12, color: "var(--text-dim)" }}>
                       Token 有效期至：{auth.expiresAt ? new Date(auth.expiresAt * 1000).toLocaleString("zh-CN") : "长期有效（自动续期）"}
                     </div>
+                    {corosQuota && (
+                      <div style={{ fontSize: 12, color: "var(--text-dim)", marginTop: 4 }}>
+                        FIT 文件每日下载配额：{corosQuota.used}/{corosQuota.limit}{corosQuota.exhausted ? "（今日已用完，官方限制 50 次/天）" : "（官方限制 50 次/天）"}
+                      </div>
+                    )}
                     <div style={{ display: "flex", gap: 8, marginTop: 12, alignItems: "center", flexWrap: "wrap" }}>
                       <button className="btn-secondary" onClick={connectCoros} disabled={authConnecting} style={{ fontSize: 12, padding: "5px 12px" }}>
                         {authConnecting ? "正在打开授权页面…" : "重新授权"}

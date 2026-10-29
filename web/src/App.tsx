@@ -284,7 +284,6 @@ export default function App() {
   const [syncMsg, setSyncMsg] = useState<{ text: string; kind: "ok" | "err" } | null>(null);
   const [showSyncDropdown, setShowSyncDropdown] = useState(false);
   const syncDropdownRef = useRef<HTMLDivElement | null>(null);
-  const [quota, setQuota] = useState<{ used: number; limit: number; exhausted: boolean } | null>(null);
 
   const [showConnectModal, setShowConnectModal] = useState(false);
   const [garminAuth, setGarminAuth] = useState<GarminMultiAuthStatus | null>(null);
@@ -303,7 +302,6 @@ export default function App() {
     api.status().then(setStatus).catch(() => {});
     refreshGarminAuth();
   }, [refreshGarminAuth]);
-  const loadQuota = () => api.fitQuota().then(setQuota).catch(() => {});
 
   const stopProgressPolling = useCallback(() => {
     if (progressTimerRef.current) {
@@ -326,7 +324,6 @@ export default function App() {
           if (p.phase === "done") {
             setDataVersion((v) => v + 1);
             refresh();
-            loadQuota();
             setTimeout(() => setSyncProgress(null), 4000);
           } else if (p.phase === "error") {
             setTimeout(() => setSyncProgress(null), 6000);
@@ -380,7 +377,6 @@ export default function App() {
   };
   useEffect(() => {
     refresh();
-    loadQuota();
 
     // 挂载时检查后端是否已有正在进行的同步（如授权回调后自动触发），若有立刻接管进度轮询
     api.syncProgress().then((p) => {
@@ -455,7 +451,6 @@ export default function App() {
       } else {
         setSyncMsg({ text: r.message, kind: "err" });
       }
-      loadQuota();
       return r;
     } catch (e) {
       setSyncMsg({ text: `同步失败：${(e as Error).message}`, kind: "err" });
@@ -642,7 +637,6 @@ export default function App() {
 
       setDataVersion((v) => v + 1);
       refresh();
-      loadQuota();
     } catch (e) {
       setSyncMsg({ text: `同步失败：${(e as Error).message}`, kind: "err" });
     } finally {
@@ -863,11 +857,6 @@ export default function App() {
             >
               <span>{authConnecting ? "正在等待授权…" : "➕ 连接运动手表"}</span>
             </button>
-          )}
-          {status?.auth?.connected && quota && (
-            <div className="sync-msg follow-msg" title="高驰 FIT 文件每日下载配额（COROS 官方平台限制为 50 次/日，Garmin 不受此限）">
-              高驰 FIT 额度 {quota.used}/{quota.limit}{quota.exhausted ? " · 今日已用完" : ""}
-            </div>
           )}
           {syncMsg && (
             <div className={`sync-msg ${syncMsg.kind}`}>{syncMsg.text}</div>
