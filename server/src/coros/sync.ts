@@ -1,5 +1,6 @@
 import { db, sqlite } from "../db/client.ts";
 import { upsertUserProfile } from "./user-profile.ts";
+import { detectActivityConflicts } from "../conflicts.ts";
 import {
   activityDetails,
   activities,
@@ -162,14 +163,14 @@ export async function syncAll(
 
   const upsertActivity = sqlite.query(`
     INSERT INTO activities (label_id, sport_type, sport_name, date, date_label, start_ts, end_ts,
-      location, lat, lon, duration_sec, distance_km, avg_pace_sec, avg_hr, calories, raw, synced_at)
-    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?, unixepoch())
+      location, lat, lon, duration_sec, distance_km, avg_pace_sec, avg_hr, calories, raw, source, synced_at)
+    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?, 'coros', unixepoch())
     ON CONFLICT(label_id) DO UPDATE SET
       sport_type=excluded.sport_type, sport_name=excluded.sport_name, date=excluded.date,
       date_label=excluded.date_label, start_ts=excluded.start_ts, end_ts=excluded.end_ts,
       location=excluded.location, lat=excluded.lat, lon=excluded.lon, duration_sec=excluded.duration_sec,
       distance_km=excluded.distance_km, avg_pace_sec=excluded.avg_pace_sec, avg_hr=excluded.avg_hr,
-      calories=excluded.calories, raw=excluded.raw, synced_at=unixepoch()
+      calories=excluded.calories, raw=excluded.raw, source='coros', synced_at=unixepoch()
   `);
 
   sqlite.transaction(() => {
@@ -499,11 +500,23 @@ export async function syncAll(
     message: `高驰云端数据拉取完毕，共 ${byId.size} 次训练`,
   });
 
+  let dedupResult = { detectedPairs: 0, resolved: 0 };
+  try {
+    dedupResult = detectActivityConflicts({ primaryBrand: "coros" });
+    if (dedupResult.detectedPairs > 0) {
+      console.log(`[Deduplication] 智能去重：检测到 ${dedupResult.detectedPairs} 对重叠活动，自动归档 ${dedupResult.resolved} 条对比样本`);
+    }
+  } catch (e) {
+    console.warn("[Deduplication] 智能去重检测失败:", e);
+  }
+
   return {
     startedAt, finishedAt,
     activities: byId.size, details: detailCount, lapRows: lapRowCount,
     loadDays, healthDays, sleepDays, errors,
     fitQuotaLeft: FIT_DAILY_LIMIT - (quota?.used ?? 0),
+    conflictsDetected: dedupResult.detectedPairs,
+    conflictsResolved: dedupResult.resolved,
   };
 }
 

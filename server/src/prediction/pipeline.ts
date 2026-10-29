@@ -1,4 +1,4 @@
-import { asc, desc, eq } from "drizzle-orm";
+import { asc, desc, eq, ne } from "drizzle-orm";
 import { db } from "../db/client.ts";
 import { activities, activityDetails, dailyHealth, fitness, laps, trainingLoad, users } from "../db/schema.ts";
 import { round } from "../analytics.ts";
@@ -141,6 +141,12 @@ export function buildReport() {
 
   const loadMap = new Map<string, number>();
   for (const l of db.select().from(trainingLoad).all()) loadMap.set(l.date, l.shortLoad ?? 0);
+  const actsAll = db.select().from(activities).where(ne(activities.isDuplicate, 1)).all();
+  for (const d of computeDailyLoads(actsAll)) {
+    if (!loadMap.has(d.date) && d.load > 0) {
+      loadMap.set(d.date, Math.round(d.load));
+    }
+  }
 
   const efforts: Effort[] = [];
   for (const lapsOfAct of byAct.values()) {

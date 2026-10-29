@@ -1,6 +1,10 @@
 export type Activity = {
   labelId: string; sportType: number; sportName: string;
   date: string; dateLabel: string;
+  source?: "coros" | "garmin" | "suunto" | "fit" | string;
+  isDuplicate?: number | null;
+  duplicateOf?: string | null;
+  conflictStatus?: string | null;
   startTs: number | null; endTs: number | null;
   location: string | null; lat: number | null; lon: number | null;
   durationSec: number | null; distanceKm: number | null;
@@ -9,6 +13,7 @@ export type Activity = {
     avgCadence: number | null; avgPower: number | null; trainingLoad: number | null;
     trainingFocus: string | null; performance: string | null; aerobicTe: number | null;
     bestKmSec: number | null; elevGain: number | null; elevLoss: number | null;
+    avgStrideM?: number | null;
   };
 };
 
@@ -27,6 +32,7 @@ export type AiReport = {
 export type ActivityDetail = {
   activity: Activity & { raw?: string };
   detail: Record<string, any> | null;
+  comparisonActivity?: { activity: Activity; detail: Record<string, any> | null; laps: Lap[] } | null;
   sessionKey?: string | null;
   laps: Lap[];
   scatter: { lapIndex: number; distanceKm: number; paceSec: number; hr: number; maxHr: number; cadence: number; strideM: number }[];
@@ -54,6 +60,8 @@ export type SessionDecoupling = {
 export type Session = {
   key: string; date: string; startTs: number; endTs: number; maxGapSec: number;
   activityCount: number; labelIds: string[];
+  duplicateCount?: number;
+  comparisonActivities?: Activity[];
   totals: { distanceKm: number; durationSec: number; calories: number; trainingLoad: number; elevGain: number; avgHr: number | null };
   sets: SessionSet[];
   kind: "single" | "multi";
@@ -78,10 +86,46 @@ export type SessionReport = {
   provider: string; model: string; focus: string | null; report: string; createdAt: number;
 };
 
+export type SessionComparisonItem = {
+  labelId: string;
+  source: string;
+  name: string;
+  distanceKm: number;
+  durationSec: number;
+  avgPaceSec: number | null;
+  avgHr: number | null;
+  maxHr: number | null;
+  avgCadence: number | null;
+  avgStrideM: number | null;
+  elevGain: number | null;
+  trainingLoad: number | null;
+};
+
+export type SessionComparisonDelta = {
+  distanceDiffKm: number;
+  distanceDiffPct: number;
+  durationDiffSec: number;
+  paceDiffSec: number | null;
+  avgHrDiff: number | null;
+  maxHrDiff: number | null;
+  avgCadenceDiff: number | null;
+  avgStrideDiffM: number | null;
+  elevGainDiff: number | null;
+  trainingLoadDiff: number | null;
+};
+
+export type SessionComparisonStats = {
+  primary: SessionComparisonItem;
+  secondary: SessionComparisonItem;
+  delta: SessionComparisonDelta;
+};
+
 export type SessionDetail = {
   session: Session;
   activities: (Activity & { detail: any })[];
   laps: SessionLap[];
+  comparisonLaps?: SessionLap[];
+  comparisonStats?: SessionComparisonStats | null;
   zones: { basis: number; maxHr: number; restingHr: number; reserve: number; source: string; method: string; usedFallback: boolean; belowZone1Seconds: number; belowZone1Pct: number; zones: { zone: string; label: string; pctLabel: string; seconds: number; pct: number; hrLo: number; hrHi: number | null }[] };
   reports: SessionReport[];
   age: number | null;
@@ -129,7 +173,7 @@ async function req<T>(path: string, init?: RequestInit): Promise<T> {
 
 export type SyncProgress = {
   active: boolean;
-  phase: "idle" | "records" | "details" | "load" | "health" | "metrics" | "workflow" | "done" | "error";
+  phase: "idle" | "records" | "details" | "load" | "health" | "metrics" | "workflow" | "list" | "fit" | "done" | "error";
   current: number;
   total: number;
   percent: number;
@@ -151,6 +195,8 @@ export type QuickSyncResult = {
   lapRows?: number;
   errors?: string[];
   fitQuotaLeft?: number;
+  conflictsDetected?: number;
+  conflictsResolved?: number;
   elapsedSec?: number;
   message: string;
 };
@@ -185,6 +231,33 @@ export type AuthStatus = {
   expiresAt: number | null;
   expired: boolean;
   mismatch?: AccountMismatchInfo | null;
+};
+
+export type GarminRegion = "global" | "cn";
+
+export type GarminAuthStatus = {
+  connected: boolean;
+  region: GarminRegion | null;
+  userFullName: string | null;
+  garminGuid: string | null;
+  expiresAt: number | null;
+  expired: boolean;
+};
+
+export type GarminMultiAuthStatus = {
+  connected: boolean;
+  cn: GarminAuthStatus;
+  global: GarminAuthStatus;
+};
+
+export type GarminSyncProgress = {
+  active: boolean;
+  phase: "idle" | "list" | "fit" | "done" | "error";
+  current: number;
+  total: number;
+  percent: number;
+  message: string;
+  updatedAt: number;
 };
 
 /** 同步运动类型配置：编码表由服务端下发，前端不自己维护一份 */
@@ -271,6 +344,42 @@ export type RouteFilePreview = {
   sourceNote?: string;
 };
 
+export type GarminHealthRecord = {
+  date: string;
+  calendarDate: string;
+  hrvWeeklyAvg?: number | null;
+  hrvLastNightAvg?: number | null;
+  hrvStatus?: string | null;
+  hrvFeedback?: string | null;
+  hrvBaselineLow?: number | null;
+  hrvBaselineHigh?: number | null;
+  sleepScore?: number | null;
+  sleepQuality?: string | null;
+  sleepDurationSec?: number | null;
+  deepSleepSec?: number | null;
+  lightSleepSec?: number | null;
+  remSleepSec?: number | null;
+  awakeSleepSec?: number | null;
+  avgSleepHr?: number | null;
+  avgSleepSpo2?: number | null;
+  avgRespiration?: number | null;
+  bodyBatteryHigh?: number | null;
+  bodyBatteryLow?: number | null;
+  bodyBatteryRecent?: number | null;
+  bodyBatteryCharged?: number | null;
+  bodyBatteryDrained?: number | null;
+  avgStress?: number | null;
+  maxStress?: number | null;
+  stressQualifier?: string | null;
+  restingHr?: number | null;
+  minHr?: number | null;
+  maxHr?: number | null;
+  totalSteps?: number | null;
+  activeCalories?: number | null;
+  totalCalories?: number | null;
+  updatedAt?: number;
+};
+
 export const api = {
   races: () => req<Race[]>("/api/races"),
   race: (id: number) => req<RaceDetail>(`/api/races/${id}`),
@@ -354,9 +463,17 @@ export const api = {
   load: (days = 90) => req<LoadPoint[]>("/api/load?days=" + days),
 
   health: (days = 60) => req<{
-    health: any[]; hr: any[]; stress: any[]; sleep: any[];
+    health: any[];
+    hr: any[];
+    stress: any[];
+    sleep: any[];
+    garmin?: {
+      records: GarminHealthRecord[];
+      latest?: GarminHealthRecord | null;
+    };
   }>("/api/health?days=" + days),
   fitness: () => req<{ latest: any; history: any[] }>("/api/fitness"),
+  prediction: () => req<any>("/api/prediction"),
   recovery: () => req<{ latest: any }>("/api/recovery"),
   profile: () => req<any>("/api/profile"),
 
@@ -379,6 +496,56 @@ export const api = {
     }),
   openExternal: (url: string) =>
     req<{ ok: boolean }>("/api/open-external", { method: "POST", body: JSON.stringify({ url }) }),
+
+  garminAuthStatus: () => req<GarminMultiAuthStatus>("/api/garmin/auth/status"),
+  connectGarmin: (apiKey: string, region: "auto" | "global" | "cn" = "auto") =>
+    req<GarminAuthStatus>("/api/garmin/auth/connect", {
+      method: "POST",
+      body: JSON.stringify({ apiKey, region }),
+    }),
+  disconnectGarmin: (region?: "cn" | "global" | "all") =>
+    req<{ ok: boolean }>("/api/garmin/auth/disconnect", { method: "POST", body: JSON.stringify({ region }) }),
+  syncGarmin: (limit = 100, region?: "cn" | "global" | "all") =>
+    req<{
+      syncedCount: number;
+      fitDownloaded: number;
+      newActivities: number;
+      conflictsDetected?: number;
+      conflictsResolved?: number;
+    }>("/api/garmin/sync", {
+      method: "POST",
+      body: JSON.stringify({ limit, region }),
+    }),
+  garminSyncProgress: () => req<GarminSyncProgress>("/api/garmin/sync/progress"),
+
+  conflicts: () => req<any[]>("/api/conflicts"),
+  detectConflicts: (primaryBrand?: "coros" | "garmin") =>
+    req<{ detectedPairs: number; resolved: number; conflicts: any[] }>("/api/conflicts/detect", {
+      method: "POST",
+      body: JSON.stringify({ primaryBrand }),
+    }),
+  resolveConflict: (primaryLabelId: string, secondaryLabelId: string, action: "set_primary" | "keep_both") =>
+    req<{ ok: boolean }>("/api/conflicts/resolve", {
+      method: "POST",
+      body: JSON.stringify({ primaryLabelId, secondaryLabelId, action }),
+    }),
+
+  testDataStatus: () =>
+    req<{
+      count: number;
+      items: Array<{
+        labelId: string;
+        sportName: string;
+        source: string;
+        dateLabel: string;
+        distanceKm: number;
+        duplicateOf: string | null;
+      }>;
+    }>("/api/test-data"),
+  cleanTestData: () =>
+    req<{ removedCount: number; restoredActivities: string[] }>("/api/test-data/clean", {
+      method: "POST",
+    }),
 
   profiles: () => req<{ activeId: string; profiles: ProfileItem[] }>("/api/profiles"),
   switchProfile: (id: string) =>

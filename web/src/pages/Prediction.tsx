@@ -80,9 +80,9 @@ export default function Prediction() {
   return (
     <>
       <div className="banner info">
-        这页的预测<strong>完全基于你自己的训练数据</strong>算出来，不使用 COROS 的体能评分。
-        做法是：先从每次训练里找出「连续跑出的最好成绩」当锚点，
-        再用多个模型加权合成。下方每个数字都可以展开看它是怎么来的。
+        这页的预测<strong>完全基于你自己的真实训练数据</strong>独立计算，不依赖单一手表的封闭评分。
+        做法是：从全品牌训练中提取连续跑出的最好成绩作为基准锚点，
+        再用多个经典运动生理学模型加权合成。下方每个数字都可以展开看它是怎么来的。
       </div>
 
       <div className="grid g4" style={{ marginBottom: 14 }}>
@@ -90,7 +90,7 @@ export default function Prediction() {
           <div className="stat">
             <span className="label"><IconGauge size={15} />自建阈值配速</span>
             <span className="value num" style={{ color: "var(--accent)" }}>{fmtP(d.threshold.paceSec)}<span className="unit">/km</span></span>
-            <span className="hint">官方给的是 {fmtP(d.official.thresholdPaceSec)}/km</span>
+            <span className="hint">{d.official.thresholdPaceSec ? `官方参照 ${fmtP(d.official.thresholdPaceSec)}/km` : "多品牌实测拟合"}</span>
           </div>
         </div>
         <div className="card stat-card">
@@ -340,7 +340,7 @@ export default function Prediction() {
       </div>
 
       <div className="card" style={{ marginBottom: 14 }}>
-        <h3 className="card-title">日常训练能力预测（自建多模型）vs COROS 官方</h3>
+        <h3 className="card-title">日常综合训练能力预测（跨品牌实测多模型集成）</h3>
         <p className="card-sub">
           基于日常乳酸阈值、间歇及训练拉练数据加权集成。日常长距离多为轻松跑（LSD），外推相对保守，反映日常体能基线；特定赛事的实战预测请前往「赛事」查看备赛简报。点任意一行可展开查看子模型构成。
         </p>
@@ -348,7 +348,7 @@ export default function Prediction() {
           <thead>
             <tr>
               <th>距离</th><th>日常综合预测</th><th>配速</th><th>可信区间</th>
-              <th>信心</th><th>实测校验</th><th>官方预测</th><th>差异</th>
+              <th>信心</th><th>实测校验</th><th>官方参照</th><th>差异</th>
             </tr>
           </thead>
           <tbody>

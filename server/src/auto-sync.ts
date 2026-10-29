@@ -21,6 +21,7 @@ import { db, sqlite } from "./db/client.ts";
 import { activities } from "./db/schema.ts";
 import { execFileSync } from "node:child_process";
 import { mkdirSync, readdirSync } from "node:fs";
+import { parseAltitudeFromFit } from "./fit-parser.ts";
 import {
   appendAltitudeRecords,
   classifyAltitude,
@@ -59,45 +60,7 @@ let doneFit = new Set<string>();
 /** 探测间隔：3 分钟。不用更密 —— COROS 的上传延迟是小时级的。 */
 const POLL_MS = 3 * 60 * 1000;
 
-// ---------------- FIT 解码 ----------------
-
-const PY_DECODER = `
-import sys, json
-from fitparse import FitFile
-f = FitFile(sys.argv[1])
-alts, lats, lons = [], [], []
-for m in f.get_messages('record'):
-    d = {fl.name: fl.value for fl in m}
-    if d.get('altitude') is not None: alts.append(d['altitude'])
-    if d.get('position_lat') is not None: lats.append(d['position_lat'])
-    if d.get('position_long') is not None: lons.append(d['position_long'])
-if not alts:
-    print(json.dumps({'samples': 0}))
-else:
-    gain = 0.0
-    for i in range(1, len(alts)):
-        diff = alts[i] - alts[i-1]
-        if diff > 0.3:
-            gain += diff
-    print(json.dumps({
-        'samples': len(alts), 'altMin': min(alts), 'altMax': max(alts),
-        'altAvg': sum(alts)/len(alts), 'gainFromFit': gain,
-        'latSemicircle': sum(lats)/len(lats) if lats else 0,
-        'lonSemicircle': sum(lons)/len(lons) if lons else 0,
-    }))
-`;
-
-function decodeFit(path: string) {
-  try {
-    const out = execFileSync("python3", ["-c", PY_DECODER, path], { encoding: "utf8" });
-    return JSON.parse(out.trim()) as {
-      samples: number; altMin: number; altMax: number; altAvg: number;
-      gainFromFit: number; latSemicircle: number; lonSemicircle: number;
-    };
-  } catch {
-    return null;
-  }
-}
+// ---------------- FIT 解码（采用纯 JS/TS fit-parser，彻底解耦 Python） ----------------
 
 /**
  * 给指定活动拉 FIT 并提取海拔。
@@ -118,7 +81,7 @@ export async function fetchAltitudeFor(labelId: string, sportType: number): Prom
     execFileSync("curl", ["-s", "--max-time", "15", "-o", path, url], { timeout: 16000 });
     recordFitDownload();
 
-    const s = decodeFit(path);
+    const s = await parseAltitudeFromFit(path);
     if (!s || !s.samples) return null;
 
     const band = classifyAltitude(s.altAvg);

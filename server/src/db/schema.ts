@@ -22,6 +22,8 @@ export const activities = sqliteTable(
     calories: integer("calories"),
     raw: text("raw"),
     syncedAt: integer("synced_at").notNull().default(sql`(unixepoch())`),
+    /** 数据来源品牌：coros / garmin / suunto / fit 等，默认 coros */
+    source: text("source").default("coros"),
     /**
      * 比赛锚点的人工覆盖标记（见 drizzle/0010_race_anchor_exclude.sql）。
      *   1  = 强制排除出能力基准
@@ -32,6 +34,16 @@ export const activities = sqliteTable(
      */
     raceExcluded: integer("race_excluded"),
     raceExcludeReason: text("race_exclude_reason"),
+    /**
+     * 重叠活动去重与对比标记：
+     *   0 = 正常主力活动（计入跑量与负荷统计）
+     *   1 = 冲突识别出的对比样本（归档展示，不计入跑量/负荷以防翻倍）
+     */
+    isDuplicate: integer("is_duplicate").default(0),
+    /** 对应另一手表的记录 labelId */
+    duplicateOf: text("duplicate_of"),
+    /** 冲突解决状态：auto_primary / auto_duplicate / manual_primary / manual_duplicate / manual_keep_both */
+    conflictStatus: text("conflict_status"),
   },
   (t) => [index("idx_activities_date").on(t.date), index("idx_activities_sport").on(t.sportType)],
 );

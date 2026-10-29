@@ -38,10 +38,10 @@ export default function ActivityDetailView({
           tip: [
             [`${residual > 0 ? "+" : ""}${residual.toFixed(1)} bpm（${statusText}）`, "相对基准心率偏差"],
             [fmtPace(l.avgPaceSec) + " /km", "配速"],
-            [`${l.avgHr} bpm`, "实际平均心率"],
-            [`${l.maxHr} bpm`, "最大心率"],
-            [`${l.avgCadence} spm`, "步频"],
-            [`${l.avgStrideM.toFixed(2)} m`, "步幅"],
+            [`${l.avgHr ?? "—"} bpm`, "实际平均心率"],
+            [`${l.maxHr ?? "—"} bpm`, "最大心率"],
+            [`${l.avgCadence ?? "—"} spm`, "步频"],
+            [l.avgStrideM ? `${l.avgStrideM.toFixed(2)} m` : "—", "步幅"],
           ] as [string, string][],
         };
       })
@@ -51,10 +51,22 @@ export default function ActivityDetailView({
     <>
       <div className="page-head">
         <div>
-          <h2>{a.dateLabel} · {a.sportName}</h2>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4, flexWrap: "wrap" }}>
+            {a.source === "garmin" ? (
+              <span style={{ fontSize: 11, padding: "2px 7px", borderRadius: 4, background: "rgba(16, 185, 129, 0.15)", color: "#10b981", fontWeight: 700 }}>佳明 GARMIN</span>
+            ) : (
+              <span style={{ fontSize: 11, padding: "2px 7px", borderRadius: 4, background: "rgba(59, 130, 246, 0.15)", color: "#3b82f6", fontWeight: 700 }}>高驰 COROS</span>
+            )}
+            {a.isDuplicate === 1 ? (
+              <span style={{ fontSize: 11, padding: "2px 7px", borderRadius: 4, background: "rgba(234, 179, 8, 0.18)", color: "#eab308", fontWeight: 700 }}>对比样本（已归档）</span>
+            ) : (
+              <span style={{ fontSize: 11, padding: "2px 7px", borderRadius: 4, background: "rgba(99, 102, 241, 0.12)", color: "#818cf8", fontWeight: 700 }}>主力有效记录</span>
+            )}
+            <h2 style={{ margin: 0 }}>{a.dateLabel} · {a.sportName}</h2>
+          </div>
           <div className="sub">
             {a.location ?? "—"}
-            {d?.trainingFocus ? ` ｜ COROS 判定训练重点：${d.trainingFocus}` : ""}
+            {d?.trainingFocus ? ` ｜ 判定训练重点：${d.trainingFocus}` : ""}
             {d?.performance ? ` ｜ 表现：${d.performance}` : ""}
           </div>
         </div>
@@ -65,6 +77,23 @@ export default function ActivityDetailView({
           <button className="btn" onClick={onBack} title="返回上一级（快捷键：Esc 或鼠标后退键）"><IconBack size={15} />返回</button>
         </div>
       </div>
+
+      {data.comparisonActivity && (
+        <div className="card" style={{ marginBottom: 14, background: "rgba(99, 102, 241, 0.05)", border: "1px solid rgba(99, 102, 241, 0.2)" }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 10 }}>
+            <div>
+              <div style={{ fontWeight: 600 }}>⌚ 双表同场记录对比</div>
+              <div style={{ fontSize: 12, color: "var(--text-dim)", marginTop: 2 }}>
+                检测到该训练由【{a.source === "garmin" ? "佳明" : "高驰"}】与【{data.comparisonActivity.activity.source === "garmin" ? "佳明" : "高驰"}】双表同时记录。
+              </div>
+            </div>
+            <div style={{ textAlign: "right", fontSize: 12 }}>
+              <div>当前表（{a.source === "garmin" ? "佳明" : "高驰"}）：<strong>{a.distanceKm} km</strong> · {fmtPace(a.avgPaceSec)} · {a.avgHr ?? "—"} bpm</div>
+              <div style={{ color: "var(--text-dim)" }}>对照表（{data.comparisonActivity.activity.source === "garmin" ? "佳明" : "高驰"}）：<strong>{data.comparisonActivity.activity.distanceKm} km</strong> · {fmtPace(data.comparisonActivity.activity.avgPaceSec)} · {data.comparisonActivity.activity.avgHr ?? "—"} bpm</div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {lapSummary.count > 0 && lapSummary.distanceMatches === false && (
         <div className="banner warn">

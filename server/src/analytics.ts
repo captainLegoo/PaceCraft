@@ -1,6 +1,8 @@
-import { and, asc, desc, eq, gte, inArray, lte } from "drizzle-orm";
+import { and, asc, desc, eq, gte, inArray, lte, ne } from "drizzle-orm";
 import { db } from "./db/client.ts";
 import { activities, activityDetails, laps, trainingLoad, users } from "./db/schema.ts";
+import { computeUnifiedTrimp } from "./conflicts.ts";
+import { computeDailyLoads } from "./prediction/dailyLoad.ts";
 
 /** 以周一为起点做 ISO 周分组 */
 export function isoWeek(dateLabel: string): string {
@@ -16,7 +18,7 @@ export function weeklyVolume(weeks = 16) {
     .from(activities)
     .orderBy(desc(activities.date))
     .all()
-    .filter((a) => (a.distanceKm ?? 0) > 0);
+    .filter((a) => !a.isDuplicate && (a.distanceKm ?? 0) > 0);
 
   const buckets = new Map<string, {
     weekStart: string; distanceKm: number; durationSec: number; count: number;
@@ -58,7 +60,7 @@ export function weeklyVolume(weeks = 16) {
 }
 
 export function monthlyVolume(months = 12) {
-  const rows = db.select().from(activities).all().filter((a) => (a.distanceKm ?? 0) > 0);
+  const rows = db.select().from(activities).all().filter((a) => !a.isDuplicate && (a.distanceKm ?? 0) > 0);
   const buckets = new Map<string, { month: string; distanceKm: number; durationSec: number; count: number }>();
   for (const a of rows) {
     const key = a.dateLabel.slice(0, 7);
@@ -74,8 +76,71 @@ export function monthlyVolume(months = 12) {
     .map((b) => ({ ...b, distanceKm: round(b.distanceKm, 1) }));
 }
 
-/** 训练负荷序列 + 7 日移动平均 */
+/** 训练负荷序列 + 7 日移动平均（跨品牌多生态统一 Banister EWMA + ACWR 模型） */
 export function loadSeries(days = 90) {
+  const acts = db
+    .select({
+      date: activities.date,
+      durationSec: activities.durationSec,
+      avgHr: activities.avgHr,
+      distanceKm: activities.distanceKm,
+      isDuplicate: activities.isDuplicate,
+      sportType: activities.sportType,
+    })
+    .from(activities)
+    .where(ne(activities.isDuplicate, 1))
+    .orderBy(asc(activities.date))
+    .all();
+
+  // 若存在真实训练记录，按跨品牌统一归一化 TRIMP 计算每日 ATL、CTL 与 ACWR
+  if (acts.length > 0) {
+    const daily = computeDailyLoads(acts);
+    if (daily.length > 0) {
+      let atl = 0;
+      let ctl = 0;
+      const alpha7 = 2 / (7 + 1); // 7 日短期负荷 (ATL/疲劳)
+      const alpha28 = 2 / (28 + 1); // 28 日长期负荷 (CTL/体能)
+
+      const fullSeries = daily.map((d) => {
+        atl = atl * (1 - alpha7) + d.load * alpha7;
+        ctl = ctl * (1 - alpha28) + d.load * alpha28;
+        const shortLoad = Math.round(atl);
+        const longLoad = Math.round(ctl);
+        const ratio = ctl > 5 ? round(atl / ctl, 2) : 1.0;
+
+        let comment = "Optimized";
+        if (ratio < 0.8) comment = "Recovery";
+        else if (ratio <= 1.3) comment = "Optimized";
+        else if (ratio <= 1.5) comment = "Maintaining";
+        else comment = "Overreaching";
+
+        return {
+          date: d.date,
+          comment,
+          shortLoad,
+          longLoad,
+          ratio,
+        };
+      });
+
+      const sliced = fullSeries.slice(-days);
+      return sliced.map((r, i) => {
+        const window = sliced.slice(Math.max(0, i - 6), i + 1);
+        const valid = window.filter((w) => w.shortLoad != null);
+        return {
+          ...r,
+          shortLoadAvg7: valid.length > 0
+            ? round(valid.reduce((s, w) => s + (w.shortLoad ?? 0), 0) / valid.length, 1)
+            : null,
+          ratioAvg7: valid.length > 0
+            ? round(valid.reduce((s, w) => s + (w.ratio ?? 0), 0) / valid.length, 2)
+            : null,
+        };
+      });
+    }
+  }
+
+  // 兜底回退：若活动表无数据，尝试读取 training_load 表（如仅同步了官方历史负荷）
   const rows = db
     .select()
     .from(trainingLoad)
@@ -496,6 +561,8 @@ export type Session = {
   classification: string;
   classificationReason: string;
   decoupling?: SessionDecoupling | null;
+  duplicateCount?: number;
+  comparisonActivities?: any[];
 };
 
 /**
@@ -545,7 +612,24 @@ export function buildSessions(opts: { from?: string; to?: string; gapSec?: numbe
 
     for (const a of sorted) {
       const prev = bucket[bucket.length - 1];
-      if (prev && a.startTs != null && prev.endTs != null && a.startTs - prev.endTs > gapSec) flush();
+
+      // 切分条件：
+      // 1. 组间时间间隔 > gapSec（4小时）；
+      // 2. 独立双表切分：如果 a 与 prev 开始时间重叠（相差 <= 10分钟），但两笔记录都不是对比样本（例如用户选择 manual_keep_both 保留两者独立训练），
+      //    它们是同一时间的两场独立记录，绝不能合并为同一场间歇跑！
+      const isSimultaneousIndependent =
+        prev &&
+        a.startTs != null &&
+        prev.startTs != null &&
+        Math.abs(a.startTs - prev.startTs) <= 600 &&
+        !a.isDuplicate &&
+        !prev.isDuplicate;
+
+      const isTimeGap = prev && a.startTs != null && prev.endTs != null && a.startTs - prev.endTs > gapSec;
+
+      if (isTimeGap || isSimultaneousIndependent) {
+        flush();
+      }
       bucket.push(a);
     }
     flush();
@@ -634,22 +718,35 @@ function makeSession(
   lapsByLabel: Map<string, any[]>
 ): Session {
   const labelIds = acts.map((a) => a.labelId);
-  const withDetails = acts.map((a) => ({ a, d: detailById.get(a.labelId) ?? null }));
-  const sessionLaps = acts.flatMap((a) => lapsByLabel.get(a.labelId) ?? []);
+  const withDetails = acts.map((a) => {
+    const d = detailById.get(a.labelId) ?? null;
+    const trainingLoad = d?.trainingLoad != null
+      ? d.trainingLoad
+      : computeUnifiedTrimp(a.durationSec ?? 0, a.avgHr);
+    return { a, d, trainingLoad };
+  });
 
-  const distanceKm = acts.reduce((s, a) => s + (a.distanceKm ?? 0), 0);
-  const durationSec = acts.reduce((s, a) => s + (a.durationSec ?? 0), 0);
-  const calories = acts.reduce((s, a) => s + (a.calories ?? 0), 0);
-  const trainingLoad = withDetails.reduce((s, x) => s + (x.d?.trainingLoad ?? 0), 0);
-  const elevGain = withDetails.reduce((s, x) => s + (x.d?.elevGain ?? 0), 0);
+  // 分离主力活动与归档的对比样本活动（去重，不重复累加）
+  const primaryActs = acts.filter((a) => !a.isDuplicate);
+  const comparisonActs = acts.filter((a) => a.isDuplicate);
+  const effectiveActs = primaryActs.length > 0 ? primaryActs : acts;
+  const effectiveDetails = withDetails.filter((x) => primaryActs.length > 0 ? !x.a.isDuplicate : true);
+
+  const sessionLaps = effectiveActs.flatMap((a) => lapsByLabel.get(a.labelId) ?? []);
+
+  const distanceKm = effectiveActs.reduce((s, a) => s + (a.distanceKm ?? 0), 0);
+  const durationSec = effectiveActs.reduce((s, a) => s + (a.durationSec ?? 0), 0);
+  const calories = effectiveActs.reduce((s, a) => s + (a.calories ?? 0), 0);
+  const trainingLoad = effectiveDetails.reduce((s, x) => s + (x.trainingLoad ?? 0), 0);
+  const elevGain = effectiveDetails.reduce((s, x) => s + (x.d?.elevGain ?? 0), 0);
 
   // 少数短记录 COROS 不给距离（多为 GPS 丢失的碎片记录）。
   // 这类记录时长仍然计入，但距离要单独标出来，不能假装全场距离是完整的。
-  const unknownDistance = acts.filter((a) => a.distanceKm == null).length;
+  const unknownDistance = effectiveActs.filter((a) => a.distanceKm == null).length;
 
   // 按时长加权的平均心率
   let hrSum = 0, hrWeight = 0;
-  for (const { a } of withDetails) {
+  for (const { a } of effectiveDetails) {
     if (a.avgHr) { hrSum += a.avgHr * (a.durationSec ?? 0); hrWeight += a.durationSec ?? 0; }
   }
 
@@ -658,26 +755,26 @@ function makeSession(
     a.endTs ?? (a.startTs != null && a.durationSec != null ? a.startTs + a.durationSec : a.startTs ?? 0);
 
   let maxGapSec = 0;
-  for (let i = 1; i < acts.length; i++) {
-    const g = (acts[i].startTs ?? 0) - endOf(acts[i - 1]);
+  for (let i = 1; i < effectiveActs.length; i++) {
+    const g = (effectiveActs[i].startTs ?? 0) - endOf(effectiveActs[i - 1]);
     if (g > maxGapSec) maxGapSec = g;
   }
 
-  const sets = detectSets(withDetails);
-  const { classification, reason } = classify(acts, sets, distanceKm);
+  const sets = detectSets(effectiveDetails);
+  const { classification, reason } = classify(effectiveActs, sets, distanceKm);
 
-  const hasNonRun = acts.some((a) => a.sportType != null && ![100, 102, 103, 104].includes(a.sportType));
-  const sportTypes = new Set(acts.map((a) => a.sportType).filter((t) => t != null));
+  const hasNonRun = effectiveActs.some((a) => a.sportType != null && ![100, 102, 103, 104].includes(a.sportType));
+  const sportTypes = new Set(effectiveActs.map((a) => a.sportType).filter((t) => t != null));
   const hasNonRunOrMixed = hasNonRun || sportTypes.size > 1;
 
   return {
     // 用下划线而不是 #：# 在 URL 里是片段分隔符，会把路径截断
-    key: `${date}_${acts[0].labelId}`,
+    key: `${date}_${effectiveActs[0].labelId}`,
     date,
-    startTs: acts[0].startTs ?? 0,
-    endTs: acts[acts.length - 1].endTs ?? acts[0].startTs ?? 0,
+    startTs: effectiveActs[0].startTs ?? 0,
+    endTs: effectiveActs[effectiveActs.length - 1].endTs ?? effectiveActs[0].startTs ?? 0,
     maxGapSec,
-    activityCount: acts.length,
+    activityCount: effectiveActs.length,
     unknownDistanceCount: unknownDistance,
     labelIds,
     totals: {
@@ -689,10 +786,12 @@ function makeSession(
       avgHr: hrWeight > 0 ? Math.round(hrSum / hrWeight) : null,
     },
     sets,
-    kind: acts.length === 1 ? "single" : "multi",
+    kind: effectiveActs.length === 1 ? "single" : "multi",
     classification,
     classificationReason: reason,
     decoupling: computeSessionDecoupling(sessionLaps, distanceKm, durationSec, classification, hasNonRunOrMixed),
+    duplicateCount: comparisonActs.length,
+    comparisonActivities: comparisonActs,
   };
 }
 
@@ -817,26 +916,40 @@ export function sessionLaps(labelIds: string[]) {
     .where(inArray(laps.labelId, labelIds))
     .all();
 
-  return rows
-    .map((r) => {
-      const offsetSec = offsetOf.get(r.labelId) ?? 0;
-      return {
-        labelId: r.labelId,
-        lapIndex: r.lapIndex,
-        offsetSec,
-        elapsedSec: offsetSec + Math.round(r.totalLengthSec ?? r.timeSec ?? 0),
-        distanceM: r.distanceM,
-        timeSec: r.timeSec,
-        avgPaceSec: r.avgPaceSec,
-        avgHr: r.avgHr,
-        maxHr: r.maxHr,
-        avgCadence: r.avgCadence,
-        avgStrideM: r.avgStrideM,
-        // 爬升必须在映射里显式带出：漏掉它，逐段表就只有配速心率，
-        // AI 无法区分「上坡导致的慢」和「体能退步」，会一律判成掉速。
-        elevGain: r.elevGain,
-        totalDescent: r.totalDescent,
-      };
-    })
-    .sort((a, b) => (a.offsetSec - b.offsetSec) || (a.labelId.localeCompare(b.labelId)) || (a.lapIndex - b.lapIndex));
+  const sorted = rows.sort(
+    (a, b) =>
+      (offsetOf.get(a.labelId) ?? 0) - (offsetOf.get(b.labelId) ?? 0) ||
+      a.labelId.localeCompare(b.labelId) ||
+      a.lapIndex - b.lapIndex,
+  );
+
+  const cumByLabel = new Map<string, number>();
+
+  return sorted.map((r) => {
+    const offsetSec = offsetOf.get(r.labelId) ?? 0;
+    const prevCum = cumByLabel.get(r.labelId) ?? 0;
+    // 如果 totalLengthSec 已经单调递增则使用，否则按 timeSec 累加自愈
+    const lapTime = Math.round(r.timeSec ?? 0);
+    const candidate = Math.round(r.totalLengthSec ?? 0);
+    const cumSec = candidate > prevCum ? candidate : prevCum + lapTime;
+    cumByLabel.set(r.labelId, cumSec);
+
+    return {
+      labelId: r.labelId,
+      lapIndex: r.lapIndex,
+      offsetSec,
+      elapsedSec: offsetSec + cumSec,
+      distanceM: r.distanceM,
+      timeSec: r.timeSec,
+      avgPaceSec: r.avgPaceSec,
+      avgHr: r.avgHr,
+      maxHr: r.maxHr,
+      avgCadence: r.avgCadence,
+      avgStrideM: r.avgStrideM,
+      // 爬升必须在映射里显式带出：漏掉它，逐段表就只有配速心率，
+      // AI 无法区分「上坡导致的慢」和「体能退步」，会一律判成掉速。
+      elevGain: r.elevGain,
+      totalDescent: r.totalDescent,
+    };
+  });
 }

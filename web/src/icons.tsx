@@ -147,6 +147,18 @@ export function IconRecovery({ size = 18, className }: P) {
   );
 }
 
+/** 身体电量 / 电池 */
+export function IconBattery({ size = 18, className }: P) {
+  return (
+    <svg {...base(size)} className={className} aria-hidden>
+      <rect x="2" y="7" width="16" height="10" rx="2" ry="2" />
+      <line x1="22" y1="11" x2="22" y2="13" />
+      <line x1="6" y1="11" x2="6" y2="13" />
+      <line x1="10" y1="11" x2="10" y2="13" />
+    </svg>
+  );
+}
+
 /** 睡眠（月亮 + 星） */
 export function IconMoon({ size = 18, className }: P) {
   return (

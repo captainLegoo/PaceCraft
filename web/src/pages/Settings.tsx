@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import { api, type SyncProgress, type SyncSportsPayload } from "../api";
+import { useEffect, useState, useCallback } from "react";
+import { api, type GarminMultiAuthStatus, type GarminSyncProgress, type SyncProgress, type SyncSportsPayload } from "../api";
 import { formatElapsed } from "../utils/format";
 import { useClipboard } from "../utils/clipboard";
 import { IconDatabase, IconGear, IconHeart, IconSync } from "../icons";
@@ -18,7 +18,6 @@ export type PopularModel = {
 export type ProviderPreset = {
   id: string;
   name: string;
-  group: "featured" | "domestic" | "global" | "local";
   provider: "openai" | "anthropic";
   baseUrl: string;
   defaultModel: string;
@@ -29,75 +28,108 @@ export type ProviderPreset = {
   defaultApiKey?: string;
 };
 
-const PROVIDER_GROUPS = [
-  { key: "featured", label: "🌟 推荐热门平台" },
-  { key: "domestic", label: "🇨🇳 国内主流大模型平台" },
-  { key: "global", label: "🌐 国际主流大模型平台" },
-  { key: "local", label: "💻 本地与自定义部署" },
-] as const;
-
 const PROVIDERS: ProviderPreset[] = [
-  // --- 推荐热门 ---
   {
     id: "deepseek",
-    name: "DeepSeek (深度求索 · 官方)",
-    group: "featured",
+    name: "DeepSeek",
     provider: "openai",
     baseUrl: "https://api.deepseek.com/v1",
     defaultModel: "deepseek-chat",
     popularModels: [
-      { model: "deepseek-chat", label: "DeepSeek-V3", desc: "高性价比首选 · 综合能力卓越", tag: "推荐" },
-      { model: "deepseek-reasoner", label: "DeepSeek-R1", desc: "深度长链推理与反思", tag: "深度思考" },
+      { model: "deepseek-chat", label: "DeepSeek-V3", desc: "高性价比首选 · 综合能力卓越" },
+      { model: "deepseek-reasoner", label: "DeepSeek-R1", desc: "深度长链推理与反思" },
     ],
     docUrl: "https://platform.deepseek.com",
     docLabel: "DeepSeek 开放平台",
   },
   {
-    id: "siliconflow",
-    name: "硅基流动 (SiliconFlow · 极速聚合)",
-    group: "featured",
+    id: "openai",
+    name: "OpenAI",
     provider: "openai",
-    baseUrl: "https://api.siliconflow.cn/v1",
-    defaultModel: "deepseek-ai/DeepSeek-V3",
+    baseUrl: "https://api.openai.com/v1",
+    defaultModel: "gpt-4o-mini",
     popularModels: [
-      { model: "deepseek-ai/DeepSeek-V3", label: "DeepSeek-V3", desc: "极速稳定 · 极高性价比", tag: "高性价" },
-      { model: "deepseek-ai/DeepSeek-R1", label: "DeepSeek-R1", desc: "深度思考推理", tag: "深度思考" },
-      { model: "Pro/deepseek-ai/DeepSeek-V3", label: "DeepSeek-V3 Pro", desc: "企业高可用专线" },
-      { model: "Pro/deepseek-ai/DeepSeek-R1", label: "DeepSeek-R1 Pro", desc: "企业推理专线" },
-      { model: "Qwen/Qwen2.5-72B-Instruct", label: "Qwen2.5 72B", desc: "通义千问开源旗舰" },
+      { model: "gpt-4o-mini", label: "GPT-4o mini", desc: "轻快高性价比 · 跑友首选" },
+      { model: "gpt-4o", label: "GPT-4o", desc: "全能多模态旗舰" },
+      { model: "o3-mini", label: "o3-mini", desc: "高性价比强推理" },
+      { model: "o1", label: "o1", desc: "通用深度思考推理" },
     ],
-    docUrl: "https://cloud.siliconflow.cn",
-    docLabel: "硅基流动控制台",
-    apiKeyHint: "国内热门大模型托管平台，新用户常有赠送 Token",
+    docUrl: "https://platform.openai.com",
+    docLabel: "OpenAI Platform",
+  },
+  {
+    id: "anthropic",
+    name: "Claude",
+    provider: "anthropic",
+    baseUrl: "https://api.anthropic.com",
+    defaultModel: "claude-3-7-sonnet-latest",
+    popularModels: [
+      { model: "claude-3-7-sonnet-latest", label: "Claude 3.7 Sonnet", desc: "混合推理与深度思考旗舰" },
+      { model: "claude-3-5-sonnet-latest", label: "Claude 3.5 Sonnet", desc: "标杆大模型" },
+      { model: "claude-3-5-haiku-latest", label: "Claude 3.5 Haiku", desc: "轻量快速高性价比" },
+    ],
+    docUrl: "https://console.anthropic.com",
+    docLabel: "Anthropic Console",
+  },
+  {
+    id: "gemini",
+    name: "Gemini",
+    provider: "openai",
+    baseUrl: "https://generativelanguage.googleapis.com/v1beta/openai",
+    defaultModel: "gemini-2.5-flash",
+    popularModels: [
+      { model: "gemini-2.5-flash", label: "Gemini 2.5 Flash", desc: "兼顾深度思考与极速响应" },
+      { model: "gemini-2.5-pro", label: "Gemini 2.5 Pro", desc: "复杂分析推理旗舰" },
+      { model: "gemini-2.0-flash", label: "Gemini 2.0 Flash", desc: "低延迟极速生成" },
+      { model: "gemini-1.5-pro", label: "Gemini 1.5 Pro", desc: "百万长上下文" },
+    ],
+    docUrl: "https://aistudio.google.com",
+    docLabel: "Google AI Studio",
+    apiKeyHint: "Google AI Studio 提供充沛的免费调用额度，通过兼容接口直连",
   },
   {
     id: "qwen",
-    name: "阿里云百炼 (通义千问 Qwen)",
-    group: "featured",
+    name: "Qwen",
     provider: "openai",
     baseUrl: "https://dashscope.aliyuncs.com/compatible-mode/v1",
     defaultModel: "qwen-plus",
     popularModels: [
-      { model: "qwen-plus", label: "Qwen Plus", desc: "能力均衡全面 · 主力推荐", tag: "推荐" },
-      { model: "qwen-max", label: "Qwen Max", desc: "千问旗舰大模型 · 复杂推理", tag: "旗舰" },
+      { model: "qwen-plus", label: "Qwen Plus", desc: "能力均衡全面 · 主力推荐" },
+      { model: "qwen-max", label: "Qwen Max", desc: "千问旗舰大模型 · 复杂推理" },
       { model: "qwen-turbo", label: "Qwen Turbo", desc: "响应极速 · 超低成本" },
-      { model: "deepseek-r1", label: "百炼 DeepSeek-R1", desc: "阿里云官方托管 R1" },
-      { model: "deepseek-v3", label: "百炼 DeepSeek-V3", desc: "阿里云官方托管 V3" },
+      { model: "deepseek-r1", label: "百炼 DeepSeek-R1", desc: "阿里云托管 R1" },
+      { model: "deepseek-v3", label: "百炼 DeepSeek-V3", desc: "阿里云托管 V3" },
       { model: "qwen2.5-72b-instruct", label: "Qwen2.5 72B", desc: "开源旗舰底座" },
     ],
     docUrl: "https://bailian.console.aliyun.com",
     docLabel: "阿里云百炼平台",
   },
   {
+    id: "siliconflow",
+    name: "SiliconFlow",
+    provider: "openai",
+    baseUrl: "https://api.siliconflow.cn/v1",
+    defaultModel: "deepseek-ai/DeepSeek-V3",
+    popularModels: [
+      { model: "deepseek-ai/DeepSeek-V3", label: "DeepSeek-V3", desc: "极速稳定 · 极高性价比" },
+      { model: "deepseek-ai/DeepSeek-R1", label: "DeepSeek-R1", desc: "深度思考推理" },
+      { model: "Pro/deepseek-ai/DeepSeek-V3", label: "DeepSeek-V3 Pro", desc: "企业高可用专线" },
+      { model: "Pro/deepseek-ai/DeepSeek-R1", label: "DeepSeek-R1 Pro", desc: "企业推理专线" },
+      { model: "Qwen/Qwen2.5-72B-Instruct", label: "Qwen2.5 72B", desc: "通义千问开源旗舰" },
+    ],
+    docUrl: "https://cloud.siliconflow.cn",
+    docLabel: "硅基流动控制台",
+    apiKeyHint: "热门模型托管平台，新用户常有赠送 Token",
+  },
+  {
     id: "zhipu",
-    name: "智谱 AI (GLM-4 / 智谱清言)",
-    group: "featured",
+    name: "GLM",
     provider: "openai",
     baseUrl: "https://open.bigmodel.cn/api/paas/v4",
     defaultModel: "glm-4-flash",
     popularModels: [
-      { model: "glm-4-flash", label: "GLM-4 Flash", desc: "官方免费调用 · 响应极快", tag: "免费" },
-      { model: "glm-4-plus", label: "GLM-4 Plus", desc: "智谱旗舰大模型 · 综合逻辑强", tag: "旗舰" },
+      { model: "glm-4-flash", label: "GLM-4 Flash", desc: "官方免费调用 · 响应极快" },
+      { model: "glm-4-plus", label: "GLM-4 Plus", desc: "智谱旗舰大模型 · 综合逻辑强" },
       { model: "glm-4-air", label: "GLM-4 Air", desc: "高性价比极速版" },
       { model: "glm-4-long", label: "GLM-4 Long", desc: "100万长上下文支持" },
     ],
@@ -105,32 +137,28 @@ const PROVIDERS: ProviderPreset[] = [
     docLabel: "智谱大模型开放平台",
     apiKeyHint: "GLM-4-Flash 永久免费，零门槛轻松体验",
   },
-
-  // --- 国内主流平台 ---
   {
     id: "kimi",
-    name: "月之暗面 (Kimi / Moonshot)",
-    group: "domestic",
+    name: "Kimi",
     provider: "openai",
     baseUrl: "https://api.moonshot.cn/v1",
     defaultModel: "moonshot-v1-8k",
     popularModels: [
-      { model: "moonshot-v1-8k", label: "Moonshot 8K", desc: "标准长上下文", tag: "推荐" },
+      { model: "moonshot-v1-8k", label: "Moonshot 8K", desc: "标准长上下文" },
       { model: "moonshot-v1-32k", label: "Moonshot 32K", desc: "中长上下文" },
-      { model: "kimi-k1.5-preview", label: "Kimi k1.5", desc: "多模态思考推理预览版", tag: "思考" },
+      { model: "kimi-k1.5-preview", label: "Kimi k1.5", desc: "多模态思考推理预览版" },
     ],
     docUrl: "https://platform.moonshot.cn",
     docLabel: "Moonshot 开放平台",
   },
   {
     id: "doubao",
-    name: "字节火山引擎 (豆包 Doubao)",
-    group: "domestic",
+    name: "Doubao",
     provider: "openai",
     baseUrl: "https://ark.cn-beijing.volces.com/api/v3",
     defaultModel: "doubao-1.5-pro-32k",
     popularModels: [
-      { model: "doubao-1.5-pro-32k", label: "Doubao 1.5 Pro", desc: "豆包旗舰主力模型", tag: "推荐" },
+      { model: "doubao-1.5-pro-32k", label: "Doubao 1.5 Pro", desc: "豆包旗舰主力模型" },
       { model: "doubao-1.5-lite-32k", label: "Doubao 1.5 Lite", desc: "轻量极速模型" },
       { model: "doubao-pro-32k", label: "Doubao Pro 32K", desc: "经典专业版" },
     ],
@@ -140,27 +168,84 @@ const PROVIDERS: ProviderPreset[] = [
   },
   {
     id: "minimax",
-    name: "MiniMax (海螺 AI 开放平台)",
-    group: "domestic",
+    name: "MiniMax",
     provider: "openai",
     baseUrl: "https://api.minimax.chat/v1",
     defaultModel: "MiniMax-Text-01",
     popularModels: [
-      { model: "MiniMax-Text-01", label: "MiniMax-Text-01", desc: "400万超长文本新一代旗舰", tag: "旗舰" },
+      { model: "MiniMax-Text-01", label: "MiniMax-Text-01", desc: "400万超长文本新一代旗舰" },
       { model: "abab6.5s-chat", label: "abab 6.5s", desc: "轻量高性价比" },
     ],
     docUrl: "https://platform.minimaxi.com",
     docLabel: "MiniMax 开放平台",
   },
   {
+    id: "openrouter",
+    name: "OpenRouter",
+    provider: "openai",
+    baseUrl: "https://openrouter.ai/api/v1",
+    defaultModel: "deepseek/deepseek-chat",
+    popularModels: [
+      { model: "deepseek/deepseek-chat", label: "DeepSeek V3", desc: "OpenRouter 托管路由" },
+      { model: "deepseek/deepseek-r1", label: "DeepSeek R1", desc: "OpenRouter R1 深度推理" },
+      { model: "anthropic/claude-3.7-sonnet", label: "Claude 3.7", desc: "免绑卡聚合调用" },
+      { model: "openai/gpt-4o-mini", label: "GPT-4o mini", desc: "高性价比" },
+      { model: "google/gemini-2.0-flash-001", label: "Gemini 2.0 Flash", desc: "超低单价" },
+      { model: "meta-llama/llama-3.3-70b-instruct", label: "Llama 3.3 70B", desc: "开源旗舰" },
+    ],
+    docUrl: "https://openrouter.ai",
+    docLabel: "OpenRouter 平台",
+    apiKeyHint: "单 API Key 自由调用数百款大模型",
+  },
+  {
+    id: "groq",
+    name: "Groq",
+    provider: "openai",
+    baseUrl: "https://api.groq.com/openai/v1",
+    defaultModel: "llama-3.3-70b-versatile",
+    popularModels: [
+      { model: "llama-3.3-70b-versatile", label: "Llama 3.3 70B", desc: "每秒近 300 token 极速响应" },
+      { model: "deepseek-r1-distill-llama-70b", label: "DeepSeek R1 70B", desc: "R1 蒸馏极速推理" },
+      { model: "llama-3.1-8b-instant", label: "Llama 3.1 8B", desc: "瞬时超低延迟" },
+    ],
+    docUrl: "https://console.groq.com",
+    docLabel: "Groq Console",
+  },
+  {
+    id: "mistral",
+    name: "Mistral AI",
+    provider: "openai",
+    baseUrl: "https://api.mistral.ai/v1",
+    defaultModel: "mistral-large-latest",
+    popularModels: [
+      { model: "mistral-large-latest", label: "Mistral Large", desc: "Mistral 旗舰全能大模型" },
+      { model: "mistral-small-latest", label: "Mistral Small", desc: "轻量高性价比" },
+      { model: "codestral-latest", label: "Codestral", desc: "结构化数据特化模型" },
+    ],
+    docUrl: "https://console.mistral.ai",
+    docLabel: "Mistral Platform",
+  },
+  {
+    id: "xai",
+    name: "xAI",
+    provider: "openai",
+    baseUrl: "https://api.x.ai/v1",
+    defaultModel: "grok-2-latest",
+    popularModels: [
+      { model: "grok-2-latest", label: "Grok 2", desc: "xAI 旗舰主力模型" },
+      { model: "grok-beta", label: "Grok Beta", desc: "测试体验版" },
+    ],
+    docUrl: "https://console.x.ai",
+    docLabel: "xAI 控制台",
+  },
+  {
     id: "lingyi",
-    name: "零一万物 (01.AI / Yi)",
-    group: "domestic",
+    name: "01.AI",
     provider: "openai",
     baseUrl: "https://api.lingyiwanwu.com/v1",
     defaultModel: "yi-lightning",
     popularModels: [
-      { model: "yi-lightning", label: "Yi Lightning", desc: "千亿参数超快推理旗舰", tag: "推荐" },
+      { model: "yi-lightning", label: "Yi Lightning", desc: "千亿参数超快推理旗舰" },
       { model: "yi-large", label: "Yi Large", desc: "通用能力大模型" },
       { model: "yi-medium", label: "Yi Medium", desc: "经济快速版" },
     ],
@@ -169,13 +254,12 @@ const PROVIDERS: ProviderPreset[] = [
   },
   {
     id: "qianfan",
-    name: "百度千帆 (文心大模型 ERNIE)",
-    group: "domestic",
+    name: "Baidu",
     provider: "openai",
     baseUrl: "https://qianfan.baidubce.com/v2",
     defaultModel: "ernie-4.0-turbo-8k",
     popularModels: [
-      { model: "ernie-4.0-turbo-8k", label: "ERNIE 4.0 Turbo", desc: "百度文心旗舰", tag: "旗舰" },
+      { model: "ernie-4.0-turbo-8k", label: "ERNIE 4.0 Turbo", desc: "百度文心旗舰" },
       { model: "ernie-3.5-8k", label: "ERNIE 3.5", desc: "经典高性价比" },
       { model: "deepseek-r1", label: "千帆 DeepSeek-R1", desc: "千帆托管 R1" },
       { model: "deepseek-v3", label: "千帆 DeepSeek-V3", desc: "千帆托管 V3" },
@@ -185,145 +269,28 @@ const PROVIDERS: ProviderPreset[] = [
   },
   {
     id: "hunyuan",
-    name: "腾讯混元 (Tencent Hunyuan)",
-    group: "domestic",
+    name: "Tencent",
     provider: "openai",
     baseUrl: "https://api.hunyuan.cloud.tencent.com/v1",
     defaultModel: "hunyuan-standard",
     popularModels: [
-      { model: "hunyuan-standard", label: "混元 Standard", desc: "通用标准版", tag: "推荐" },
-      { model: "hunyuan-pro", label: "混元 Pro", desc: "混元旗舰版", tag: "旗舰" },
+      { model: "hunyuan-standard", label: "混元 Standard", desc: "通用标准版" },
+      { model: "hunyuan-pro", label: "混元 Pro", desc: "混元旗舰版" },
       { model: "hunyuan-turbo", label: "混元 Turbo", desc: "极速低延迟" },
     ],
     docUrl: "https://cloud.tencent.com/product/hunyuan",
     docLabel: "腾讯云混元控制台",
   },
-
-  // --- 国际主流平台 ---
-  {
-    id: "openai",
-    name: "OpenAI (官方 / ChatGPT)",
-    group: "global",
-    provider: "openai",
-    baseUrl: "https://api.openai.com/v1",
-    defaultModel: "gpt-4o-mini",
-    popularModels: [
-      { model: "gpt-4o-mini", label: "GPT-4o mini", desc: "轻快高性价比 · 跑友首选", tag: "推荐" },
-      { model: "gpt-4o", label: "GPT-4o", desc: "全能多模态旗舰", tag: "旗舰" },
-      { model: "o3-mini", label: "o3-mini", desc: "最新高性价比强推理", tag: "深度推理" },
-      { model: "o1", label: "o1", desc: "前沿通用慢思考推理" },
-    ],
-    docUrl: "https://platform.openai.com",
-    docLabel: "OpenAI Platform",
-  },
-  {
-    id: "anthropic",
-    name: "Anthropic (Claude 官方)",
-    group: "global",
-    provider: "anthropic",
-    baseUrl: "https://api.anthropic.com",
-    defaultModel: "claude-3-7-sonnet-latest",
-    popularModels: [
-      { model: "claude-3-7-sonnet-latest", label: "Claude 3.7 Sonnet", desc: "混合推理与深度思考最新旗舰", tag: "最新旗舰" },
-      { model: "claude-3-5-sonnet-latest", label: "Claude 3.5 Sonnet", desc: "业界标杆旗舰大模型" },
-      { model: "claude-3-5-haiku-latest", label: "Claude 3.5 Haiku", desc: "轻量快速高性价比" },
-    ],
-    docUrl: "https://console.anthropic.com",
-    docLabel: "Anthropic Console",
-  },
-  {
-    id: "gemini",
-    name: "Google Gemini (Google AI Studio)",
-    group: "global",
-    provider: "openai",
-    baseUrl: "https://generativelanguage.googleapis.com/v1beta/openai",
-    defaultModel: "gemini-2.5-flash",
-    popularModels: [
-      { model: "gemini-2.5-flash", label: "Gemini 2.5 Flash", desc: "兼顾深度思考与极速响应", tag: "推荐" },
-      { model: "gemini-2.5-pro", label: "Gemini 2.5 Pro", desc: "顶级复杂分析推理旗舰", tag: "旗舰" },
-      { model: "gemini-2.0-flash", label: "Gemini 2.0 Flash", desc: "低延迟极速生成" },
-      { model: "gemini-1.5-pro", label: "Gemini 1.5 Pro", desc: "百万长上下文" },
-    ],
-    docUrl: "https://aistudio.google.com",
-    docLabel: "Google AI Studio",
-    apiKeyHint: "Google AI Studio 提供充沛的免费调用额度，通过兼容接口直连",
-  },
-  {
-    id: "openrouter",
-    name: "OpenRouter (全球模型聚合路由)",
-    group: "global",
-    provider: "openai",
-    baseUrl: "https://openrouter.ai/api/v1",
-    defaultModel: "deepseek/deepseek-chat",
-    popularModels: [
-      { model: "deepseek/deepseek-chat", label: "DeepSeek V3", desc: "OpenRouter 托管路由", tag: "推荐" },
-      { model: "deepseek/deepseek-r1", label: "DeepSeek R1", desc: "OpenRouter R1 深度推理" },
-      { model: "anthropic/claude-3.7-sonnet", label: "Claude 3.7", desc: "聚合充值免海外绑卡" },
-      { model: "openai/gpt-4o-mini", label: "GPT-4o mini", desc: "高性价比" },
-      { model: "google/gemini-2.0-flash-001", label: "Gemini 2.0 Flash", desc: "超低单价" },
-      { model: "meta-llama/llama-3.3-70b-instruct", label: "Llama 3.3 70B", desc: "开源旗舰" },
-    ],
-    docUrl: "https://openrouter.ai",
-    docLabel: "OpenRouter 平台",
-    apiKeyHint: "单 API Key 自由调用全球数百款大模型",
-  },
-  {
-    id: "groq",
-    name: "Groq (全球极速 LPU 推理)",
-    group: "global",
-    provider: "openai",
-    baseUrl: "https://api.groq.com/openai/v1",
-    defaultModel: "llama-3.3-70b-versatile",
-    popularModels: [
-      { model: "llama-3.3-70b-versatile", label: "Llama 3.3 70B", desc: "每秒近 300 token 闪电回复", tag: "极速" },
-      { model: "deepseek-r1-distill-llama-70b", label: "DeepSeek R1 70B", desc: "R1 蒸馏极速推理" },
-      { model: "llama-3.1-8b-instant", label: "Llama 3.1 8B", desc: "瞬时超低延迟" },
-    ],
-    docUrl: "https://console.groq.com",
-    docLabel: "Groq Console",
-  },
-  {
-    id: "xai",
-    name: "xAI (Grok)",
-    group: "global",
-    provider: "openai",
-    baseUrl: "https://api.x.ai/v1",
-    defaultModel: "grok-2-latest",
-    popularModels: [
-      { model: "grok-2-latest", label: "Grok 2", desc: "xAI 旗舰主力模型", tag: "旗舰" },
-      { model: "grok-beta", label: "Grok Beta", desc: "测试体验版" },
-    ],
-    docUrl: "https://console.x.ai",
-    docLabel: "xAI 控制台",
-  },
-  {
-    id: "mistral",
-    name: "Mistral AI (欧洲顶尖旗舰)",
-    group: "global",
-    provider: "openai",
-    baseUrl: "https://api.mistral.ai/v1",
-    defaultModel: "mistral-large-latest",
-    popularModels: [
-      { model: "mistral-large-latest", label: "Mistral Large", desc: "Mistral 旗舰全能大模型", tag: "旗舰" },
-      { model: "mistral-small-latest", label: "Mistral Small", desc: "轻量高性价比" },
-      { model: "codestral-latest", label: "Codestral", desc: "结构化数据与代码逻辑特化" },
-    ],
-    docUrl: "https://console.mistral.ai",
-    docLabel: "Mistral Platform",
-  },
-
-  // --- 本地与自建 ---
   {
     id: "ollama",
-    name: "Ollama (本地私有大模型 · 离线)",
-    group: "local",
+    name: "Ollama",
     provider: "openai",
     baseUrl: "http://localhost:11434/v1",
     defaultModel: "deepseek-r1:latest",
     popularModels: [
-      { model: "deepseek-r1:latest", label: "deepseek-r1", desc: "本地运行 DeepSeek R1", tag: "离线推理" },
-      { model: "qwen2.5:latest", label: "qwen2.5", desc: "本地通义千问 2.5", tag: "离线" },
-      { model: "llama3.3:latest", label: "llama3.3", desc: "本地 Llama 3.3", tag: "离线" },
+      { model: "deepseek-r1:latest", label: "deepseek-r1", desc: "本地运行 DeepSeek R1" },
+      { model: "qwen2.5:latest", label: "qwen2.5", desc: "本地通义千问 2.5" },
+      { model: "llama3.3:latest", label: "llama3.3", desc: "本地 Llama 3.3" },
     ],
     docUrl: "https://ollama.com",
     docLabel: "Ollama 官网",
@@ -332,8 +299,7 @@ const PROVIDERS: ProviderPreset[] = [
   },
   {
     id: "custom",
-    name: "自定义平台 / OneAPI / NewAPI / 其它中转",
-    group: "local",
+    name: "自定义 / 中转",
     provider: "openai",
     baseUrl: "",
     defaultModel: "",
@@ -396,9 +362,20 @@ export default function Settings({
   );
 
   const [cfg, setCfg] = useState<any>({
-    provider: "openai", baseUrl: "https://api.openai.com/v1", apiKey: "",
-    model: "gpt-4o-mini", temperature: 0.7, maxTokens: 8000,
+    provider: "openai", baseUrl: "https://api.deepseek.com/v1", apiKey: "",
+    model: "", temperature: 0.7, maxTokens: 8000,
   });
+  // 记录各平台草稿配置（多平台独立记忆）
+  const [providerDrafts, setProviderDrafts] = useState<Record<string, { apiKey: string; model: string; baseUrl?: string; provider?: string }>>(() => {
+    try {
+      const saved = localStorage.getItem("pacecraft_ai_provider_drafts");
+      return saved ? JSON.parse(saved) : {};
+    } catch {
+      return {};
+    }
+  });
+  // 记录当前系统中真正已保存生效的平台 ID（用于高亮“当前生效中”）
+  const [activeSavedProviderId, setActiveSavedProviderId] = useState<string | null>(null);
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [providerTab, setProviderTab] = useState<"featured" | "domestic" | "global" | "local">("featured");
   const [selectedProviderId, setSelectedProviderId] = useState<string>("deepseek");
@@ -418,6 +395,133 @@ export default function Settings({
   const [wipeInput, setWipeInput] = useState("");
   const [wipeError, setWipeError] = useState<string | null>(null);
   const [confirmingDisconnect, setConfirmingDisconnect] = useState(false);
+
+  // 模拟测试数据清理状态
+  const [testDataInfo, setTestDataInfo] = useState<{ count: number; items: any[] } | null>(null);
+  const [cleaningTest, setCleaningTest] = useState(false);
+  const [testCleanMsg, setTestCleanMsg] = useState<string | null>(null);
+
+  const loadTestDataStatus = useCallback(async () => {
+    try {
+      const res = await api.testDataStatus();
+      setTestDataInfo(res);
+    } catch {}
+  }, []);
+
+  const handleCleanTestData = async () => {
+    if (!confirm("确定要清理数据库中的模拟测试记录吗？\n清理后将恢复真实主表记录，跑量和负荷将回归完全纯净。")) return;
+    setCleaningTest(true);
+    setTestCleanMsg(null);
+    try {
+      const res = await api.cleanTestData();
+      setTestCleanMsg(`已成功清理 ${res.removedCount} 条模拟测试记录，恢复 ${res.restoredActivities.length} 条真实活动！`);
+      await loadTestDataStatus();
+      onStatus();
+    } catch (e) {
+      alert((e as Error).message);
+    } finally {
+      setCleaningTest(false);
+    }
+  };
+
+  // Garmin 状态
+  const [garminAuth, setGarminAuth] = useState<GarminMultiAuthStatus | null>(null);
+  const hasCoros = Boolean(auth?.connected);
+  const hasGarmin = Boolean(garminAuth?.cn?.connected || garminAuth?.global?.connected);
+  const hasAnyWatch = hasCoros || hasGarmin;
+  const [garminCnKey, setGarminCnKey] = useState("");
+  const [garminGlobalKey, setGarminGlobalKey] = useState("");
+  const [connectingRegion, setConnectingRegion] = useState<"cn" | "global" | null>(null);
+  const [garminDisconnecting, setGarminDisconnecting] = useState<"cn" | "global" | null>(null);
+  const [confirmingGarminDisconnect, setConfirmingGarminDisconnect] = useState<"cn" | "global" | null>(null);
+  const [garminMsg, setGarminMsg] = useState<{ kind: "ok" | "error"; text: string } | null>(null);
+  const [garminSyncing, setGarminSyncing] = useState(false);
+  const [garminSyncProgress, setGarminSyncProgress] = useState<GarminSyncProgress | null>(null);
+
+  const refreshGarminAuth = useCallback(async () => {
+    try {
+      const res = await api.garminAuthStatus();
+      setGarminAuth(res);
+      return res;
+    } catch {
+      return null;
+    }
+  }, []);
+
+  const handleConnectGarminRegion = async (region: "cn" | "global") => {
+    const key = region === "cn" ? garminCnKey.trim() : garminGlobalKey.trim();
+    if (!key) {
+      setGarminMsg({ kind: "error", text: `请输入 Garmin (${region === "cn" ? "中国区" : "国际区"}) Personal API Key` });
+      return;
+    }
+    setConnectingRegion(region);
+    setGarminMsg(null);
+    try {
+      const res = await api.connectGarmin(key, region);
+      await refreshGarminAuth();
+      setGarminMsg({
+        kind: "ok",
+        text: `Garmin (${region === "cn" ? "中国区" : "国际区"}) 账号连接成功！正在自动同步近 1 年运动数据...`,
+      });
+      if (region === "cn") setGarminCnKey("");
+      else setGarminGlobalKey("");
+      onStatus();
+      // 授权成功后，自动触发该区域的数据同步
+      void handleSyncGarmin(region);
+    } catch (e) {
+      setGarminMsg({ kind: "error", text: (e as Error).message });
+    } finally {
+      setConnectingRegion(null);
+    }
+  };
+
+  const handleDisconnectGarminRegion = async (region: "cn" | "global") => {
+    setGarminDisconnecting(region);
+    try {
+      await api.disconnectGarmin(region);
+      await refreshGarminAuth();
+      setGarminMsg({ kind: "ok", text: `Garmin (${region === "cn" ? "中国区" : "国际区"}) 账号已解除绑定` });
+      setConfirmingGarminDisconnect(null);
+      onStatus();
+    } catch (e) {
+      setGarminMsg({ kind: "error", text: (e as Error).message });
+    } finally {
+      setGarminDisconnecting(null);
+    }
+  };
+
+  const handleSyncGarmin = async (region?: "cn" | "global" | "all") => {
+    setGarminSyncing(true);
+    setGarminMsg(null);
+    const pollTimer = setInterval(async () => {
+      try {
+        const p = await api.garminSyncProgress();
+        setGarminSyncProgress(p);
+        if (!p.active) {
+          clearInterval(pollTimer);
+        }
+      } catch {}
+    }, 800);
+
+    try {
+      const res = await api.syncGarmin(100, region);
+      const conflictMsg = res.conflictsResolved ? `，自动去重 ${res.conflictsResolved} 笔同场重叠记录` : "";
+      setGarminMsg({
+        kind: "ok",
+        text: `Garmin 同步成功！共扫描 ${res.syncedCount} 条记录，新增 ${res.newActivities} 条，下载并解析 .FIT ${res.fitDownloaded} 份${conflictMsg}。`,
+      });
+      onStatus();
+    } catch (e) {
+      setGarminMsg({ kind: "error", text: `同步失败: ${(e as Error).message}` });
+    } finally {
+      clearInterval(pollTimer);
+      setGarminSyncing(false);
+      try {
+        const p = await api.garminSyncProgress();
+        setGarminSyncProgress(p);
+      } catch {}
+    }
+  };
 
   // 同步哪些运动类型：编码表由服务端下发，这里只存选中的 code
   const [sports, setSports] = useState<SyncSportsPayload | null>(null);
@@ -564,8 +668,23 @@ export default function Settings({
         setCfg((c: any) => ({ ...c, ...s }));
         const pid = detectProviderId(s.baseUrl, s.provider);
         setSelectedProviderId(pid);
-        const p = PROVIDERS.find((item) => item.id === pid);
-        if (p?.group) setProviderTab(p.group);
+        setActiveSavedProviderId(pid);
+        // 初始化当前生效平台的记忆
+        setProviderDrafts((prev) => {
+          const next = {
+            ...prev,
+            [pid]: {
+              apiKey: s.apiKey || prev[pid]?.apiKey || "",
+              model: s.model || prev[pid]?.model || "",
+              baseUrl: s.baseUrl,
+              provider: s.provider,
+            },
+          };
+          try {
+            localStorage.setItem("pacecraft_ai_provider_drafts", JSON.stringify(next));
+          } catch {}
+          return next;
+        });
       }
     }).catch(() => {});
     api.syncSports().then((s) => {
@@ -573,8 +692,10 @@ export default function Settings({
       setPicked(s.selected);
     }).catch(() => {});
     loadHr();
+    refreshGarminAuth();
+    loadTestDataStatus();
     api.systemDataInfo().then((info) => setDataDir(info.rootDataDir)).catch(() => {});
-  }, []);
+  }, [refreshGarminAuth, loadTestDataStatus]);
 
   /** 切换一个运动类型 */
   const toggleSport = (code: number) =>
@@ -623,7 +744,24 @@ export default function Settings({
     setSaving(true); setAiMsg(null);
     try {
       await api.saveAiSettings(cfg);
-      setAiMsg({ kind: "ok", text: "已保存配置。之后在训练详情页、训练周报与备赛页均可使用 AI 分析。" });
+      setActiveSavedProviderId(selectedProviderId);
+      // 更新该平台的持久化草稿
+      setProviderDrafts((prev) => {
+        const next = {
+          ...prev,
+          [selectedProviderId]: {
+            apiKey: cfg.apiKey || "",
+            model: cfg.model || "",
+            baseUrl: cfg.baseUrl,
+            provider: cfg.provider,
+          },
+        };
+        try {
+          localStorage.setItem("pacecraft_ai_provider_drafts", JSON.stringify(next));
+        } catch {}
+        return next;
+      });
+      setAiMsg({ kind: "ok", text: `已保存并生效当前【${currentProvider?.name || selectedProviderId}】配置。` });
       onStatus();
       api.status().then(setStatus).catch(() => {});
     } catch (e) {
@@ -642,56 +780,142 @@ export default function Settings({
   };
 
   const doSync = async () => {
-    setSyncing(true); setMsg(null);
-    const timer = setInterval(async () => {
-      try {
-        const p = await api.syncProgress();
-        setSyncProgress(p);
-        if (!p.active) {
-          clearInterval(timer);
-        }
-      } catch {}
-    }, 500);
+    if (!hasAnyWatch) return;
+    setSyncing(true);
+    setMsg(null);
+
+    const summaries: string[] = [];
+    const errors: string[] = [];
 
     try {
-      const r = await api.sync(syncDays);
+      // 1. 同步高驰 COROS（若已连接）
+      if (hasCoros) {
+        setSyncProgress({
+          active: true,
+          phase: "records",
+          current: 0,
+          total: 100,
+          percent: 5,
+          message: "正在连接高驰 COROS 拉取历史记录...",
+          startedAt: Date.now(),
+        });
+
+        let timer: ReturnType<typeof setInterval> | null = setInterval(async () => {
+          try {
+            const p = await api.syncProgress();
+            if (p.active) setSyncProgress(p);
+          } catch {}
+        }, 500);
+
+        try {
+          const r = await api.sync(syncDays);
+          summaries.push(
+            `高驰：${r.activities} 次活动、${r.details} 条详情、${r.lapRows} 行分圈、${r.loadDays} 天负荷（FIT 额度剩余 ${r.fitQuotaLeft}/50）`
+          );
+          if (r.errors?.length) errors.push(...r.errors);
+        } catch (e: any) {
+          errors.push(`高驰同步失败: ${e.message}`);
+        } finally {
+          if (timer) clearInterval(timer);
+        }
+      }
+
+      // 2. 同步佳明 Garmin（若已连接）
+      if (hasGarmin) {
+        setSyncProgress({
+          active: true,
+          phase: "list",
+          current: 0,
+          total: 100,
+          percent: hasCoros ? 50 : 5,
+          message: "正在连接 Garmin 佳明拉取历史训练与健康数据...",
+          startedAt: Date.now(),
+        });
+
+        let gTimer: ReturnType<typeof setInterval> | null = setInterval(async () => {
+          try {
+            const gp = await api.garminSyncProgress();
+            if (gp.active) {
+              setSyncProgress({
+                active: true,
+                phase: gp.phase,
+                current: gp.current,
+                total: gp.total,
+                percent: hasCoros ? 50 + Math.round(gp.percent * 0.5) : gp.percent,
+                message: gp.message,
+                startedAt: Date.now(),
+              });
+            }
+          } catch {}
+        }, 500);
+
+        try {
+          const count = Math.max(100, Math.ceil(syncDays * 1.5));
+          const gRes = await api.syncGarmin(count, "all");
+          const conflictMsg = gRes.conflictsResolved ? `（自动去重 ${gRes.conflictsResolved} 笔同场重叠）` : "";
+          summaries.push(`佳明：扫描 ${gRes.syncedCount} 条，新增 ${gRes.newActivities} 条，解析 FIT ${gRes.fitDownloaded} 份${conflictMsg}`);
+        } catch (e: any) {
+          errors.push(`佳明同步失败: ${e.message}`);
+        } finally {
+          if (gTimer) clearInterval(gTimer);
+        }
+      }
+
       setMsg({
-        kind: r.errors?.length ? "error" : "ok",
-        text:
-          `同步完成：${r.activities} 次活动、${r.details} 条详情、${r.lapRows} 行分圈、${r.loadDays} 天负荷、${r.healthDays} 天健康、${r.sleepDays} 天睡眠。` +
-          (r.errors?.length ? ` 有 ${r.errors.length} 个错误：${r.errors.slice(0, 3).join("；")}` : "") +
-          ` FIT 配额剩余 ${r.fitQuotaLeft}/50。`,
+        kind: errors.length ? "error" : "ok",
+        text: `同步完成！${summaries.join(" ｜ ")}${errors.length ? ` 有错误：${errors.slice(0, 3).join("；")}` : ""}`,
       });
       onStatus();
-    } catch (e) {
-      setMsg({ kind: "error", text: (e as Error).message });
+    } catch (e: any) {
+      setMsg({ kind: "error", text: (e as Error).message || "同步异常" });
     } finally {
-      clearInterval(timer);
       setSyncing(false);
       setTimeout(() => setSyncProgress(null), 3000);
     }
   };
 
   const onSelectProvider = (pid: string) => {
+    // 1. 先保存当前旧平台的输入到记忆中
+    const oldPid = selectedProviderId;
+    let updatedDrafts = { ...providerDrafts };
+    if (oldPid) {
+      updatedDrafts[oldPid] = {
+        apiKey: cfg.apiKey || "",
+        model: cfg.model || "",
+        baseUrl: cfg.baseUrl,
+        provider: cfg.provider,
+      };
+      setProviderDrafts(updatedDrafts);
+      try {
+        localStorage.setItem("pacecraft_ai_provider_drafts", JSON.stringify(updatedDrafts));
+      } catch {}
+    }
+
+    // 2. 切换到新平台
     setSelectedProviderId(pid);
     const found = PROVIDERS.find((p) => p.id === pid);
     if (!found) return;
-    setProviderTab(found.group);
+
+    // 3. 读取新平台的历史记忆（如果有的话；如果没有则展现干净空白）
+    const draft = updatedDrafts[pid];
+
     if (found.id === "custom") {
-      setShowAdvanced(true);
       setCfg((c: any) => ({
         ...c,
-        provider: c.provider || "openai",
-        baseUrl: detectProviderId(c.baseUrl, c.provider) !== "custom" ? "" : c.baseUrl,
+        provider: draft?.provider || c.provider || "openai",
+        baseUrl: draft?.baseUrl !== undefined ? draft.baseUrl : (detectProviderId(c.baseUrl, c.provider) !== "custom" ? "" : c.baseUrl),
+        apiKey: draft?.apiKey ?? "",
+        model: draft?.model ?? "",
       }));
       return;
     }
+
     setCfg((c: any) => ({
       ...c,
-      provider: found.provider,
-      baseUrl: found.baseUrl,
-      model: found.defaultModel || c.model,
-      apiKey: (found.id === "ollama" && !c.apiKey) ? "ollama" : c.apiKey,
+      provider: draft?.provider || found.provider,
+      baseUrl: draft?.baseUrl || found.baseUrl,
+      apiKey: draft?.apiKey !== undefined ? draft.apiKey : (found.id === "ollama" ? "ollama" : ""),
+      model: draft?.model !== undefined ? draft.model : "",
     }));
   };
 
@@ -719,13 +943,13 @@ export default function Settings({
               )}
             </div>
             <p className="card-sub" style={{ margin: "2px 0 12px" }}>
-              配置 AI 模型用于训练场次深度复盘、周报评析与赛事备战推演。已预置主流国内外模型平台与高频配置。
+              配置大语言模型用于训练场次深度复盘、周报评析与赛事备战推演。支持主流模型平台与自定义接口。
             </p>
 
-            {/* 1. 服务商平台选择（分类卡片 + 快捷网格，避免长下拉框） */}
+            {/* 1. 服务商平台选择（平铺报菜名 / 网格排列方式展示） */}
             <div style={{ marginBottom: 12 }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
-                <span style={{ fontSize: 12.5, fontWeight: 500, color: "var(--fg)" }}>服务商平台</span>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+                <span style={{ fontSize: 12.5, fontWeight: 600, color: "var(--fg)" }}>服务商平台</span>
                 {/* 紧凑下拉备选：方便快速直接切换 */}
                 <select
                   value={currentProviderId}
@@ -742,78 +966,25 @@ export default function Settings({
                   }}
                   title="也可以从下拉列表中直接切换"
                 >
-                  {PROVIDER_GROUPS.map((grp) => (
-                    <optgroup key={grp.key} label={grp.label}>
-                      {PROVIDERS.filter((p) => p.group === grp.key).map((p) => (
-                        <option key={p.id} value={p.id}>
-                          {p.name}
-                        </option>
-                      ))}
-                    </optgroup>
+                  {PROVIDERS.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.name}
+                    </option>
                   ))}
                 </select>
               </div>
 
-              {/* 分类选项卡 */}
-              <div style={{ display: "flex", gap: 5, marginBottom: 8, overflowX: "auto", paddingBottom: 2 }}>
-                {PROVIDER_GROUPS.map((grp) => {
-                  const isTabActive = providerTab === grp.key;
-                  const hasSelectedHere = currentProvider?.group === grp.key;
-                  return (
-                    <button
-                      key={grp.key}
-                      type="button"
-                      onClick={() => setProviderTab(grp.key)}
-                      style={{
-                        cursor: "pointer",
-                        padding: "4px 10px",
-                        borderRadius: 6,
-                        fontSize: 12,
-                        fontWeight: isTabActive ? 600 : 400,
-                        border: isTabActive ? "1px solid var(--accent)" : "1px solid var(--border)",
-                        background: isTabActive ? "rgba(14, 165, 233, 0.12)" : "var(--surface-2)",
-                        color: isTabActive ? "var(--accent)" : "var(--muted)",
-                        display: "inline-flex",
-                        alignItems: "center",
-                        gap: 5,
-                        whiteSpace: "nowrap",
-                        transition: "all 0.15s ease",
-                      }}
-                    >
-                      <span>{grp.label}</span>
-                      {hasSelectedHere && (
-                        <span
-                          style={{
-                            width: 6,
-                            height: 6,
-                            borderRadius: "50%",
-                            background: "var(--accent)",
-                            display: "inline-block",
-                          }}
-                          title="当前选中的平台在此分类"
-                        />
-                      )}
-                    </button>
-                  );
-                })}
-              </div>
-
-              {providerTab === "global" && (
-                <div style={{ marginBottom: 8, padding: "6px 10px", background: "var(--surface-2)", borderRadius: 6, fontSize: 11.5, color: "var(--muted)", border: "1px solid var(--border)" }}>
-                  🌐 <strong>数据出境提示</strong>：选用境外大模型平台时，训练指标数据将由您的设备直接发送至对应境外服务商，请确认您知悉并同意其数据隐私政策。
-                </div>
-              )}
-
-              {/* 当前分类下的服务商按钮网格 */}
+              {/* 全部服务商平台平铺平列（报菜名排列，无任何地域与国内外标签） */}
               <div
                 style={{
                   display: "grid",
-                  gridTemplateColumns: "repeat(auto-fill, minmax(138px, 1fr))",
+                  gridTemplateColumns: "repeat(auto-fill, minmax(115px, 1fr))",
                   gap: 6,
                 }}
               >
-                {PROVIDERS.filter((p) => p.group === providerTab).map((p) => {
+                {PROVIDERS.map((p) => {
                   const isSelected = currentProviderId === p.id;
+                  const isActiveSaved = activeSavedProviderId === p.id && status?.aiConfigured;
                   const shortName = p.name.split(" (")[0];
                   const subText = p.name.includes(" (") ? p.name.slice(p.name.indexOf(" (") + 2, -1) : "";
                   return (
@@ -826,8 +997,8 @@ export default function Settings({
                         textAlign: "left",
                         padding: "7px 9px",
                         borderRadius: 7,
-                        border: isSelected ? "1.5px solid var(--accent)" : "1px solid var(--border)",
-                        background: isSelected ? "rgba(14, 165, 233, 0.12)" : "var(--surface-2)",
+                        border: isSelected ? "1.5px solid var(--accent)" : isActiveSaved ? "1px solid rgba(16,185,129,0.4)" : "1px solid var(--border)",
+                        background: isSelected ? "rgba(14, 165, 233, 0.12)" : isActiveSaved ? "rgba(16,185,129,0.06)" : "var(--surface-2)",
                         display: "flex",
                         flexDirection: "column",
                         gap: 2,
@@ -846,14 +1017,30 @@ export default function Settings({
                         >
                           {shortName}
                         </span>
-                        {isSelected && (
-                          <span style={{ color: "var(--accent)", fontSize: 12, fontWeight: 700 }}>✓</span>
-                        )}
+                        <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                          {isActiveSaved && (
+                            <span
+                              style={{
+                                width: 6,
+                                height: 6,
+                                borderRadius: "50%",
+                                background: "#10b981",
+                                boxShadow: "0 0 4px rgba(16, 185, 129, 0.6)",
+                                display: "inline-block",
+                                flexShrink: 0,
+                              }}
+                              title="当前生效中"
+                            />
+                          )}
+                          {isSelected && (
+                            <span style={{ color: "var(--accent)", fontSize: 11, fontWeight: 700 }}>✓</span>
+                          )}
+                        </div>
                       </div>
                       {subText && (
                         <span
                           style={{
-                            fontSize: 10.5,
+                            fontSize: 10,
                             color: isSelected ? "var(--accent)" : "var(--muted)",
                             opacity: 0.85,
                             lineHeight: 1.15,
@@ -871,47 +1058,25 @@ export default function Settings({
               </div>
             </div>
 
-            {/* 若选中自定义平台，直接在此展开清晰的 Base URL 与协议设置 */}
-            {currentProviderId === "custom" && (
-              <div
-                style={{
-                  marginTop: -2,
-                  marginBottom: 12,
-                  padding: "12px",
-                  background: "var(--surface-2)",
-                  borderRadius: 8,
-                  border: "1.5px solid var(--accent)",
-                  display: "flex",
-                  flexDirection: "column",
-                  gap: 10,
-                }}
-              >
-                <div style={{ fontSize: 12, fontWeight: 600, color: "var(--accent)", display: "flex", alignItems: "center", gap: 5 }}>
-                  <span>⚙️</span> 自定义平台 / OneAPI / NewAPI / 其它中转接口配置
-                </div>
-                <label className="field" style={{ margin: 0 }}>
-                  <span>接口协议</span>
-                  <select value={cfg.provider} onChange={(e) => setCfg({ ...cfg, provider: e.target.value })}>
-                    <option value="openai">OpenAI 兼容（/chat/completions）</option>
-                    <option value="anthropic">Anthropic（/v1/messages）</option>
-                  </select>
-                </label>
-                <label className="field" style={{ margin: 0 }}>
-                  <span>Base URL（必填）</span>
-                  <input
-                    value={cfg.baseUrl}
-                    onChange={(e) => setCfg({ ...cfg, baseUrl: e.target.value })}
-                    placeholder="例如 https://api.your-proxy.com/v1"
-                    autoFocus
-                  />
-                  <div className="hint" style={{ marginTop: 3 }}>
-                    {cfg.provider === "openai"
-                      ? "需包含到 /v1 这一层（如 https://api.your-proxy.com/v1），程序会自动拼 /chat/completions"
-                      : "填到域名即可，程序会自动拼 /v1/messages"}
-                  </div>
-                </label>
-              </div>
-            )}
+            {/* 接口协议与 Base URL：直接作为常规配置展示，无需去高级折叠中寻找 */}
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 2fr", gap: 8, marginBottom: 10 }}>
+              <label className="field" style={{ margin: 0 }}>
+                <span>接口协议</span>
+                <select value={cfg.provider} onChange={(e) => setCfg({ ...cfg, provider: e.target.value })}>
+                  <option value="openai">OpenAI 兼容</option>
+                  <option value="anthropic">Anthropic</option>
+                </select>
+              </label>
+
+              <label className="field" style={{ margin: 0 }}>
+                <span>Base URL</span>
+                <input
+                  value={cfg.baseUrl}
+                  onChange={(e) => setCfg({ ...cfg, baseUrl: e.target.value })}
+                  placeholder={cfg.provider === "openai" ? "https://api.openai.com/v1" : "https://api.anthropic.com"}
+                />
+              </label>
+            </div>
 
             {/* 服务商快捷指引 */}
             {currentProvider && (currentProvider.docUrl || currentProvider.apiKeyHint) && (
@@ -943,7 +1108,7 @@ export default function Settings({
             )}
 
             {/* 2. API Key */}
-            <label className="field">
+            <label className="field" style={{ marginBottom: 10 }}>
               <span>API Key</span>
               <input
                 type="password"
@@ -960,8 +1125,8 @@ export default function Settings({
               />
             </label>
 
-            {/* 3. 模型名 + 热门快捷选择 */}
-            <label className="field" style={{ marginBottom: 4 }}>
+            {/* 3. 模型名 */}
+            <label className="field" style={{ marginBottom: 12 }}>
               <span>模型名称</span>
               <input
                 list="ai-model-datalist"
@@ -978,60 +1143,7 @@ export default function Settings({
               </datalist>
             </label>
 
-            {/* 热门预置模型一键填入 */}
-            {currentProvider?.popularModels && currentProvider.popularModels.length > 0 && (
-              <div style={{ marginTop: 6, marginBottom: 12 }}>
-                <div style={{ fontSize: 11.5, color: "var(--muted)", marginBottom: 6 }}>
-                  热门推荐模型（点击一键选择）：
-                </div>
-                <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-                  {currentProvider.popularModels.map((pm) => {
-                    const active = cfg.model === pm.model;
-                    return (
-                      <button
-                        key={pm.model}
-                        type="button"
-                        onClick={() => setCfg({ ...cfg, model: pm.model })}
-                        style={{
-                          cursor: "pointer",
-                          fontSize: 12,
-                          padding: "4px 9px",
-                          borderRadius: 6,
-                          border: active ? "1px solid var(--accent)" : "1px solid var(--border)",
-                          background: active ? "rgba(14, 165, 233, 0.14)" : "var(--surface-2)",
-                          color: active ? "var(--accent)" : "var(--fg)",
-                          display: "inline-flex",
-                          alignItems: "center",
-                          gap: 5,
-                          fontWeight: active ? 600 : 400,
-                          transition: "all 0.15s ease",
-                        }}
-                        title={pm.desc ? `${pm.model} · ${pm.desc}` : pm.model}
-                      >
-                        <span>{pm.label}</span>
-                        {pm.tag && (
-                          <span
-                            style={{
-                              fontSize: 10,
-                              padding: "1px 4px",
-                              borderRadius: 3,
-                              background: active ? "var(--accent)" : "var(--border)",
-                              color: active ? "#fff" : "var(--muted)",
-                              fontWeight: 500,
-                              lineHeight: 1.1,
-                            }}
-                          >
-                            {pm.tag}
-                          </span>
-                        )}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
-
-            {/* 高级选项折叠器：供修改 Base URL、协议、温度与最大 Token */}
+            {/* 高级参数折叠器：仅保留温度与最大 Token 调节 */}
             <div style={{ marginTop: 4, marginBottom: 14 }}>
               <button
                 type="button"
@@ -1049,37 +1161,11 @@ export default function Settings({
                 }}
                 onClick={() => setShowAdvanced(!showAdvanced)}
               >
-                <span>{showAdvanced ? "▾ 收起自定义接口与高级参数（Base URL / 协议 / Token 预算）" : "▸ 展开自定义接口与高级参数（Base URL / 协议 / Token 预算）"}</span>
+                <span>{showAdvanced ? "▾ 收起高级超参数 (Temperature / Token)" : "▸ 展开高级超参数 (Temperature / Token)"}</span>
               </button>
 
               {showAdvanced && (
                 <div style={{ marginTop: 8, padding: "12px", background: "var(--surface-2)", borderRadius: 8, display: "flex", flexDirection: "column", gap: 10, border: "1px solid var(--border)" }}>
-                  {currentProviderId !== "custom" && (
-                    <>
-                      <label className="field" style={{ margin: 0 }}>
-                        <span>接口协议</span>
-                        <select value={cfg.provider} onChange={(e) => setCfg({ ...cfg, provider: e.target.value })}>
-                          <option value="openai">OpenAI 兼容（/chat/completions）</option>
-                          <option value="anthropic">Anthropic（/v1/messages）</option>
-                        </select>
-                      </label>
-
-                      <label className="field" style={{ margin: 0 }}>
-                        <span>Base URL</span>
-                        <input
-                          value={cfg.baseUrl}
-                          onChange={(e) => setCfg({ ...cfg, baseUrl: e.target.value })}
-                          placeholder="https://api.openai.com/v1"
-                        />
-                        <div className="hint" style={{ marginTop: 3 }}>
-                          {cfg.provider === "openai"
-                            ? "需包含到 /v1 这一层，程序会自动拼 /chat/completions"
-                            : "填到域名即可，程序会自动拼 /v1/messages"}
-                        </div>
-                      </label>
-                    </>
-                  )}
-
                   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
                     <label className="field" style={{ margin: 0 }}>
                       <span>温度 (Temperature)</span>
@@ -1334,154 +1420,394 @@ export default function Settings({
           <WorkflowPanel />
         </div>
 
-        {/* 右列：COROS 数据同步 + 当前数据状态 */}
+        {/* 右列：手表设备账号连接 + 当前数据状态 */}
         <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-          {/* COROS 账号绑定卡片 */}
-          <div className="card">
-            <h3 className="card-title">
-              <span style={{ display: "inline-block", width: 8, height: 8, borderRadius: "50%", background: auth?.connected ? "#10b981" : "#f59e0b", marginRight: 6 }} />
-              COROS 账号连接
-              {status?.profile && (
-                <span style={{ fontSize: 11, fontWeight: "normal", color: "var(--text-dim)", marginLeft: 8 }}>
-                  (档案: {status.profile.nickname && status.profile.nickname !== status.profile.name ? `${status.profile.name}（${status.profile.nickname}）` : status.profile.name})
-                </span>
-              )}
-            </h3>
-            <p className="card-sub">
-              通过高驰官方 OAuth 2.0 PKCE 协议连接。授权凭证只保存在你本地电脑，不经过任何第三方服务器。
+          {/* 统一外层大边框：运动手表账号连接中心 */}
+          <div
+            style={{
+              background: "var(--card-bg, var(--surface))",
+              border: "1px solid var(--border)",
+              borderRadius: "var(--radius, 12px)",
+              padding: "18px 20px",
+              boxShadow: "0 2px 8px rgba(0,0,0,0.06)",
+            }}
+          >
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6, flexWrap: "wrap", gap: 8 }}>
+              <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700, display: "flex", alignItems: "center", gap: 8 }}>
+                <span>⌚</span> 运动手表账号连接
+              </h3>
+              <span style={{ fontSize: 12, color: "var(--text-dim)", background: "var(--surface-2)", padding: "2px 8px", borderRadius: 12 }}>
+                多品牌并存 · 本地安全加密
+              </span>
+            </div>
+            <p style={{ margin: "0 0 16px 0", fontSize: 12.5, color: "var(--text-dim)", lineHeight: 1.5 }}>
+              管理你的运动手表数据源。支持<strong>高驰 (COROS) 与佳明 (中国区 / 国际区)</strong> 同时绑定与多源数据汇聚，凭证仅保存在本地设备。
             </p>
-            {authMsg && (
-              <div className={`sync-msg ${authMsg.kind}`} style={{ marginBottom: 10 }}>
-                {authMsg.text}
-              </div>
-            )}
-            {auth?.connected ? (
-              <div style={{ background: "var(--bg-subtle, rgba(255,255,255,0.03))", padding: "12px 14px", borderRadius: 8, border: "1px solid var(--border)", marginBottom: 8 }}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
-                  <span style={{ fontSize: 13, fontWeight: 600 }}>高驰昵称：{auth.nickname || "已绑定（未拉取昵称）"}</span>
-                  <span style={{ fontSize: 11, color: "#10b981", background: "rgba(16,185,129,0.1)", padding: "2px 8px", borderRadius: 12 }}>● 正常连接</span>
-                </div>
-                <div style={{ fontSize: 12, color: "var(--text-dim)" }}>
-                  Token 有效期至：{auth.expiresAt ? new Date(auth.expiresAt * 1000).toLocaleString("zh-CN") : "长期有效（自动续期）"}
-                </div>
-                <div style={{ display: "flex", gap: 8, marginTop: 12, alignItems: "center", flexWrap: "wrap" }}>
-                  <button className="btn-secondary" onClick={connectCoros} disabled={authConnecting} style={{ fontSize: 12, padding: "5px 12px" }}>
-                    {authConnecting ? "正在打开授权页面…" : "重新授权"}
-                  </button>
-                  {!confirmingDisconnect ? (
-                    <button
-                      type="button"
-                      className="btn-danger"
-                      onClick={() => setConfirmingDisconnect(true)}
-                      disabled={authLoading}
-                      style={{ fontSize: 12, padding: "5px 12px", background: "rgba(239,68,68,0.1)", color: "#ef4444", border: "1px solid rgba(239,68,68,0.2)", borderRadius: 6, cursor: "pointer" }}
-                    >
-                      解除绑定
-                    </button>
-                  ) : (
-                    <div style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "3px 8px", background: "rgba(239,68,68,0.08)", borderRadius: 6, border: "1px solid rgba(239,68,68,0.25)" }}>
-                      <span style={{ fontSize: 12, color: "#ef4444", fontWeight: 500 }}>确定解除？</span>
-                      <button
-                        type="button"
-                        onClick={async () => {
-                          await disconnectCoros();
-                          setConfirmingDisconnect(false);
-                        }}
-                        disabled={authLoading}
-                        style={{ fontSize: 11.5, padding: "3px 8px", background: "#ef4444", color: "#fff", border: "none", borderRadius: 4, cursor: "pointer", fontWeight: 600 }}
-                      >
-                        {authLoading ? "解绑中…" : "确认解绑"}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setConfirmingDisconnect(false)}
-                        disabled={authLoading}
-                        style={{ fontSize: 11.5, padding: "3px 6px", background: "transparent", color: "var(--text-dim)", border: "1px solid var(--border)", borderRadius: 4, cursor: "pointer" }}
-                      >
-                        取消
-                      </button>
-                    </div>
+
+            <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+              {/* COROS 账号绑定卡片 */}
+              <div className="card" style={{ margin: 0, background: "var(--surface-2, rgba(255,255,255,0.02))", border: "1px solid var(--border)" }}>
+                <h3 className="card-title">
+                  <span style={{ display: "inline-block", width: 8, height: 8, borderRadius: "50%", background: auth?.connected ? "#10b981" : "#f59e0b", marginRight: 6 }} />
+                  COROS 高驰账号连接
+                  {status?.profile && (
+                    <span style={{ fontSize: 11, fontWeight: "normal", color: "var(--text-dim)", marginLeft: 8 }}>
+                      (档案: {status.profile.nickname && status.profile.nickname !== status.profile.name ? `${status.profile.name}（${status.profile.nickname}）` : status.profile.name})
+                    </span>
                   )}
-                </div>
-              </div>
-            ) : (
-              <div style={{ background: "rgba(245,158,11,0.06)", padding: "14px", borderRadius: 8, border: "1px dashed #f59e0b", marginBottom: 8 }}>
-                <div style={{ fontSize: 13, fontWeight: 600, color: "#f59e0b", marginBottom: 4 }}>
-                  当前尚未连接 COROS 账号
-                </div>
-                <p style={{ fontSize: 12, color: "var(--text-dim)", margin: "0 0 12px 0", lineHeight: 1.5 }}>
-                  连接后可直接拉取历史跑步数据、心率、分圈及体能负荷指标。
+                </h3>
+                <p className="card-sub">
+                  通过高驰官方 OAuth 2.0 PKCE 协议连接。授权凭证只保存在你本地电脑，不经过任何第三方服务器。
                 </p>
-                {!authConnecting ? (
-                  <button
-                    type="button"
-                    onClick={connectCoros}
-                    style={{
-                      background: "#2563eb",
-                      color: "#fff",
-                      border: "none",
-                      borderRadius: 6,
-                      padding: "8px 16px",
-                      fontSize: 13,
-                      fontWeight: 600,
-                      cursor: "pointer",
-                      display: "inline-flex",
-                      alignItems: "center",
-                      gap: 6,
-                    }}
-                  >
-                    🔗 一键连接 COROS 账号
-                  </button>
-                ) : (
-                  <div style={{ background: "var(--bg-subtle, rgba(0,0,0,0.2))", padding: "10px 12px", borderRadius: 6, border: "1px solid var(--border)" }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8, fontSize: 12.5, fontWeight: 500, color: "#60a5fa" }}>
-                      <span className="spinner" style={{ display: "inline-block", width: 12, height: 12, border: "2px solid #60a5fa", borderTopColor: "transparent", borderRadius: "50%", animation: "spin 1s linear infinite" }} />
-                      正在等待浏览器完成授权…
+                {authMsg && (
+                  <div className={`sync-msg ${authMsg.kind}`} style={{ marginBottom: 10 }}>
+                    {authMsg.text}
+                  </div>
+                )}
+                {auth?.connected ? (
+                  <div style={{ background: "var(--bg-subtle, rgba(255,255,255,0.03))", padding: "12px 14px", borderRadius: 8, border: "1px solid var(--border)", marginBottom: 8 }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+                      <span style={{ fontSize: 13, fontWeight: 600 }}>高驰昵称：{auth.nickname || "已绑定（未拉取昵称）"}</span>
+                      <span style={{ fontSize: 11, color: "#10b981", background: "rgba(16,185,129,0.1)", padding: "2px 8px", borderRadius: 12 }}>● 正常连接</span>
                     </div>
-                    <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
-                      <button
-                        type="button"
-                        onClick={openCorosBrowser}
-                        style={{ fontSize: 12, padding: "4px 10px", background: "#2563eb", color: "#fff", border: "none", borderRadius: 4, cursor: "pointer" }}
-                      >
-                        🌐 在浏览器中打开
+                    <div style={{ fontSize: 12, color: "var(--text-dim)" }}>
+                      Token 有效期至：{auth.expiresAt ? new Date(auth.expiresAt * 1000).toLocaleString("zh-CN") : "长期有效（自动续期）"}
+                    </div>
+                    <div style={{ display: "flex", gap: 8, marginTop: 12, alignItems: "center", flexWrap: "wrap" }}>
+                      <button className="btn-secondary" onClick={connectCoros} disabled={authConnecting} style={{ fontSize: 12, padding: "5px 12px" }}>
+                        {authConnecting ? "正在打开授权页面…" : "重新授权"}
                       </button>
-                      {authUrl && (
+                      {!confirmingDisconnect ? (
                         <button
                           type="button"
-                          onClick={() => copyAuthUrl(authUrl)}
-                          style={{
-                            fontSize: 12,
-                            padding: "4px 10px",
-                            background: copiedAuthUrl ? "rgba(34, 197, 94, 0.15)" : "var(--surface-2)",
-                            color: copiedAuthUrl ? "var(--good)" : "var(--fg)",
-                            border: `1px solid ${copiedAuthUrl ? "var(--good)" : "var(--border)"}`,
-                            borderRadius: 4,
-                            cursor: "pointer",
-                            transition: "all 0.2s ease",
-                          }}
+                          className="btn-danger"
+                          onClick={() => setConfirmingDisconnect(true)}
+                          disabled={authLoading}
+                          style={{ fontSize: 12, padding: "5px 12px", background: "rgba(239,68,68,0.1)", color: "#ef4444", border: "1px solid rgba(239,68,68,0.2)", borderRadius: 6, cursor: "pointer" }}
                         >
-                          {copiedAuthUrl ? "✓ 授权链接已复制" : "📋 复制授权链接"}
+                          解除绑定
                         </button>
+                      ) : (
+                        <div style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "3px 8px", background: "rgba(239,68,68,0.08)", borderRadius: 6, border: "1px solid rgba(239,68,68,0.25)" }}>
+                          <span style={{ fontSize: 12, color: "#ef4444", fontWeight: 500 }}>确定解除？</span>
+                          <button
+                            type="button"
+                            onClick={async () => {
+                              await disconnectCoros();
+                              setConfirmingDisconnect(false);
+                            }}
+                            disabled={authLoading}
+                            style={{ fontSize: 11.5, padding: "3px 8px", background: "#ef4444", color: "#fff", border: "none", borderRadius: 4, cursor: "pointer", fontWeight: 600 }}
+                          >
+                            {authLoading ? "解绑中…" : "确认解绑"}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setConfirmingDisconnect(false)}
+                            disabled={authLoading}
+                            style={{ fontSize: 11.5, padding: "3px 6px", background: "transparent", color: "var(--text-dim)", border: "1px solid var(--border)", borderRadius: 4, cursor: "pointer" }}
+                          >
+                            取消
+                          </button>
+                        </div>
                       )}
+                    </div>
+                  </div>
+                ) : (
+                  <div style={{ background: "rgba(245,158,11,0.06)", padding: "14px", borderRadius: 8, border: "1px dashed #f59e0b", marginBottom: 8 }}>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: "#f59e0b", marginBottom: 4 }}>
+                      当前尚未连接 COROS 账号
+                    </div>
+                    <p style={{ fontSize: 12, color: "var(--text-dim)", margin: "0 0 12px 0", lineHeight: 1.5 }}>
+                      连接后可直接拉取历史跑步数据、心率、分圈及体能负荷指标。
+                    </p>
+                    {!authConnecting ? (
                       <button
                         type="button"
-                        onClick={cancelCoros}
-                        style={{ fontSize: 12, padding: "4px 10px", background: "transparent", color: "var(--muted)", border: "1px solid var(--border)", borderRadius: 4, cursor: "pointer" }}
+                        onClick={connectCoros}
+                        style={{
+                          background: "#2563eb",
+                          color: "#fff",
+                          border: "none",
+                          borderRadius: 6,
+                          padding: "8px 16px",
+                          fontSize: 13,
+                          fontWeight: 600,
+                          cursor: "pointer",
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: 6,
+                        }}
                       >
-                        取消
+                        🔗 一键连接 COROS 账号
                       </button>
-                    </div>
+                    ) : (
+                      <div style={{ background: "var(--bg-subtle, rgba(0,0,0,0.2))", padding: "10px 12px", borderRadius: 6, border: "1px solid var(--border)" }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8, fontSize: 12.5, fontWeight: 500, color: "#60a5fa" }}>
+                          <span className="spinner" style={{ display: "inline-block", width: 12, height: 12, border: "2px solid #60a5fa", borderTopColor: "transparent", borderRadius: "50%", animation: "spin 1s linear infinite" }} />
+                          正在等待浏览器完成授权…
+                        </div>
+                        <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+                          <button
+                            type="button"
+                            onClick={openCorosBrowser}
+                            style={{ fontSize: 12, padding: "4px 10px", background: "#2563eb", color: "#fff", border: "none", borderRadius: 4, cursor: "pointer" }}
+                          >
+                            🌐 在浏览器中打开
+                          </button>
+                          {authUrl && (
+                            <button
+                              type="button"
+                              onClick={() => copyAuthUrl(authUrl)}
+                              style={{
+                                fontSize: 12,
+                                padding: "4px 10px",
+                                background: copiedAuthUrl ? "rgba(34, 197, 94, 0.15)" : "var(--surface-2)",
+                                color: copiedAuthUrl ? "var(--good)" : "var(--fg)",
+                                border: `1px solid ${copiedAuthUrl ? "var(--good)" : "var(--border)"}`,
+                                borderRadius: 4,
+                                cursor: "pointer",
+                                transition: "all 0.2s ease",
+                              }}
+                            >
+                              {copiedAuthUrl ? "✓ 授权链接已复制" : "📋 复制授权链接"}
+                            </button>
+                          )}
+                          <button
+                            type="button"
+                            onClick={cancelCoros}
+                            style={{ fontSize: 12, padding: "4px 10px", background: "transparent", color: "var(--muted)", border: "1px solid var(--border)", borderRadius: 4, cursor: "pointer" }}
+                          >
+                            取消
+                          </button>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
-            )}
+
+              {/* Garmin 佳明账号连接卡片（多账号/双区并存） */}
+              <div className="card" style={{ margin: 0, background: "var(--surface-2, rgba(255,255,255,0.02))", border: "1px solid var(--border)" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6, flexWrap: "wrap", gap: 8 }}>
+                  <h3 className="card-title" style={{ margin: 0 }}>
+                    <span style={{ fontSize: 16 }}>⌚</span> Garmin 佳明 Connect 连接
+                  </h3>
+                  {garminAuth?.connected && (
+                    <button
+                      className="btn-secondary"
+                      onClick={() => handleSyncGarmin("all")}
+                      disabled={garminSyncing}
+                      style={{ fontSize: 12, padding: "5px 12px", background: "#2563eb", color: "#fff", border: "none", borderRadius: 6, cursor: "pointer", fontWeight: 600 }}
+                    >
+                      {garminSyncing ? "正在同步…" : "🔄 一键同步全部佳明"}
+                    </button>
+                  )}
+                </div>
+                <p className="card-sub">
+                  基于 Garmin Connect Personal API 官方接口。支持<strong>中国区与国际区同时连接</strong>，数据统一汇聚进当前档案，凭证仅保存在本地。
+                </p>
+                <div style={{ fontSize: 12, color: "var(--text-dim)", marginBottom: 12, padding: "6px 10px", background: "rgba(255,255,255,0.03)", borderRadius: 6, border: "1px dashed var(--border)" }}>
+                  ℹ️ 首次同步需拉取并解析 1 年历史分圈以构建全量预测模型与体能曲线，同步时间可能较长（约 20~60 秒），请耐心等待。
+                </div>
+
+                {garminMsg && (
+                  <div className={`sync-msg ${garminMsg.kind === "ok" ? "ok" : "err"}`} style={{ marginBottom: 12 }}>
+                    {garminMsg.text}
+                  </div>
+                )}
+
+                {garminSyncProgress?.active && (
+                  <div style={{ marginBottom: 12, padding: "8px 10px", background: "rgba(37,99,235,0.08)", borderRadius: 6, border: "1px solid rgba(37,99,235,0.2)" }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, marginBottom: 4 }}>
+                      <span>{garminSyncProgress.message}</span>
+                      <span>{garminSyncProgress.percent}%</span>
+                    </div>
+                    <div style={{ width: "100%", height: 4, background: "rgba(255,255,255,0.1)", borderRadius: 2, overflow: "hidden" }}>
+                      <div style={{ width: `${garminSyncProgress.percent}%`, height: "100%", background: "#2563eb", transition: "width 0.3s ease" }} />
+                    </div>
+                  </div>
+                )}
+
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 12 }}>
+                  {/* 子卡片 1: 中国区 */}
+                  <div style={{ background: "var(--bg-subtle, rgba(255,255,255,0.02))", padding: "12px 14px", borderRadius: 8, border: "1px solid var(--border)" }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 10, gap: 8 }}>
+                      <div>
+                        <div style={{ display: "flex", alignItems: "center", gap: 6, fontWeight: 600, fontSize: 13, marginBottom: 4 }}>
+                          <span>🇨🇳</span> 佳明 (中国区)
+                        </div>
+                        <span style={{ fontSize: 10.5, color: "#10b981", background: "rgba(16,185,129,0.1)", padding: "1px 6px", borderRadius: 10, display: "inline-block" }}>connect.garmin.cn</span>
+                      </div>
+                      {garminAuth?.cn?.connected ? (
+                        <span style={{ fontSize: 11, color: "#10b981", background: "rgba(16,185,129,0.1)", padding: "3px 9px", borderRadius: 12, fontWeight: 500, whiteSpace: "nowrap", flexShrink: 0 }}>
+                          ● 已连接
+                        </span>
+                      ) : (
+                        <span style={{ fontSize: 11, color: "var(--text-dim)", whiteSpace: "nowrap", flexShrink: 0 }}>未连接</span>
+                      )}
+                    </div>
+
+                    {garminAuth?.cn?.connected ? (
+                      <div>
+                        <div style={{ fontSize: 12, marginBottom: 4 }}>
+                          账号：<strong>{garminAuth.cn.userFullName || "已连接"}</strong>
+                        </div>
+                        <div style={{ fontSize: 11.5, color: "var(--text-dim)", marginBottom: 10 }}>
+                          Token 状态：{garminAuth.cn.expired ? "已过期" : "正常（自动轮换）"}
+                        </div>
+                        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                          <button
+                            onClick={() => handleSyncGarmin("cn")}
+                            disabled={garminSyncing}
+                            style={{ fontSize: 11.5, padding: "5px 12px", background: "var(--surface)", color: "var(--text)", border: "1px solid var(--border)", borderRadius: 6, cursor: "pointer", fontWeight: 500 }}
+                          >
+                            {garminSyncing ? "同步中…" : "🔄 同步该区"}
+                          </button>
+                          {confirmingGarminDisconnect !== "cn" ? (
+                            <button
+                              onClick={() => setConfirmingGarminDisconnect("cn")}
+                              disabled={Boolean(garminDisconnecting)}
+                              style={{ fontSize: 11.5, padding: "5px 12px", background: "rgba(239,68,68,0.1)", color: "#ef4444", border: "1px solid rgba(239,68,68,0.2)", borderRadius: 6, cursor: "pointer" }}
+                            >
+                              解除绑定
+                            </button>
+                          ) : (
+                            <div style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+                              <button
+                                onClick={() => handleDisconnectGarminRegion("cn")}
+                                disabled={Boolean(garminDisconnecting)}
+                                style={{ fontSize: 11, padding: "3px 8px", background: "#ef4444", color: "#fff", border: "none", borderRadius: 4, cursor: "pointer", fontWeight: 600 }}
+                              >
+                                {garminDisconnecting === "cn" ? "解绑中…" : "确认解绑"}
+                              </button>
+                              <button
+                                onClick={() => setConfirmingGarminDisconnect(null)}
+                                style={{ fontSize: 11, padding: "3px 6px", background: "transparent", color: "var(--text-dim)", border: "1px solid var(--border)", borderRadius: 4, cursor: "pointer" }}
+                              >
+                                取消
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    ) : (
+                      <div>
+                        <input
+                          type="password"
+                          placeholder="粘贴中国区 Personal API Key"
+                          value={garminCnKey}
+                          onChange={(e) => setGarminCnKey(e.target.value)}
+                          disabled={connectingRegion === "cn"}
+                          style={{ width: "100%", padding: "7px 10px", fontSize: 12, background: "var(--bg)", border: "1px solid var(--border)", borderRadius: 6, color: "var(--text)", marginBottom: 8, boxSizing: "border-box" }}
+                        />
+                        <button
+                          onClick={() => handleConnectGarminRegion("cn")}
+                          disabled={connectingRegion === "cn" || !garminCnKey.trim()}
+                          style={{ width: "100%", padding: "7px 0", fontSize: 12, background: "#10b981", color: "#fff", border: "none", borderRadius: 6, cursor: "pointer", fontWeight: 600, marginBottom: 8 }}
+                        >
+                          {connectingRegion === "cn" ? "正在连接并拉取数据…" : "连接中国区账号"}
+                        </button>
+                        <a href="https://connect.garmin.cn/app/settings/personalApiToken" target="_blank" rel="noopener noreferrer" style={{ fontSize: 11, color: "#60a5fa", textDecoration: "underline" }}>
+                          🔗 前往中国区后台生成 Key
+                        </a>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* 子卡片 2: 国际区 */}
+                  <div style={{ background: "var(--bg-subtle, rgba(255,255,255,0.02))", padding: "12px 14px", borderRadius: 8, border: "1px solid var(--border)" }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 10, gap: 8 }}>
+                      <div>
+                        <div style={{ display: "flex", alignItems: "center", gap: 6, fontWeight: 600, fontSize: 13, marginBottom: 4 }}>
+                          <span>🌐</span> 佳明 (国际区)
+                        </div>
+                        <span style={{ fontSize: 10.5, color: "#60a5fa", background: "rgba(96,165,250,0.1)", padding: "1px 6px", borderRadius: 10, display: "inline-block" }}>connect.garmin.com</span>
+                      </div>
+                      {garminAuth?.global?.connected ? (
+                        <span style={{ fontSize: 11, color: "#10b981", background: "rgba(16,185,129,0.1)", padding: "3px 9px", borderRadius: 12, fontWeight: 500, whiteSpace: "nowrap", flexShrink: 0 }}>
+                          ● 已连接
+                        </span>
+                      ) : (
+                        <span style={{ fontSize: 11, color: "var(--text-dim)", whiteSpace: "nowrap", flexShrink: 0 }}>未连接</span>
+                      )}
+                    </div>
+
+                    {garminAuth?.global?.connected ? (
+                      <div>
+                        <div style={{ fontSize: 12, marginBottom: 4 }}>
+                          账号：<strong>{garminAuth.global.userFullName || "已连接"}</strong>
+                        </div>
+                        <div style={{ fontSize: 11.5, color: "var(--text-dim)", marginBottom: 10 }}>
+                          Token 状态：{garminAuth.global.expired ? "已过期" : "正常（自动轮换）"}
+                        </div>
+                        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                          <button
+                            onClick={() => handleSyncGarmin("global")}
+                            disabled={garminSyncing}
+                            style={{ fontSize: 11.5, padding: "5px 12px", background: "var(--surface)", color: "var(--text)", border: "1px solid var(--border)", borderRadius: 6, cursor: "pointer", fontWeight: 500 }}
+                          >
+                            {garminSyncing ? "同步中…" : "🔄 同步该区"}
+                          </button>
+                          {confirmingGarminDisconnect !== "global" ? (
+                            <button
+                              onClick={() => setConfirmingGarminDisconnect("global")}
+                              disabled={Boolean(garminDisconnecting)}
+                              style={{ fontSize: 11.5, padding: "5px 12px", background: "rgba(239,68,68,0.1)", color: "#ef4444", border: "1px solid rgba(239,68,68,0.2)", borderRadius: 6, cursor: "pointer" }}
+                            >
+                              解除绑定
+                            </button>
+                          ) : (
+                            <div style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+                              <button
+                                onClick={() => handleDisconnectGarminRegion("global")}
+                                disabled={Boolean(garminDisconnecting)}
+                                style={{ fontSize: 11, padding: "3px 8px", background: "#ef4444", color: "#fff", border: "none", borderRadius: 4, cursor: "pointer", fontWeight: 600 }}
+                              >
+                                {garminDisconnecting === "global" ? "解绑中…" : "确认解绑"}
+                              </button>
+                              <button
+                                onClick={() => setConfirmingGarminDisconnect(null)}
+                                style={{ fontSize: 11, padding: "3px 6px", background: "transparent", color: "var(--text-dim)", border: "1px solid var(--border)", borderRadius: 4, cursor: "pointer" }}
+                              >
+                                取消
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    ) : (
+                      <div>
+                        <input
+                          type="password"
+                          placeholder="粘贴国际区 Personal API Key"
+                          value={garminGlobalKey}
+                          onChange={(e) => setGarminGlobalKey(e.target.value)}
+                          disabled={connectingRegion === "global"}
+                          style={{ width: "100%", padding: "7px 10px", fontSize: 12, background: "var(--bg)", border: "1px solid var(--border)", borderRadius: 6, color: "var(--text)", marginBottom: 8, boxSizing: "border-box" }}
+                        />
+                        <button
+                          onClick={() => handleConnectGarminRegion("global")}
+                          disabled={connectingRegion === "global" || !garminGlobalKey.trim()}
+                          style={{ width: "100%", padding: "7px 0", fontSize: 12, background: "#2563eb", color: "#fff", border: "none", borderRadius: 6, cursor: "pointer", fontWeight: 600, marginBottom: 8 }}
+                        >
+                          {connectingRegion === "global" ? "正在连接并拉取数据…" : "连接国际区账号"}
+                        </button>
+                        <a href="https://connect.garmin.com/modern/settings/personalApiToken" target="_blank" rel="noopener noreferrer" style={{ fontSize: 11, color: "#60a5fa", textDecoration: "underline" }}>
+                          🔗 前往国际区后台生成 Key
+                        </a>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
 
           <div className="card">
             <h3 className="card-title"><IconSync size={14} />数据同步</h3>
             <p className="card-sub">
-              COROS 没有提供推送通知，只能主动拉取。建议每天或每次训练后手动同步一次。
+              平台采用纯本地运行与主动拉取机制，数据完全保存在你本机。建议每次训练后或定期点击同步一次。
             </p>
 
             <div className="hint" style={{ marginBottom: 6 }}>同步哪些运动类型</div>
@@ -1598,8 +1924,21 @@ export default function Settings({
               </div>
             )}
 
-            <button className="btn" onClick={doSync} disabled={syncing || !auth?.connected} title={!auth?.connected ? "请先连接 COROS 账号" : undefined}>
-              {syncing ? <><span className="spin" /> 同步中 {syncProgress ? `(${syncProgress.percent}%)` : "..."}</> : !auth?.connected ? "请先连接 COROS 账号" : "立即同步"}
+            <button
+              className="btn"
+              onClick={doSync}
+              disabled={syncing || !hasAnyWatch}
+              title={!hasAnyWatch ? "请先在上方连接 COROS 或 Garmin 账号" : undefined}
+            >
+              {syncing ? (
+                <>
+                  <span className="spin" /> 同步中 {syncProgress ? `(${syncProgress.percent}%)` : "..."}
+                </>
+              ) : !hasAnyWatch ? (
+                "请先连接运动手表"
+              ) : (
+                "立即同步"
+              )}
             </button>
             {msg && (
               <div className={`banner ${msg.kind === "ok" ? "info" : "error"}`} style={{ marginTop: 14, marginBottom: 0 }}>
@@ -1682,15 +2021,79 @@ export default function Settings({
             <span>PaceCraft {appVersion}</span>
           </ExternalLink>
         </div>
-        <p className="card-sub">本看板所有数据均来自 COROS 官方 MCP（mcp.coros.com，中国区），未使用任何非官方接口。</p>
+        <p className="card-sub">本看板所有数据均来自各品牌官方开放平台（高驰 COROS 官方开放接口 / 佳明 Garmin Personal API），未使用任何非官方接口。</p>
         <ul style={{ color: "var(--text-dim)", fontSize: 12.5, lineHeight: 1.9, paddingLeft: 18, margin: 0 }}>
-          <li>授权通过 OAuth 2.0 动态客户端注册 + PKCE 完成，无需审批，token 仅存本机。</li>
-          <li>概览类接口返回的是可读文本、时序类返回 JSON，解析层已针对两者分别处理并用真实数据校验。</li>
-          <li>分圈距离原始单位为厘米，已在多次活动上与记录距离交叉验证一致。</li>
-          <li>心率区间由本看板按 Tanaka 公式推算（COROS 未提供分区字段），不是官方数据。</li>
-          <li>FIT 原始文件每天限 50 次下载，当前看板不自动拉取，仅在你需要时再考虑。</li>
+          <li>高驰授权通过 OAuth 2.0 动态客户端注册 + PKCE 完成，Garmin 通过官方 Personal API Key 接入，Token 与 Key 均仅存储于你本机 SQLite 数据库。</li>
+          <li>时序活动数据、分圈轨迹与 .FIT 文件均经平台独立解析引擎统一标准化归一化处理。</li>
+          <li>分圈距离原始单位已在多次活动上与记录距离交叉验证一致。</li>
+          <li>心率区间与能力预测由本看板独立引擎计算，完全跨品牌通用。</li>
+          <li>高驰 FIT 原始文件每日限 50 次下载（官方限制，Garmin 不受此限），超出后保留基础时序指标。</li>
         </ul>
       </div>
+
+      {/* 模拟测试数据清理 */}
+      {testDataInfo && (testDataInfo.count > 0 || testCleanMsg) && (
+        <div className="card" style={{ borderColor: "rgba(245, 158, 11, 0.4)", marginTop: 14 }}>
+          <h3 className="card-title" style={{ color: "var(--warn, #f59e0b)" }}>
+            🧪 模拟测试数据管理
+          </h3>
+          <p className="card-sub">
+            检测用于功能演练、双表去重测试注入的模拟活动记录。一键清理后将恢复真实主表记录，跑量与负荷回归 100% 真实纯净。
+          </p>
+
+          {testDataInfo.count > 0 ? (
+            <div style={{
+              background: "rgba(245, 158, 11, 0.08)",
+              border: "1px solid rgba(245, 158, 11, 0.3)",
+              borderRadius: 8,
+              padding: "14px 16px",
+            }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 12 }}>
+                <div>
+                  <div style={{ color: "var(--warn, #f59e0b)", fontWeight: 600, fontSize: 13.5 }}>
+                    发现 {testDataInfo.count} 条模拟测试记录：
+                  </div>
+                  <ul style={{ margin: "6px 0 0 18px", padding: 0, fontSize: 12, color: "var(--text-dim)", lineHeight: 1.6 }}>
+                    {testDataInfo.items.map((i) => (
+                      <li key={i.labelId}>
+                        [{i.source.toUpperCase()}] {i.dateLabel} · {i.distanceKm} km · {i.sportName}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+                <button
+                  className="btn sm"
+                  onClick={handleCleanTestData}
+                  disabled={cleaningTest}
+                  style={{
+                    background: "rgba(245, 158, 11, 0.2)",
+                    color: "var(--warn, #f59e0b)",
+                    borderColor: "rgba(245, 158, 11, 0.5)",
+                    fontWeight: 600,
+                    flexShrink: 0,
+                  }}
+                >
+                  {cleaningTest ? "正在清理…" : "一键清理模拟测试数据"}
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div style={{
+              background: "rgba(16, 185, 129, 0.08)",
+              border: "1px solid rgba(16, 185, 129, 0.25)",
+              borderRadius: 8,
+              padding: "12px 14px",
+              color: "var(--good, #10b981)",
+              fontSize: 12.5,
+              display: "flex",
+              alignItems: "center",
+              gap: 8,
+            }}>
+              <span>✓</span> {testCleanMsg || "数据库中无模拟测试数据，所有训练记录均为真实同步数据。"}
+            </div>
+          )}
+        </div>
+      )}
 
       <div className="card" style={{ borderColor: "rgba(239, 68, 68, 0.35)", marginTop: 14 }}>
         <h3 className="card-title" style={{ color: "var(--bad, #ef4444)" }}>

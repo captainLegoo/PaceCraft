@@ -121,6 +121,10 @@ export function getProfileTokenPath(id = getActiveProfileId()): string {
   return join(getProfileDir(id), "tokens.json");
 }
 
+export function getProfileGarminTokenPath(id = getActiveProfileId()): string {
+  return join(getProfileDir(id), "garmin_tokens.json");
+}
+
 export function listProfileMetas(): ProfileMeta[] {
   ensureDir(PROFILES_DIR);
   const dirs = readdirSync(PROFILES_DIR).filter((f) => {

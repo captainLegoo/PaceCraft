@@ -11,6 +11,14 @@ import {
 } from "./db/schema.ts";
 import { SERVER_HOST, SERVER_PORT, WEB_ORIGIN } from "./config.ts";
 import { ageFromBirthday, buildSessions, hrZoneOptions, hrZones, loadSeries, monthlyVolume, paceHrScatter, sessionLaps, weeklyVolume } from "./analytics.ts";
+import {
+  computeUnifiedTrimp,
+  detectActivityConflicts,
+  getActivityConflicts,
+  resolveActivityConflict,
+  getMockTestDataInfo,
+  cleanMockTestData,
+} from "./conflicts.ts";
 import { syncAll, type SyncProgress } from "./coros/sync.ts";
 import { saveSportTypeCodes, sportSettingsPayload } from "./coros/sport-types.ts";
 import { backfillAltitude, fitQuotaStatus, followState, startFollow, stopFollow } from "./auto-sync.ts";
@@ -47,8 +55,35 @@ import {
   resolveAccountMismatch,
   startAuthFlow,
 } from "./coros/auth-service.ts";
+import {
+  connectGarmin,
+  disconnectGarmin,
+  getGarminAuthStatus,
+  getGarminMultiAuthStatus,
+} from "./garmin/auth.ts";
+import {
+  getGarminSyncProgress,
+  syncGarminActivities,
+} from "./garmin/sync.ts";
+import {
+  getGarminHealthList,
+  seedMockGarminHealthData,
+  syncGarminHealth,
+} from "./garmin/health.ts";
+import { registry } from "./providers/index.ts";
 import { closeCurrentDatabase, switchProfileDatabase } from "./db/client.ts";
-import { checkLatestRelease, detectRegion, fetchUpdateManifest, getPreferredRoute, setPreferredRoute } from "./updater.ts";
+import {
+  checkLatestRelease,
+  detectRegion,
+  fetchUpdateManifest,
+  getPreferredRoute,
+  setPreferredRoute,
+  startInstallerDownload,
+  getInstallerDownloadProgress,
+  cancelInstallerDownload,
+  launchInstaller,
+  openContainingFolder,
+} from "./updater.ts";
 import {
   createNewProfile,
   deleteProfile,
@@ -113,7 +148,8 @@ const app = new Elysia()
     const curVer = (query as any)?.currentVersion || APP_VERSION;
     const channel = (query as any)?.channel;
     const force = (query as any)?.force === "true" || (query as any)?.force === "1";
-    const result = await checkLatestRelease(curVer, channel, force);
+    const platform = (query as any)?.platform;
+    const result = await checkLatestRelease(curVer, channel, force, platform);
     return result;
   })
   .get("/api/updater/region", async () => {
@@ -130,6 +166,43 @@ const app = new Elysia()
       return { ok: true, preferredRoute: route };
     }
     return new Response(JSON.stringify({ error: "无效的线路选项" }), { status: 400 });
+  })
+  .post("/api/updater/download-installer", async ({ body }) => {
+    try {
+      const { url, fileName, platform, force } = (body || {}) as {
+        url?: string;
+        fileName?: string;
+        platform?: "windows" | "macos" | "linux";
+        force?: boolean;
+      };
+      const state = await startInstallerDownload({ url, fileName, platform, force });
+      return { ok: true, ...state };
+    } catch (e: any) {
+      return new Response(JSON.stringify({ ok: false, error: e?.message || "启动下载失败" }), { status: 500 });
+    }
+  })
+  .get("/api/updater/download-progress", () => {
+    return getInstallerDownloadProgress();
+  })
+  .post("/api/updater/cancel-download", () => {
+    const ok = cancelInstallerDownload();
+    return { ok };
+  })
+  .post("/api/updater/run-installer", ({ body }) => {
+    const { filePath } = (body || {}) as { filePath?: string };
+    const res = launchInstaller(filePath);
+    if (!res.ok) {
+      return new Response(JSON.stringify({ ok: false, error: res.message }), { status: 400 });
+    }
+    return { ok: true };
+  })
+  .post("/api/updater/open-dir", ({ body }) => {
+    const { filePath } = (body || {}) as { filePath?: string };
+    const res = openContainingFolder(filePath);
+    if (!res.ok) {
+      return new Response(JSON.stringify({ ok: false, error: res.message }), { status: 400 });
+    }
+    return { ok: true };
   })
   .get("/api/updater/latest.json", async ({ query }) => {
     const channel = (query as any)?.channel;
@@ -164,6 +237,7 @@ const app = new Elysia()
       latestActivityDate: one(db.select({ d: activities.dateLabel }).from(activities).orderBy(desc(activities.date)).limit(1).all())?.d ?? null,
       aiConfigured: getAiConfig() !== null,
       auth: getAuthStatus(),
+      garminAuth: getGarminMultiAuthStatus(),
     };
   })
 
@@ -302,6 +376,59 @@ const app = new Elysia()
       return { ok: true };
     }
     return new Response(JSON.stringify({ error: "Invalid URL" }), { status: 400 });
+  })
+
+  /** Garmin (佳明) 授权与同步 */
+  .get("/api/garmin/auth/status", () => getGarminMultiAuthStatus())
+  .post("/api/garmin/auth/connect", async ({ body }) => {
+    try {
+      const { apiKey, region } = (body || {}) as { apiKey?: string; region?: "auto" | "global" | "cn" };
+      if (!apiKey) throw new Error("请输入 Garmin Personal API Key");
+      return await connectGarmin(apiKey, region ?? "auto");
+    } catch (e) {
+      return new Response(JSON.stringify({ error: (e as Error).message }), { status: 400 });
+    }
+  })
+  .post("/api/garmin/auth/disconnect", ({ body }) => {
+    const { region } = (body || {}) as { region?: "cn" | "global" | "all" };
+    return disconnectGarmin(region);
+  })
+  .post("/api/garmin/sync", async ({ body }) => {
+    try {
+      const { limit, region } = (body || {}) as { limit?: number; region?: "cn" | "global" | "all" };
+      return await syncGarminActivities({ limit: limit ?? 100, region: region ?? "all" });
+    } catch (e) {
+      return new Response(JSON.stringify({ error: (e as Error).message }), { status: 500 });
+    }
+  })
+  .get("/api/garmin/sync/progress", () => getGarminSyncProgress())
+
+  /** 可插拔多品牌数据源（卡槽式管理） */
+  .get("/api/providers", async () => {
+    const list = registry.getAll();
+    const result = [];
+    for (const p of list) {
+      result.push({
+        id: p.id,
+        brand: p.brand,
+        name: p.name,
+        icon: p.icon,
+        connected: await p.isConnected(),
+        auth: await p.getAuthStatus(),
+      });
+    }
+    return result;
+  })
+  .post("/api/providers/sync", async ({ body }) => {
+    try {
+      const { providerId, days, limit } = (body || {}) as { providerId?: string; days?: number; limit?: number };
+      if (providerId) {
+        return await registry.syncOne(providerId, { days, limit });
+      }
+      return await registry.syncAll({ days, limit });
+    } catch (e) {
+      return new Response(JSON.stringify({ error: (e as Error).message }), { status: 500 });
+    }
   })
 
   .post("/api/sync", async ({ query }) => {
@@ -525,6 +652,8 @@ const app = new Elysia()
         lapRows: result.lapRows,
         errors: result.errors,
         fitQuotaLeft: result.fitQuotaLeft,
+        conflictsDetected: (result as any).conflictsDetected ?? 0,
+        conflictsResolved: (result as any).conflictsResolved ?? 0,
         elapsedSec: Math.round((Date.now() - startedAt) / 1000),
         message: finalMsg,
       };
@@ -785,12 +914,19 @@ const app = new Elysia()
 
     return rows.map((a) => {
       const d = detailById.get(a.labelId);
+      const unifiedLoad = d?.trainingLoad != null
+        ? d.trainingLoad
+        : computeUnifiedTrimp(a.durationSec ?? 0, a.avgHr);
       return {
         ...a,
-        detail: d && {
-          avgCadence: d.avgCadence, avgPower: d.avgPower, trainingLoad: d.trainingLoad,
+        detail: d ? {
+          avgCadence: d.avgCadence, avgPower: d.avgPower, trainingLoad: unifiedLoad,
           trainingFocus: d.trainingFocus, performance: d.performance, aerobicTe: d.aerobicTe,
           bestKmSec: d.bestKmSec, elevGain: d.elevGain, elevLoss: d.elevLoss,
+        } : {
+          avgCadence: null, avgPower: null, trainingLoad: unifiedLoad,
+          trainingFocus: null, performance: null, aerobicTe: null,
+          bestKmSec: null, elevGain: null, elevLoss: null,
         },
       };
     });
@@ -801,6 +937,9 @@ const app = new Elysia()
     if (!activity) return { error: "not found" };
 
     const detail = one(db.select().from(activityDetails).where(eq(activityDetails.labelId, params.labelId)).all());
+    if (detail && detail.trainingLoad == null) {
+      detail.trainingLoad = computeUnifiedTrimp(activity.durationSec ?? 0, activity.avgHr);
+    }
     const lapRows = db
       .select()
       .from(laps)
@@ -814,6 +953,20 @@ const app = new Elysia()
       .orderBy(desc(aiReports.createdAt))
       .all();
 
+    let comparisonActivity: any = null;
+    if (activity.duplicateOf) {
+      const compAct = one(db.select().from(activities).where(eq(activities.labelId, activity.duplicateOf)).all());
+      if (compAct) {
+        const compDetail = one(db.select().from(activityDetails).where(eq(activityDetails.labelId, activity.duplicateOf)).all());
+        const compLaps = db.select().from(laps).where(eq(laps.labelId, activity.duplicateOf)).orderBy(asc(laps.lapIndex)).all();
+        comparisonActivity = {
+          activity: compAct,
+          detail: compDetail,
+          laps: compLaps,
+        };
+      }
+    }
+
     const totalLapDist = lapRows.reduce((s, l) => s + l.distanceM, 0);
     const first = lapRows[0];
     const profile = one(db.select().from(users).all());
@@ -823,6 +976,7 @@ const app = new Elysia()
     return {
       activity,
       detail,
+      comparisonActivity,
       sessionKey: session?.key ?? null,
       laps: lapRows,
       scatter: paceHrScatter(params.labelId),
@@ -840,6 +994,38 @@ const app = new Elysia()
         slowestLapSec: lapRows.length > 1 ? Math.max(...lapRows.slice(0, -1).map((l) => l.avgPaceSec ?? 0)) : null,
       },
     };
+  })
+
+  // ---------- 跨品牌活动冲突与智能去重 ----------
+  .get("/api/conflicts", () => {
+    return getActivityConflicts();
+  })
+
+  .post("/api/conflicts/detect", ({ body }) => {
+    const b = (body ?? {}) as { primaryBrand?: "coros" | "garmin" };
+    const res = detectActivityConflicts(b);
+    return {
+      ...res,
+      conflicts: getActivityConflicts(),
+    };
+  })
+
+  .post("/api/conflicts/resolve", ({ body }) => {
+    const b = body as { primaryLabelId: string; secondaryLabelId: string; action: "set_primary" | "keep_both" };
+    if (!b?.primaryLabelId || !b?.secondaryLabelId || !b?.action) {
+      return { ok: false, error: "Missing required parameters" };
+    }
+    const success = resolveActivityConflict(b.primaryLabelId, b.secondaryLabelId, b.action);
+    return { ok: success };
+  })
+
+  // ---------- 模拟测试数据管理 ----------
+  .get("/api/test-data", () => {
+    return getMockTestDataInfo();
+  })
+
+  .post("/api/test-data/clean", () => {
+    return cleanMockTestData();
   })
 
   // ---------- 训练量 ----------
@@ -861,12 +1047,23 @@ const app = new Elysia()
         .filter((h) => h.stressAvg !== null && h.stressAvg !== undefined)
         .map((h) => ({ date: h.dateLabel, avgStress: h.stressAvg, level: null }));
     }
+
+    const garminHealthRows = getGarminHealthList(days);
+    const latestGarmin = garminHealthRows.length > 0 ? garminHealthRows[garminHealthRows.length - 1] : null;
+
     return {
       health: healthRows,
       hr: tail(db.select().from(heartRate).orderBy(asc(heartRate.date)).all()),
       stress: stressRows,
       sleep: tail(db.select().from(sleep).orderBy(asc(sleep.date)).all()),
+      garmin: {
+        records: garminHealthRows,
+        latest: latestGarmin,
+      },
     };
+  })
+  .post("/api/garmin/sync-health", async () => {
+    return await syncGarminHealth(14);
   })
 
   .get("/api/fitness", () => ({
@@ -1027,17 +1224,49 @@ const app = new Elysia()
     return buildSessions({ from: q.from, to: q.to, gapSec });
   })
 
-  .get("/api/sessions/:key", ({ params }) => {
-    const session = buildSessions().find((s) => s.key === params.key);
-    if (!session) return { error: "not found" };
+  .get("/api/sessions/:key", ({ params, set }) => {
+    const rawKey = params.key;
+    const decodedKey = decodeURIComponent(rawKey);
+    const normalizedKey = decodedKey.replace("#", "_");
+    const labelIdInKey = decodedKey.includes("_")
+      ? decodedKey.slice(decodedKey.indexOf("_") + 1)
+      : decodedKey.includes("#")
+      ? decodedKey.slice(decodedKey.indexOf("#") + 1)
+      : decodedKey;
+
+    const allSessions = buildSessions();
+    const session = allSessions.find(
+      (s) =>
+        s.key === rawKey ||
+        s.key === decodedKey ||
+        s.key === normalizedKey ||
+        s.key.replace("#", "_") === normalizedKey ||
+        s.labelIds.includes(rawKey) ||
+        s.labelIds.includes(decodedKey) ||
+        s.labelIds.includes(labelIdInKey) ||
+        s.comparisonActivities?.some(
+          (c: any) =>
+            c.labelId === rawKey ||
+            c.labelId === decodedKey ||
+            c.labelId === labelIdInKey ||
+            decodedKey.endsWith(c.labelId)
+        )
+    );
+    if (!session) {
+      set.status = 404;
+      return { error: `找不到训练场次: ${decodedKey}` };
+    }
+
+    const compIds = session.comparisonActivities?.map((c) => c.labelId) ?? [];
+    const allLabelIds = Array.from(new Set([...session.labelIds, ...compIds]));
 
     const acts = db
       .select()
       .from(activities)
-      .where(inArray(activities.labelId, session.labelIds))
+      .where(inArray(activities.labelId, allLabelIds))
       .orderBy(asc(activities.startTs))
       .all();
-    const detailRows = db.select().from(activityDetails).where(inArray(activityDetails.labelId, session.labelIds)).all();
+    const detailRows = db.select().from(activityDetails).where(inArray(activityDetails.labelId, allLabelIds)).all();
     const detailById = new Map(detailRows.map((d) => [d.labelId, d]));
     const profile = one(db.select().from(users).all());
     const age = ageFromBirthday(profile?.birthday ?? null);
@@ -1049,13 +1278,122 @@ const app = new Elysia()
       .orderBy(desc(aiSessionReports.createdAt))
       .all();
 
-    const laps = sessionLaps(session.labelIds);
+    // 分圈只合并有效主力记录，避免双表记录重复拉长曲线
+    const primaryLabelIds = acts.filter((a) => !a.isDuplicate).map((a) => a.labelId);
+    const effectiveLabelIds = primaryLabelIds.length > 0 ? primaryLabelIds : session.labelIds;
+    const laps = sessionLaps(effectiveLabelIds);
     const peak = Math.max(...laps.map((l) => l.maxHr || l.avgHr || 0), 0);
+
+    // 智能识别双表对比记录：提取副表分圈与两表关键指标 Delta 差值
+    const duplicateAct = acts.find((a) => a.isDuplicate === 1);
+    const primaryAct = acts.find((a) => a.isDuplicate !== 1) || acts[0];
+    const pairedAct = acts.find((a) => a.duplicateOf);
+    const otherAct = pairedAct ? acts.find((a) => a.labelId === pairedAct.duplicateOf) : null;
+    const actA = primaryAct ?? pairedAct;
+    const actB = duplicateAct ?? otherAct ?? acts.find((a) => a.labelId !== actA?.labelId);
+
+    let comparisonLaps: ReturnType<typeof sessionLaps> = [];
+    let comparisonStats: any = null;
+
+    if (actA && actB && actA.labelId !== actB.labelId) {
+      comparisonLaps = sessionLaps([actB.labelId]);
+
+      const detailA = detailById.get(actA.labelId);
+      const detailB = detailById.get(actB.labelId);
+      const loadA = detailA?.trainingLoad != null ? detailA.trainingLoad : computeUnifiedTrimp(actA.durationSec ?? 0, actA.avgHr);
+      const loadB = detailB?.trainingLoad != null ? detailB.trainingLoad : computeUnifiedTrimp(actB.durationSec ?? 0, actB.avgHr);
+
+      const distA = actA.distanceKm ?? 0;
+      const distB = actB.distanceKm ?? 0;
+      const distDiff = +(distB - distA).toFixed(3);
+      const distDiffPct = distA > 0 ? +((distDiff / distA) * 100).toFixed(2) : 0;
+
+      const durA = actA.durationSec ?? 0;
+      const durB = actB.durationSec ?? 0;
+
+      const paceA = actA.avgPaceSec ?? null;
+      const paceB = actB.avgPaceSec ?? null;
+      const paceDiff = paceA != null && paceB != null ? paceB - paceA : null;
+
+      const hrA = actA.avgHr ?? null;
+      const hrB = actB.avgHr ?? null;
+      const hrDiff = hrA != null && hrB != null ? hrB - hrA : null;
+
+      const maxHrA = Math.max(...laps.map((l) => l.maxHr ?? l.avgHr ?? 0).filter(Boolean), actA.avgHr ?? 0) || null;
+      const maxHrB = Math.max(...comparisonLaps.map((l) => l.maxHr ?? l.avgHr ?? 0).filter(Boolean), actB.avgHr ?? 0) || null;
+      const maxHrDiff = maxHrA != null && maxHrB != null ? maxHrB - maxHrA : null;
+
+      const cadA = detailA?.avgCadence ?? null;
+      const cadB = detailB?.avgCadence ?? null;
+      const cadDiff = cadA != null && cadB != null ? cadB - cadA : null;
+
+      const strideA = detailA?.avgStrideM ?? null;
+      const strideB = detailB?.avgStrideM ?? null;
+      const strideDiff = strideA != null && strideB != null ? +(strideB - strideA).toFixed(2) : null;
+
+      const elevA = detailA?.elevGain ?? null;
+      const elevB = detailB?.elevGain ?? null;
+      const elevDiff = elevA != null && elevB != null ? elevB - elevA : null;
+
+      comparisonStats = {
+        primary: {
+          labelId: actA.labelId,
+          source: actA.source || "coros",
+          name: actA.sportName,
+          distanceKm: distA,
+          durationSec: durA,
+          avgPaceSec: paceA,
+          avgHr: hrA,
+          maxHr: maxHrA,
+          avgCadence: cadA,
+          avgStrideM: strideA,
+          elevGain: elevA,
+          trainingLoad: loadA,
+        },
+        secondary: {
+          labelId: actB.labelId,
+          source: actB.source || "garmin",
+          name: actB.sportName,
+          distanceKm: distB,
+          durationSec: durB,
+          avgPaceSec: paceB,
+          avgHr: hrB,
+          maxHr: maxHrB,
+          avgCadence: cadB,
+          avgStrideM: strideB,
+          elevGain: elevB,
+          trainingLoad: loadB,
+        },
+        delta: {
+          distanceDiffKm: distDiff,
+          distanceDiffPct: distDiffPct,
+          durationDiffSec: durB - durA,
+          paceDiffSec: paceDiff,
+          avgHrDiff: hrDiff,
+          maxHrDiff: maxHrDiff,
+          avgCadenceDiff: cadDiff,
+          avgStrideDiffM: strideDiff,
+          elevGainDiff: elevDiff,
+          trainingLoadDiff: loadA != null && loadB != null ? loadB - loadA : null,
+        },
+      };
+    }
 
     return {
       session,
-      activities: acts.map((a) => ({ ...a, detail: detailById.get(a.labelId) ?? null })),
+      activities: acts.map((a) => {
+        const d = detailById.get(a.labelId);
+        const unifiedLoad = d?.trainingLoad != null
+          ? d.trainingLoad
+          : computeUnifiedTrimp(a.durationSec ?? 0, a.avgHr);
+        return {
+          ...a,
+          detail: d ? { ...d, trainingLoad: unifiedLoad } : { trainingLoad: unifiedLoad },
+        };
+      }),
       laps,
+      comparisonLaps,
+      comparisonStats,
       zones: hrZones(laps, hrZoneOptions(age)),
       reports,
       age,

@@ -9,6 +9,14 @@ export function isTauriEnv(): boolean {
   return typeof window !== "undefined" && Boolean((window as any).__TAURI_INTERNALS__);
 }
 
+export type PlatformAsset = {
+  name: string;
+  downloadUrl: string;
+  rawUrl: string;
+  size?: number;
+  platform: "windows" | "macos" | "linux" | "unknown";
+};
+
 export type ReleaseCheckResponse = {
   hasUpdate: boolean;
   latestVersion: string;
@@ -17,6 +25,8 @@ export type ReleaseCheckResponse = {
   publishedAt?: string;
   downloadUrl: string;
   routeUsed: string;
+  platformAsset?: PlatformAsset | null;
+  assets?: Array<{ name: string; downloadUrl: string; rawUrl?: string; size?: number }>;
 };
 
 export default function UpdateModal({
@@ -30,11 +40,15 @@ export default function UpdateModal({
 }) {
   const [checking, setChecking] = useState(false);
   const [updateObj, setUpdateObj] = useState<Update | null>(null);
+  const [releaseData, setReleaseData] = useState<ReleaseCheckResponse | null>(null);
   const [newVersion, setNewVersion] = useState<string | null>(null);
   const [notes, setNotes] = useState<string | null>(null);
   const [status, setStatus] = useState<
     "idle" | "checking" | "up-to-date" | "available" | "downloading" | "ready" | "error"
   >("idle");
+  const [downloadMode, setDownloadMode] = useState<"tauri" | "installer">("tauri");
+  const [downloadSpeed, setDownloadSpeed] = useState<number>(0);
+  const [installerStarted, setInstallerStarted] = useState(false);
   const [progress, setProgress] = useState<{ downloaded: number; total: number; percent: number }>({
     downloaded: 0,
     total: 0,
@@ -45,6 +59,18 @@ export default function UpdateModal({
   const downloadedRef = useRef(0);
   const totalRef = useRef(0);
   const inFlightRef = useRef(false);
+  const pollTimerRef = useRef<any>(null);
+
+  const clearPollTimer = () => {
+    if (pollTimerRef.current) {
+      clearInterval(pollTimerRef.current);
+      pollTimerRef.current = null;
+    }
+  };
+
+  useEffect(() => {
+    return () => clearPollTimer();
+  }, []);
 
   const executeCheck = useCallback(async () => {
     if (inFlightRef.current) return;
@@ -53,19 +79,32 @@ export default function UpdateModal({
     setStatus("checking");
     setErrorMsg(null);
     setUpdateObj(null);
+    setReleaseData(null);
     setNewVersion(null);
     setNotes(null);
+    setInstallerStarted(false);
+    clearPollTimer();
 
     try {
       const startTime = Date.now();
+      const clientPlatform =
+        typeof navigator !== "undefined"
+          ? /Win/i.test(navigator.userAgent || (navigator as any).platform)
+            ? "windows"
+            : /Mac/i.test(navigator.userAgent || (navigator as any).platform)
+            ? "macos"
+            : "linux"
+          : undefined;
+
       // 手动触发检查时携带 force=true，强制穿透后端缓存重新向远端获取
       const checkRes = await fetch(
-        `/api/updater/check?currentVersion=${encodeURIComponent(currentAppVersion)}&channel=auto&force=true&_t=${Date.now()}`
+        `/api/updater/check?currentVersion=${encodeURIComponent(currentAppVersion)}&channel=auto&force=true&platform=${clientPlatform || ""}&_t=${Date.now()}`
       );
       if (!checkRes.ok) {
         throw new Error(`无法获取更新信息 (${checkRes.status})`);
       }
       const data: ReleaseCheckResponse = await checkRes.json();
+      setReleaseData(data);
 
       // 保证至少展示 450ms 的检查动效，给用户明确的“正在实时联网探测”的视觉反馈
       const elapsed = Date.now() - startTime;
@@ -106,11 +145,15 @@ export default function UpdateModal({
     if (open) {
       executeCheck();
     } else {
+      clearPollTimer();
       setStatus("idle");
       setUpdateObj(null);
+      setReleaseData(null);
       setNewVersion(null);
       setNotes(null);
       setErrorMsg(null);
+      setInstallerStarted(false);
+      setDownloadSpeed(0);
     }
   }, [open, executeCheck]);
 
@@ -126,51 +169,157 @@ export default function UpdateModal({
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [open, status, onClose]);
 
+  // 启动本地伴生服务安装包后台下载流程
+  const startInstallerDownloadFlow = async (asset: PlatformAsset) => {
+    setDownloadMode("installer");
+    setStatus("downloading");
+    setErrorMsg(null);
+    setInstallerStarted(false);
+    setProgress({ downloaded: 0, total: asset.size || 0, percent: 0 });
+    setDownloadSpeed(0);
+
+    try {
+      const res = await fetch("/api/updater/download-installer", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          url: asset.downloadUrl,
+          fileName: asset.name,
+          platform: asset.platform,
+        }),
+      });
+
+      if (!res.ok) {
+        const errJson = await res.json().catch(() => ({}));
+        throw new Error(errJson.error || `启动下载失败 (${res.status})`);
+      }
+
+      clearPollTimer();
+      pollTimerRef.current = setInterval(async () => {
+        try {
+          const pRes = await fetch(`/api/updater/download-progress?_t=${Date.now()}`);
+          if (!pRes.ok) return;
+          const pData = await pRes.json();
+
+          if (pData.status === "downloading") {
+            setProgress({
+              downloaded: pData.downloaded || 0,
+              total: pData.total || 0,
+              percent: pData.percent || 0,
+            });
+            setDownloadSpeed(pData.speed || 0);
+          } else if (pData.status === "completed") {
+            clearPollTimer();
+            setProgress({
+              downloaded: pData.total || pData.downloaded,
+              total: pData.total || pData.downloaded,
+              percent: 100,
+            });
+            setDownloadSpeed(0);
+            setStatus("ready");
+          } else if (pData.status === "error") {
+            clearPollTimer();
+            setStatus("error");
+            setErrorMsg(pData.error || "下载过程中断");
+          }
+        } catch {
+          // 忽略临时网络波动
+        }
+      }, 350);
+    } catch (e: any) {
+      console.error("Installer download failed:", e);
+      setStatus("error");
+      setErrorMsg(e?.message || "无法连接到更新下载服务器");
+    }
+  };
+
   const handleStartUpdate = async () => {
-    if (!isTauriEnv() || !updateObj) {
-      openExternal("https://github.com/captainLegoo/PaceCraft/releases/latest");
+    // 方案 A：Tauri 原生 Updater（存在签名与 latest.json 资源）
+    if (isTauriEnv() && updateObj) {
+      setDownloadMode("tauri");
+      setStatus("downloading");
+      setErrorMsg(null);
+      downloadedRef.current = 0;
+      totalRef.current = 0;
+      setProgress({ downloaded: 0, total: 0, percent: 0 });
+
+      try {
+        await updateObj.downloadAndInstall((event) => {
+          if (event.event === "Started") {
+            totalRef.current = event.data.contentLength ?? 0;
+            setProgress({
+              downloaded: 0,
+              total: totalRef.current,
+              percent: 0,
+            });
+          } else if (event.event === "Progress") {
+            downloadedRef.current += event.data.chunkLength;
+            const total = totalRef.current;
+            const pct = total > 0 ? Math.min(100, Math.round((downloadedRef.current / total) * 100)) : 0;
+            setProgress({
+              downloaded: downloadedRef.current,
+              total,
+              percent: pct,
+            });
+          } else if (event.event === "Finished") {
+            setProgress((prev) => ({ ...prev, percent: 100 }));
+          }
+        });
+
+        setStatus("ready");
+      } catch (err: any) {
+        console.error("Tauri download/install failed:", err);
+        // 若 Tauri 原生更新失败且存在平台安装包，自动降级为安装包极速下载
+        if (releaseData?.platformAsset) {
+          startInstallerDownloadFlow(releaseData.platformAsset);
+        } else {
+          setStatus("error");
+          const raw = String(err?.message || err || "");
+          if (/Operation not permitted|Read-only|Permission denied|os error 1/i.test(raw)) {
+            setErrorMsg("更新写入受限：若在 macOS 上运行，请确保已将应用移入「应用程序」文件夹，而非直接在 DMG 挂载盘中运行。");
+          } else {
+            setErrorMsg(raw || "安装包下载中断或签名校验未通过");
+          }
+        }
+      }
       return;
     }
 
-    setStatus("downloading");
-    setErrorMsg(null);
-    downloadedRef.current = 0;
-    totalRef.current = 0;
-    setProgress({ downloaded: 0, total: 0, percent: 0 });
+    // 方案 B：有对应平台的安装包资产（如 Windows setup.exe 或 macOS dmg），直接由后台开始极速下载
+    if (releaseData?.platformAsset) {
+      startInstallerDownloadFlow(releaseData.platformAsset);
+      return;
+    }
 
+    // 方案 C：纯网页环境或未匹配到资产时，直接在浏览器中打开安装包直链下载（绝非仅跳转 Release 首页）
+    const directUrl =
+      releaseData?.platformAsset?.downloadUrl ||
+      releaseData?.downloadUrl ||
+      "https://github.com/captainLegoo/PaceCraft/releases";
+    openExternal(directUrl);
+  };
+
+  const handleRunInstaller = async () => {
     try {
-      await updateObj.downloadAndInstall((event) => {
-        if (event.event === "Started") {
-          totalRef.current = event.data.contentLength ?? 0;
-          setProgress({
-            downloaded: 0,
-            total: totalRef.current,
-            percent: 0,
-          });
-        } else if (event.event === "Progress") {
-          downloadedRef.current += event.data.chunkLength;
-          const total = totalRef.current;
-          const pct = total > 0 ? Math.min(100, Math.round((downloadedRef.current / total) * 100)) : 0;
-          setProgress({
-            downloaded: downloadedRef.current,
-            total,
-            percent: pct,
-          });
-        } else if (event.event === "Finished") {
-          setProgress((prev) => ({ ...prev, percent: 100 }));
-        }
+      setInstallerStarted(true);
+      const res = await fetch("/api/updater/run-installer", {
+        method: "POST",
       });
-
-      setStatus("ready");
-    } catch (err: any) {
-      console.error("Download/Install update failed:", err);
-      setStatus("error");
-      const raw = String(err?.message || err || "");
-      if (/Operation not permitted|Read-only|Permission denied|os error 1/i.test(raw)) {
-        setErrorMsg("更新写入受限：若在 macOS 上运行，请确保已将应用移入「应用程序」文件夹，而非直接在 DMG 挂载盘中运行。");
-      } else {
-        setErrorMsg(raw || "安装包下载中断或签名校验未通过");
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || "启动安装程序失败");
       }
+    } catch (e: any) {
+      console.error("Run installer error:", e);
+      setErrorMsg(e?.message || "启动安装程序失败，请尝试在文件夹中手动双击安装");
+    }
+  };
+
+  const handleOpenFolder = async () => {
+    try {
+      await fetch("/api/updater/open-dir", { method: "POST" });
+    } catch (e) {
+      console.error("Open folder error:", e);
     }
   };
 
@@ -188,6 +337,11 @@ export default function UpdateModal({
   const formatSize = (bytes: number) => {
     if (!bytes || bytes <= 0) return "";
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  };
+
+  const formatSpeed = (bytesPerSec: number) => {
+    if (!bytesPerSec || bytesPerSec <= 0) return "";
+    return `${(bytesPerSec / (1024 * 1024)).toFixed(1)} MB/s`;
   };
 
   const cleanCurrent = currentAppVersion.replace(/^v/, "");
@@ -369,7 +523,9 @@ export default function UpdateModal({
           {status === "downloading" && (
             <div style={{ padding: "8px 0" }}>
               <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, marginBottom: 6, color: "var(--text)" }}>
-                <span>正在下载…</span>
+                <span>
+                  正在下载{releaseData?.platformAsset?.name ? ` ${releaseData.platformAsset.name}` : "更新安装包"}…
+                </span>
                 <span style={{ fontVariantNumeric: "tabular-nums", fontFamily: "var(--mono)" }}>
                   {progress.percent}%
                 </span>
@@ -393,10 +549,19 @@ export default function UpdateModal({
                   }}
                 />
               </div>
-              <div style={{ fontSize: 11, color: "var(--text-dim)", fontVariantNumeric: "tabular-nums" }}>
-                {progress.total > 0
-                  ? `${formatSize(progress.downloaded)} / ${formatSize(progress.total)}`
-                  : "正在连接服务器…"}
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 11, color: "var(--text-dim)", fontVariantNumeric: "tabular-nums" }}>
+                <span>
+                  {progress.total > 0
+                    ? `${formatSize(progress.downloaded)} / ${formatSize(progress.total)}`
+                    : progress.downloaded > 0
+                    ? formatSize(progress.downloaded)
+                    : "正在连接下载节点…"}
+                </span>
+                {downloadSpeed > 0 && (
+                  <span style={{ color: "var(--accent)", fontFamily: "var(--mono)", fontWeight: 500 }}>
+                    ⚡ {formatSpeed(downloadSpeed)}
+                  </span>
+                )}
               </div>
             </div>
           )}
@@ -404,10 +569,14 @@ export default function UpdateModal({
           {status === "ready" && (
             <div style={{ padding: "6px 0" }}>
               <div style={{ fontSize: 13.5, fontWeight: 500, color: "var(--text)", marginBottom: 4 }}>
-                更新已准备就绪
+                {downloadMode === "installer" ? "安装包下载完成" : "更新已准备就绪"}
               </div>
-              <div style={{ fontSize: 12, color: "var(--text-dim)" }}>
-                安装包已校验完成，重启应用即可升级到最新版本。
+              <div style={{ fontSize: 12, color: "var(--text-dim)", lineHeight: 1.5 }}>
+                {downloadMode === "installer"
+                  ? installerStarted
+                    ? "已启动安装向导。请在系统安装窗口中按提示操作；安装完成后重新打开 PaceCraft 即可。"
+                    : `新版本安装包 (${releaseData?.platformAsset?.name || "安装程序"}) 已下载至本地，点击「立即安装」将为您启动安装向导。`
+                  : "安装包已校验完成，重启应用即可升级到最新版本。"}
               </div>
             </div>
           )}
@@ -415,7 +584,7 @@ export default function UpdateModal({
           {status === "error" && (
             <div style={{ padding: "6px 0" }}>
               <div style={{ fontSize: 13, fontWeight: 500, color: "var(--bad, #ef4444)", marginBottom: 4 }}>
-                检查更新未成功
+                更新或下载未成功
               </div>
               <div style={{ fontSize: 11.5, color: "var(--text-dim)", lineHeight: 1.5 }}>
                 {errorMsg}
@@ -476,21 +645,52 @@ export default function UpdateModal({
           )}
 
           {status === "ready" && (
-            <button
-              type="button"
-              className="btn"
-              onClick={handleRestart}
-              style={{
-                padding: "5px 14px",
-                fontSize: 12,
-                background: "var(--accent)",
-                color: "#1a1d23",
-                fontWeight: 600,
-                borderColor: "transparent",
-              }}
-            >
-              重启应用
-            </button>
+            <>
+              {downloadMode === "installer" ? (
+                <>
+                  <button
+                    type="button"
+                    className="btn btn-subtle"
+                    onClick={handleOpenFolder}
+                    style={{ padding: "5px 12px", fontSize: 12 }}
+                    title="在系统文件管理器中查看已下载的安装包"
+                  >
+                    在文件夹中显示
+                  </button>
+                  <button
+                    type="button"
+                    className="btn"
+                    onClick={handleRunInstaller}
+                    style={{
+                      padding: "5px 14px",
+                      fontSize: 12,
+                      background: "var(--accent)",
+                      color: "#1a1d23",
+                      fontWeight: 600,
+                      borderColor: "transparent",
+                    }}
+                  >
+                    {installerStarted ? "再次启动安装程序" : "立即安装"}
+                  </button>
+                </>
+              ) : (
+                <button
+                  type="button"
+                  className="btn"
+                  onClick={handleRestart}
+                  style={{
+                    padding: "5px 14px",
+                    fontSize: 12,
+                    background: "var(--accent)",
+                    color: "#1a1d23",
+                    fontWeight: 600,
+                    borderColor: "transparent",
+                  }}
+                >
+                  重启应用
+                </button>
+              )}
+            </>
           )}
 
           {status === "error" && (
@@ -503,6 +703,17 @@ export default function UpdateModal({
               >
                 关闭
               </button>
+              {releaseData?.platformAsset?.downloadUrl && (
+                <button
+                  type="button"
+                  className="btn btn-subtle"
+                  onClick={() => openExternal(releaseData.platformAsset!.downloadUrl)}
+                  style={{ padding: "5px 12px", fontSize: 12 }}
+                  title="直接在浏览器中下载安装包文件"
+                >
+                  在浏览器中下载
+                </button>
+              )}
               <button
                 type="button"
                 className="btn"

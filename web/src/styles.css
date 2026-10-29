@@ -1751,3 +1751,204 @@ tbody tr.expanded-detail-row:hover > td {
 .profile-item-row.active .profile-name-text {
   font-weight: 600;
 }
+
+/* ---- 同步成果浮动结算卡片（Mac & Windows 兼容） ---- */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-8px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+/* ============================================================
+   同步成果结算通知卡片 (Sync Summary Toast)
+   严格适配暗色 (Dark) 与浅色 (Light) 模式，兼容 macOS 与 Windows 渲染
+   ============================================================ */
+.sync-summary-toast {
+  position: fixed;
+  top: 18px;
+  right: 18px;
+  z-index: 9999;
+  max-width: 440px;
+  width: calc(100% - 36px);
+  border-radius: 12px;
+  padding: 14px 16px;
+  box-sizing: border-box;
+  animation: fadeIn 0.2s ease-out;
+  transition: background-color 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+  font-family: var(--font);
+}
+
+[data-theme="dark"] .sync-summary-toast,
+:root:not([data-theme="light"]) .sync-summary-toast {
+  background: var(--surface-2);
+  color: var(--text);
+  border: 1px solid var(--border-strong);
+  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.45), 0 2px 8px rgba(0, 0, 0, 0.2);
+}
+
+[data-theme="light"] .sync-summary-toast {
+  background: #ffffff;
+  color: var(--text);
+  border: 1px solid var(--border-strong);
+  box-shadow: 0 14px 32px rgba(0, 0, 0, 0.12), 0 2px 6px rgba(0, 0, 0, 0.06);
+}
+
+.sync-summary-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.sync-summary-title {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--strong);
+}
+
+.sync-summary-close {
+  background: transparent;
+  border: none;
+  color: var(--text-faint);
+  font-size: 18px;
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 4px;
+  line-height: 1;
+  transition: color 0.15s, background-color 0.15s;
+}
+
+.sync-summary-close:hover {
+  color: var(--text);
+  background: var(--surface-3);
+}
+
+.sync-summary-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
+.sync-summary-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid transparent;
+}
+
+/* COROS 项 */
+[data-theme="dark"] .sync-summary-item.coros,
+:root:not([data-theme="light"]) .sync-summary-item.coros {
+  background: rgba(59, 130, 246, 0.12);
+  border-color: rgba(59, 130, 246, 0.25);
+}
+[data-theme="light"] .sync-summary-item.coros {
+  background: #eff6ff;
+  border-color: #bfdbfe;
+}
+
+/* Garmin 项 */
+[data-theme="dark"] .sync-summary-item.garmin,
+:root:not([data-theme="light"]) .sync-summary-item.garmin {
+  background: rgba(16, 185, 129, 0.12);
+  border-color: rgba(16, 185, 129, 0.25);
+}
+[data-theme="light"] .sync-summary-item.garmin {
+  background: #ecfdf5;
+  border-color: #a7f3d0;
+}
+
+/* 去重/冲突项 */
+[data-theme="dark"] .sync-summary-item.dedup,
+:root:not([data-theme="light"]) .sync-summary-item.dedup {
+  background: rgba(245, 158, 11, 0.12);
+  border-color: rgba(245, 158, 11, 0.25);
+}
+[data-theme="light"] .sync-summary-item.dedup {
+  background: #fffbeb;
+  border-color: #fde68a;
+}
+
+.sync-summary-tag {
+  font-size: 10.5px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-weight: 700;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+.sync-summary-tag.coros {
+  background: rgba(59, 130, 246, 0.2);
+  color: #3b82f6;
+}
+[data-theme="light"] .sync-summary-tag.coros {
+  background: #dbeafe;
+  color: #1d4ed8;
+}
+
+.sync-summary-tag.garmin {
+  background: rgba(16, 185, 129, 0.2);
+  color: #10b981;
+}
+[data-theme="light"] .sync-summary-tag.garmin {
+  background: #d1fae5;
+  color: #047857;
+}
+
+.sync-summary-tag.dedup {
+  background: rgba(245, 158, 11, 0.2);
+  color: #f59e0b;
+}
+[data-theme="light"] .sync-summary-tag.dedup {
+  background: #fef3c7;
+  color: #b45309;
+}
+
+.sync-summary-item-content {
+  color: var(--text);
+  flex: 1;
+}
+
+.sync-summary-error {
+  padding: 7px 10px;
+  border-radius: 6px;
+  font-size: 11.5px;
+  background: var(--bad-bg);
+  border: 1px solid var(--bad-border);
+  color: var(--bad-text);
+  margin-top: 2px;
+}
+
+.sync-summary-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+  font-size: 11px;
+  color: var(--text-faint);
+}
+
+@media (max-width: 640px) {
+  .sync-summary-toast {
+    top: 10px !important;
+    right: 10px !important;
+    left: 10px !important;
+    width: auto !important;
+    max-width: none !important;
+  }
+}

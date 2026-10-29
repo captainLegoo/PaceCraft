@@ -65,10 +65,20 @@ jobs:
           if [[ "$VER" =~ ^([0-9]+)\.([0-9]+)\.([0-9]+)\.([0-9]+)$ ]]; then
             VER="${BASH_REMATCH[1]}.${BASH_REMATCH[2]}.${BASH_REMATCH[3]}-${BASH_REMATCH[4]}"
           fi
-          echo "Syncing app version to $VER..."
+
+          # Tauri v2 严格要求 tauri.conf.json 的 version 必须为合法 3 段式 SemVer (X.Y.Z)
+          # 且 Windows MSI WiX 要求不能含有 beta/alpha 等非数字字符
+          # 因此将 tauri.conf.json 和 Cargo.toml 设为干净的标准 3 段式主版本号 (如 0.1.13)
+          TAURI_VER="$VER"
+          if [[ "$VER" =~ ^([0-9]+\.[0-9]+\.[0-9]+) ]]; then
+            TAURI_VER="${BASH_REMATCH[1]}"
+          fi
+
+          echo "Original version: $VER"
+          echo "Tauri & Cargo SemVer: $TAURI_VER"
           bun -e "
             const tauri = JSON.parse(await Bun.file('src-tauri/tauri.conf.json').text());
-            tauri.version = '$VER';
+            tauri.version = '$TAURI_VER';
             await Bun.write('src-tauri/tauri.conf.json', JSON.stringify(tauri, null, 2));
             const pkg = JSON.parse(await Bun.file('package.json').text());
             pkg.version = '$VER';
@@ -80,7 +90,7 @@ jobs:
             serverPkg.version = '$VER';
             await Bun.write('server/package.json', JSON.stringify(serverPkg, null, 2));
             let cargo = await Bun.file('src-tauri/Cargo.toml').text();
-            cargo = cargo.replace(/^version = \".*\"/m, 'version = \"' + '$VER' + '\"');
+            cargo = cargo.replace(/^version = \".*\"/m, 'version = \"' + '$TAURI_VER' + '\"');
             await Bun.write('src-tauri/Cargo.toml', cargo);
           "
 

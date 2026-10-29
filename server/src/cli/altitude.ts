@@ -33,69 +33,7 @@ const limit = Number(limitArg ?? 12);
 const outArg = args.find((a) => a.startsWith("--out="))?.slice(6);
 const FIT_DIR = outArg ?? "/tmp/coros-fit";
 
-/** 用 Python 解码 FIT：手写解析器在 message definition 上极易出错 */
-const PY_SCRIPT = `
-import sys, json
-from fitparse import FitFile
-f = FitFile(sys.argv[1])
-alts, lats, lons = [], [], []
-for m in f.get_messages('record'):
-    d = {fl.name: fl.value for fl in m}
-    if d.get('altitude') is not None: alts.append(d['altitude'])
-    if d.get('position_lat') is not None: lats.append(d['position_lat'])
-    if d.get('position_long') is not None: lons.append(d['position_long'])
-if not alts:
-    print(json.dumps({'samples': 0}))
-else:
-    # 先做 ±3 采样点的滑动平均，压掉气压计逐秒抖动。
-    # 只靠「逐点差值 > 阈值」是不够的：跑步时气压随温度缓慢漂移，
-    # 每一秒的微小正增量都会通过一个低阈值，五千多个采样能累出几十米的假爬升
-    #（标准田径场上实测过：全程真实高差只有 2m）。先平滑，阈值才有意义。
-    win = 7
-    sm = alts
-    if len(alts) >= win:
-        half = win // 2
-        sm = []
-        for i in range(len(alts)):
-            lo = max(0, i - half); hi = min(len(alts), i + half + 1)
-            sm.append(sum(alts[lo:hi]) / (hi - lo))
-
-    # 再用滞回阈值累加：涨过 1.2m 才计入并抬高参考点，跌过 1.2m 才下移参考点。
-    # 滞回的好处是噪声带内的来回摆动**两边都不动**，不会被累加成假爬升；
-    # 单向阈值则会反复以抬高的参考点为基准，把同一段噪声数很多遍。
-    # 阈值 1.2m 是用 55 场 FIT 对着 COROS 报值扫出来的：
-    # 起伏场偏差中位数 13m（比值 0.90），而 10 场完全平路的最大误报只有 3m。
-    th = 1.2
-    gain = 0.0
-    ref = sm[0]
-    for x in sm:
-        if x - ref > th:
-            gain += x - ref
-            ref = x
-        elif ref - x > th:
-            ref = x
-
-    # 滞回滤波会系统性地少算一点爬升（短坡的起止被阈值削掉）。
-    # 用 55 场 FIT 对着 COROS 自己的爬升值量了一下，中位比值 0.90，
-    # 所以乘回来，让这个值能真正当「交叉校验」用 —— 不然差 10% 每次都要人工解释。
-    gain = gain / 0.90
-
-    print(json.dumps({
-        'samples': len(alts), 'altMin': min(alts), 'altMax': max(alts),
-        'altAvg': sum(alts)/len(alts), 'gainFromFit': gain,
-        'latSemicircle': sum(lats)/len(lats) if lats else 0,
-        'lonSemicircle': sum(lons)/len(lons) if lons else 0,
-    }))
-`;
-
-function decodeFit(path: string) {
-  try {
-    const out = execFileSync("python3", ["-c", PY_SCRIPT, path], { encoding: "utf8" });
-    return JSON.parse(out.trim());
-  } catch {
-    return { samples: 0 };
-  }
-}
+import { parseAltitudeFromFit } from "../fit-parser.ts";
 
 mkdirSync(FIT_DIR, { recursive: true });
 
@@ -138,8 +76,8 @@ for (const a of targets) {
     reused++;
   }
 
-  const s = decodeFit(fitPath);
-  if (!s.samples) {
+  const s = await parseAltitudeFromFit(fitPath);
+  if (!s || !s.samples) {
     console.log(`${a.dateLabel}  FIT 无高程采样`);
     continue;
   }

@@ -808,7 +808,7 @@ export function ZoneBar({ zones, basis }: { zones: ZoneInput[]; basis: number | 
           : b.restingHr
             ? `，最大心率 ${b.maxHr ?? b.basis} bpm − 静息 ${b.restingHr} bpm = 储备 ${b.reserve} bpm。括号内百分比是对应的 HRR 占比`
             : ""}
-        。COROS 未提供分区字段，此处为自算。
+        。心率分区由平台按储备心率（HRR）模型统一自算。
       </div>
     </div>
   );

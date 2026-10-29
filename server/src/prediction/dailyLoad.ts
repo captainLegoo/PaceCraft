@@ -39,6 +39,7 @@ export type DailyLoadInput = {
   durationSec: number | null;
   avgHr: number | null;
   distanceKm?: number | null;
+  isDuplicate?: number | null;
 };
 
 export type DailyLoad = {
@@ -90,6 +91,7 @@ export function computeDailyLoads(
   };
 
   for (const a of acts) {
+    if (a.isDuplicate === 1) continue; // 排除归档的对比样本，防止日负荷和疲劳指数翻倍
     const row = touch(normalizeDate(a.date));
     const sec = a.durationSec ?? 0;
     if (sec <= 0) continue;

@@ -19,6 +19,7 @@
     "build:embed": "bun run scripts/bundle-dist.ts",
     "build:sidecar": "bun run build:embed && bun run scripts/build-sidecar.ts",
     "build:all": "bun run build:web && bun run build:sidecar",
+    "clean:test": "bun run server/src/cli/clean-test-data.ts",
     "sync": "bun run --cwd server sync",
     "probe": "bun run --cwd server probe",
     "shoot": "bun run .shots/shoot.ts",

@@ -10,11 +10,13 @@
     "auth": "bun run src/cli/auth.ts",
     "sync": "bun run src/cli/sync.ts",
     "probe": "bun run src/cli/probe.ts",
-    "test:week": "bun run src/cli/test-week-stability.ts"
+    "test:week": "bun run src/cli/test-week-stability.ts",
+    "clean:test": "bun run src/cli/clean-test-data.ts"
   },
   "dependencies": {
     "drizzle-orm": "^0.44.2",
-    "elysia": "^1.4.0"
+    "elysia": "^1.4.0",
+    "fit-file-parser": "^6.2.3"
   },
   "devDependencies": {
     "@types/bun": "latest",
