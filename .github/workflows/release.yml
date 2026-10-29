@@ -66,21 +66,16 @@ jobs:
             VER="${BASH_REMATCH[1]}.${BASH_REMATCH[2]}.${BASH_REMATCH[3]}-${BASH_REMATCH[4]}"
           fi
 
-          # Windows MSI 严格要求版本号必须是纯数字 (如 0.1.13 或 0.1.13.1)，不能含有 beta/alpha/rc 等字母
-          # 提取纯数字主版本号写入 tauri.conf.json 和 Cargo.toml
+          # Tauri v2 严格要求 tauri.conf.json 的 version 必须为合法 3 段式 SemVer (X.Y.Z)
+          # 且 Windows MSI WiX 要求不能含有 beta/alpha 等非数字字符
+          # 因此将 tauri.conf.json 和 Cargo.toml 设为干净的标准 3 段式主版本号 (如 0.1.13)
           TAURI_VER="$VER"
           if [[ "$VER" =~ ^([0-9]+\.[0-9]+\.[0-9]+) ]]; then
-            BASE_VER="${BASH_REMATCH[1]}"
-            # 如果包含数字子版本号（如 -beta.1 -> .1），可映射为第4位纯数字；若无则直接使用 base
-            if [[ "$VER" =~ [-._]([0-9]+)$ ]]; then
-              TAURI_VER="${BASE_VER}.${BASH_REMATCH[1]}"
-            else
-              TAURI_VER="$BASE_VER"
-            fi
+            TAURI_VER="${BASH_REMATCH[1]}"
           fi
 
           echo "Original version: $VER"
-          echo "Tauri MSI-safe version: $TAURI_VER"
+          echo "Tauri & Cargo SemVer: $TAURI_VER"
           bun -e "
             const tauri = JSON.parse(await Bun.file('src-tauri/tauri.conf.json').text());
             tauri.version = '$TAURI_VER';
