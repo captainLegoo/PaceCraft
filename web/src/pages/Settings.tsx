@@ -2,7 +2,7 @@ import { useEffect, useState, useCallback } from "react";
 import { api, type GarminMultiAuthStatus, type GarminSyncProgress, type SyncProgress, type SyncSportsPayload } from "../api";
 import { formatElapsed } from "../utils/format";
 import { useClipboard } from "../utils/clipboard";
-import { IconDatabase, IconGear, IconHeart, IconSync } from "../icons";
+import { IconCalendar, IconDatabase, IconGear, IconHeart, IconSync } from "../icons";
 import WorkflowPanel from "./WorkflowPanel";
 import { useCorosAuth } from "../use-coros-auth";
 import { DEFAULT_APP_VERSION } from "../version";
@@ -530,6 +530,7 @@ export default function Settings({
   const [picked, setPicked] = useState<number[]>([]);
   const [sportsMsg, setSportsMsg] = useState<{ kind: "ok" | "error"; text: string } | null>(null);
   const [sportsSaving, setSportsSaving] = useState(false);
+  const [showMoreSports, setShowMoreSports] = useState(false);
 
   type ZoneRow = { zone: string; label: string; hrLo: number | ""; hrHi: number | "" };
 
@@ -1419,11 +1420,97 @@ export default function Settings({
             )}
           </div>
 
-          {/* 自动化工作流：紧凑展示，消除左列留白 */}
+          {/* 自动化工作流：后台异步计算步骤 */}
           <WorkflowPanel />
+
+          {/* 当前数据状态：填补左列高度，实现左右列高度对称 */}
+          <div className="card">
+            <h3 className="card-title"><IconDatabase size={14} />当前数据状态</h3>
+            <p className="card-sub">
+              {status?.lastSync
+                ? `上次同步：${new Date(status.lastSync.startedAt * 1000).toLocaleString("zh-CN")}（${status.lastSync.status === "ok" ? "成功" : "有错误"}）`
+                : "尚未同步过"}
+            </p>
+            {status && (
+              <table>
+                <tbody>
+                  <tr><td>活动记录</td><td className="num">{status.counts.activities}</td></tr>
+                  <tr><td>分圈数据</td><td className="num">{status.counts.laps}</td></tr>
+                  <tr><td>训练负荷</td><td className="num">{status.counts.loadDays} 天</td></tr>
+                  <tr><td>每日健康</td><td className="num">{status.counts.healthDays} 天</td></tr>
+                  <tr><td>睡眠记录</td><td className="num">{status.counts.sleepDays} 天</td></tr>
+                  <tr><td>最近训练</td><td className="num">{status.latestActivityDate ?? "—"}</td></tr>
+                  <tr><td>AI 模型</td><td>{status.aiConfigured ? <span className="pill good">已配置</span> : <span className="pill">未配置</span>}</td></tr>
+                  <tr>
+                    <td>当前版本</td>
+                    <td>
+                      <div style={{ display: "inline-flex", alignItems: "center", gap: 6, verticalAlign: "middle" }}>
+                        <ExternalLink
+                          href="https://github.com/captainLegoo/PaceCraft"
+                          className="version-tag"
+                          title={`当前版本：${appVersion}（访问 GitHub 仓库）`}
+                        >
+                          <span className="dot" />
+                          <span>{appVersion}</span>
+                        </ExternalLink>
+                        <button
+                          type="button"
+                          className="version-check-btn"
+                          style={
+                            hasNewUpdate
+                              ? { color: "var(--accent)", borderColor: "var(--accent)", background: "rgba(198, 242, 78, 0.12)" }
+                              : undefined
+                          }
+                          onClick={onCheckUpdate}
+                        >
+                          {hasNewUpdate && (
+                            <span
+                              style={{
+                                width: 4,
+                                height: 4,
+                                borderRadius: "50%",
+                                background: "var(--accent)",
+                                display: "inline-block",
+                              }}
+                            />
+                          )}
+                          <span>{hasNewUpdate ? "发现新版本" : "检查更新"}</span>
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            )}
+          </div>
+
+          {/* 关于数据来源与系统：接续在当前数据状态下方，彻底消灭左列留白 */}
+          <div className="card">
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 8, marginBottom: 4 }}>
+              <h3 className="card-title" style={{ margin: 0 }}>关于数据来源与系统</h3>
+              <ExternalLink
+                href="https://github.com/captainLegoo/PaceCraft"
+                className="version-tag"
+                title="访问 GitHub 仓库"
+              >
+                <span className="dot" />
+                <span>PaceCraft {appVersion}</span>
+              </ExternalLink>
+            </div>
+            <p className="card-sub" style={{ margin: "2px 0 10px 0" }}>
+              本看板所有数据均来自各品牌官方开放平台（高驰 COROS 官方开放接口 / 佳明 Garmin Personal API），未使用任何非官方接口。
+            </p>
+            <ul style={{ color: "var(--text-dim)", fontSize: 12, lineHeight: 1.8, paddingLeft: 18, margin: 0 }}>
+              <li>高驰授权通过 OAuth 2.0 动态客户端注册 + PKCE 完成，Garmin 通过官方 Personal API Key 接入，Token 与 Key 均仅存储于你本机 SQLite 数据库。</li>
+              <li>时序活动数据、分圈轨迹与 .FIT 文件均经平台独立解析引擎统一标准化归一化处理。</li>
+              <li>分圈距离原始单位已在多次活动上与记录距离交叉验证一致。</li>
+              <li>心率区间与能力预测由本看板独立引擎计算，完全跨品牌通用。</li>
+              <li>高驰 FIT 原始文件每日限 50 次下载（官方限制，Garmin 不受此限），超出后保留基础时序指标。</li>
+            </ul>
+          </div>
         </div>
 
-        {/* 右列：手表设备账号连接 + 当前数据状态 */}
+        {/* 右列：手表设备账号连接 + 数据同步 + 反馈与建议 */}
         <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
           {/* 统一外层大边框：运动手表账号连接中心 */}
           <div
@@ -1812,15 +1899,11 @@ export default function Settings({
             </div>
           </div>
 
+          {/* 跨品牌运动类型过滤 */}
           <div className="card">
-            <h3 className="card-title"><IconSync size={14} />数据同步</h3>
-            <p className="card-sub">
-              平台采用纯本地运行与主动拉取机制，数据完全保存在你本机。建议每次训练后或定期点击同步一次。
-            </p>
-
-            <div className="hint" style={{ marginBottom: 6 }}>跨品牌同步运动类型过滤</div>
+            <h3 className="card-title"><IconSync size={14} />跨品牌运动类型过滤</h3>
             <p className="card-sub" style={{ marginBottom: 10 }}>
-              决定「立即同步」会拉回哪些训练类别，已对<strong>高驰 (COROS) 与佳明 (Garmin) 双生态</strong>全量生效。没勾选的类别在同步时会自动忽略，不会出现在看板与负荷统计中。
+              决定数据同步时会拉回哪些训练类别，已对<strong>高驰 (COROS) 与佳明 (Garmin) 双生态</strong>全量生效。没勾选的类别在同步时会自动忽略。
             </p>
 
             {sports && (
@@ -1834,30 +1917,83 @@ export default function Settings({
                   <button className="sport-link" onClick={() => setPicked([])}>清空</button>
                 </div>
 
-                {sports.groups.map((g) => {
-                  const allOn = g.types.every((t) => picked.includes(t.code));
-                  return (
-                    <div className="sport-group" key={g.key}>
-                      <div className="sport-group-head">
-                        <span className="sport-group-name">{g.label}</span>
-                        <button className="sport-link" onClick={() => setGroup(g.types, !allOn)}>
-                          {allOn ? "清空" : "全选"}
-                        </button>
-                      </div>
-                      <div className="sport-chips">
-                        {g.types.map((t) => (
-                          <button
-                            key={t.code}
-                            className={`sport-chip ${picked.includes(t.code) ? "on" : ""}`}
-                            onClick={() => toggleSport(t.code)}
-                          >
-                            {t.label}
+                {/* 核心耐力运动（跑步、骑行、游泳、健步、日常有氧） */}
+                {sports.groups
+                  .filter((g) => ["run", "bike", "swim", "walk", "cardio"].includes(g.key))
+                  .map((g) => {
+                    const allOn = g.types.every((t) => picked.includes(t.code));
+                    return (
+                      <div className="sport-group" key={g.key}>
+                        <div className="sport-group-head">
+                          <span className="sport-group-name">{g.label}</span>
+                          <button className="sport-link" onClick={() => setGroup(g.types, !allOn)}>
+                            {allOn ? "清空" : "全选"}
                           </button>
-                        ))}
+                        </div>
+                        <div className="sport-chips">
+                          {g.types.map((t) => (
+                            <button
+                              key={t.code}
+                              className={`sport-chip ${picked.includes(t.code) ? "on" : ""}`}
+                              onClick={() => toggleSport(t.code)}
+                            >
+                              {t.label}
+                            </button>
+                          ))}
+                        </div>
                       </div>
+                    );
+                  })}
+
+                {/* 次要运动类型折叠收纳：减少占用，跑友有需要时再展开 */}
+                {(() => {
+                  const moreGroups = sports.groups.filter((g) => !["run", "bike", "swim", "walk", "cardio"].includes(g.key));
+                  const morePickedCount = moreGroups.reduce((acc, g) => acc + g.types.filter((t) => picked.includes(t.code)).length, 0);
+                  if (moreGroups.length === 0) return null;
+                  return (
+                    <div style={{ marginTop: 8, marginBottom: 10 }}>
+                      <button
+                        type="button"
+                        className="btn sm"
+                        style={{ width: "100%", justifyContent: "center", fontSize: 11.5 }}
+                        onClick={() => setShowMoreSports((v) => !v)}
+                      >
+                        {showMoreSports
+                          ? "▲ 收起其他运动类型"
+                          : `▼ 展开更多运动分类（球类/攀岩/水上等${morePickedCount > 0 ? ` · 已选 ${morePickedCount} 项` : ""}）`}
+                      </button>
+
+                      {showMoreSports && (
+                        <div style={{ marginTop: 8 }}>
+                          {moreGroups.map((g) => {
+                            const allOn = g.types.every((t) => picked.includes(t.code));
+                            return (
+                              <div className="sport-group" key={g.key}>
+                                <div className="sport-group-head">
+                                  <span className="sport-group-name">{g.label}</span>
+                                  <button className="sport-link" onClick={() => setGroup(g.types, !allOn)}>
+                                    {allOn ? "清空" : "全选"}
+                                  </button>
+                                </div>
+                                <div className="sport-chips">
+                                  {g.types.map((t) => (
+                                    <button
+                                      key={t.code}
+                                      className={`sport-chip ${picked.includes(t.code) ? "on" : ""}`}
+                                      onClick={() => toggleSport(t.code)}
+                                    >
+                                      {t.label}
+                                    </button>
+                                  ))}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
                     </div>
                   );
-                })}
+                })()}
 
                 <button
                   className="btn primary"
@@ -1877,13 +2013,18 @@ export default function Settings({
                 )}
                 <div className="hint" style={{ marginTop: 14, marginBottom: 0 }}>
                   勾选只影响<strong>之后</strong>的同步，不会删除库里已有的记录。
-                  骑行和游泳虽然也能勾，但本看板的配速/坡度图表按跑步口径画，
-                  混进来数字意义有限 —— 所以默认没勾。
                 </div>
               </>
             )}
+          </div>
 
-            <div className="hint" style={{ margin: "18px 0 6px" }}>回溯天数</div>
+          {/* 回溯天数与数据同步 (独立 Card) */}
+          <div className="card">
+            <h3 className="card-title"><IconCalendar size={14} />回溯天数与数据同步</h3>
+            <p className="card-sub" style={{ marginBottom: 12 }}>
+              设置历史训练数据的同步时间范围。平台采用纯本地拉取机制，数据完全保存在你本机。
+            </p>
+
             <div style={{ display: "flex", gap: 8, marginBottom: 8, flexWrap: "wrap" }}>
               {[
                 { label: "近 90 天", days: 90 },
@@ -1908,7 +2049,7 @@ export default function Settings({
                 </button>
               ))}
             </div>
-            <label className="field">
+            <label className="field" style={{ marginBottom: 12 }}>
               <input type="number" value={syncDays} onChange={(e) => setSyncDays(Number(e.target.value))} />
               <div className="hint">
                 <strong>推荐回溯 365 天（1 年）</strong>：长周期训练数据能自动提取半马、全马等真实比赛作为基准锚点，大幅提升马拉松完赛预测准确度。已存在的训练会自动跳过分圈，不会重复消耗耗时。
@@ -1932,7 +2073,7 @@ export default function Settings({
             )}
 
             <button
-              className="btn"
+              className="btn primary"
               onClick={doSync}
               disabled={syncing || !hasAnyWatch}
               title={!hasAnyWatch ? "请先在上方连接 COROS 或 Garmin 账号" : undefined}
@@ -1954,92 +2095,10 @@ export default function Settings({
             )}
           </div>
 
-          <div className="card">
-            <h3 className="card-title"><IconDatabase size={14} />当前数据状态</h3>
-            <p className="card-sub">
-              {status?.lastSync
-                ? `上次同步：${new Date(status.lastSync.startedAt * 1000).toLocaleString("zh-CN")}（${status.lastSync.status === "ok" ? "成功" : "有错误"}）`
-                : "尚未同步过"}
-            </p>
-            {status && (
-              <table>
-                <tbody>
-                  <tr><td>活动记录</td><td className="num">{status.counts.activities}</td></tr>
-                  <tr><td>分圈数据</td><td className="num">{status.counts.laps}</td></tr>
-                  <tr><td>训练负荷</td><td className="num">{status.counts.loadDays} 天</td></tr>
-                  <tr><td>每日健康</td><td className="num">{status.counts.healthDays} 天</td></tr>
-                  <tr><td>睡眠记录</td><td className="num">{status.counts.sleepDays} 天</td></tr>
-                  <tr><td>最近训练</td><td className="num">{status.latestActivityDate ?? "—"}</td></tr>
-                  <tr><td>AI 模型</td><td>{status.aiConfigured ? <span className="pill good">已配置</span> : <span className="pill">未配置</span>}</td></tr>
-                  <tr>
-                    <td>当前版本</td>
-                    <td>
-                      <div style={{ display: "inline-flex", alignItems: "center", gap: 6, verticalAlign: "middle" }}>
-                        <ExternalLink
-                          href="https://github.com/captainLegoo/PaceCraft"
-                          className="version-tag"
-                          title={`当前版本：${appVersion}（访问 GitHub 仓库）`}
-                        >
-                          <span className="dot" />
-                          <span>{appVersion}</span>
-                        </ExternalLink>
-                        <button
-                          type="button"
-                          className="version-check-btn"
-                          style={
-                            hasNewUpdate
-                              ? { color: "var(--accent)", borderColor: "var(--accent)", background: "rgba(198, 242, 78, 0.12)" }
-                              : undefined
-                          }
-                          onClick={onCheckUpdate}
-                        >
-                          {hasNewUpdate && (
-                            <span
-                              style={{
-                                width: 4,
-                                height: 4,
-                                borderRadius: "50%",
-                                background: "var(--accent)",
-                                display: "inline-block",
-                              }}
-                            />
-                          )}
-                          <span>{hasNewUpdate ? "发现新版本" : "检查更新"}</span>
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
-            )}
-          </div>
+          {/* 反馈与建议：作为右列底部卡片，与左列系统关于卡片水平对齐 */}
+          <FeedbackSection appVersion={appVersion} status={status} />
         </div>
       </div>
-
-      <div className="card">
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 8, marginBottom: 4 }}>
-          <h3 className="card-title" style={{ margin: 0 }}>关于数据来源与系统</h3>
-          <ExternalLink
-            href="https://github.com/captainLegoo/PaceCraft"
-            className="version-tag"
-            title="访问 GitHub 仓库"
-          >
-            <span className="dot" />
-            <span>PaceCraft {appVersion}</span>
-          </ExternalLink>
-        </div>
-        <p className="card-sub">本看板所有数据均来自各品牌官方开放平台（高驰 COROS 官方开放接口 / 佳明 Garmin Personal API），未使用任何非官方接口。</p>
-        <ul style={{ color: "var(--text-dim)", fontSize: 12.5, lineHeight: 1.9, paddingLeft: 18, margin: 0 }}>
-          <li>高驰授权通过 OAuth 2.0 动态客户端注册 + PKCE 完成，Garmin 通过官方 Personal API Key 接入，Token 与 Key 均仅存储于你本机 SQLite 数据库。</li>
-          <li>时序活动数据、分圈轨迹与 .FIT 文件均经平台独立解析引擎统一标准化归一化处理。</li>
-          <li>分圈距离原始单位已在多次活动上与记录距离交叉验证一致。</li>
-          <li>心率区间与能力预测由本看板独立引擎计算，完全跨品牌通用。</li>
-          <li>高驰 FIT 原始文件每日限 50 次下载（官方限制，Garmin 不受此限），超出后保留基础时序指标。</li>
-        </ul>
-      </div>
-
-      {/* 反馈与建议 */}
-      <FeedbackSection appVersion={appVersion} status={status} />
 
       {/* 模拟测试数据清理 */}
       {testDataInfo && (testDataInfo.count > 0 || testCleanMsg) && (

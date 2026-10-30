@@ -102,33 +102,29 @@ export default function FeedbackSection({
   };
 
   return (
-    <div className="card" style={{ marginTop: 14 }}>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 10, marginBottom: 6 }}>
-        <h3 className="card-title" style={{ margin: 0, display: "flex", alignItems: "center", gap: 8 }}>
-          <IconChat size={15} /> 反馈与建议
+    <div className="card" style={{ height: "100%", display: "flex", flexDirection: "column" }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 8, marginBottom: 12 }}>
+        <h3 className="card-title" style={{ margin: 0, display: "flex", alignItems: "center", gap: 6 }}>
+          <IconChat size={14} /> 反馈与建议
         </h3>
-        <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
           <button
             type="button"
             className="btn sm"
             onClick={handleCopyDiagnostics}
             title="一键复制系统运行诊断信息（不含隐私），方便在微信群或社群粘贴"
           >
-            {copiedDiag ? "✓ 诊断信息已复制" : "📋 复制诊断报告"}
+            {copiedDiag ? "✓ 已复制" : "📋 复制诊断"}
           </button>
           <ExternalLink
             href="https://github.com/captainLegoo/PaceCraft/issues"
             className="btn sm"
             title="在浏览器中直接查看 GitHub Issues 讨论与代码进展"
           >
-            GitHub Issues ↗
+            Issues ↗
           </ExternalLink>
         </div>
       </div>
-
-      <p className="card-sub" style={{ margin: "0 0 14px 0" }}>
-        遇到 Bug、数据解析异常，或有好的跑步指标、图表建议？无需登录 GitHub 账号，直接在此向作者提交，Issue 将自动同步创建并跟进。
-      </p>
 
       {successResult ? (
         <div
@@ -136,26 +132,30 @@ export default function FeedbackSection({
             background: "var(--good-bg)",
             border: "1px solid var(--good-border)",
             borderRadius: "var(--radius)",
-            padding: "16px 18px",
+            padding: "14px 16px",
             color: "var(--good-text)",
-            fontSize: 13,
+            fontSize: 12.5,
             lineHeight: 1.6,
+            flex: 1,
+            display: "flex",
+            flexDirection: "column",
+            justifyContent: "center",
           }}
         >
-          <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 6, display: "flex", alignItems: "center", gap: 6 }}>
-            <span>✓</span> 感谢反馈！内容已成功送达 GitHub Issues
+          <div style={{ fontWeight: 600, fontSize: 13.5, marginBottom: 4, display: "flex", alignItems: "center", gap: 6 }}>
+            <span>✓</span> 反馈已成功送达 GitHub Issues！
           </div>
-          <div style={{ color: "var(--text)", fontSize: 12.5, marginBottom: 12 }}>
-            作者会定期查看并回复进展。如果你留下了联系方式，修复后会第一时间通知你。
+          <div style={{ color: "var(--text)", fontSize: 12, marginBottom: 10 }}>
+            感谢支持。若留下了联系方式，问题解决后将第一时间通知您。
           </div>
-          <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
             {successResult.issueUrl && (
               <ExternalLink
                 href={successResult.issueUrl}
                 className="btn sm primary"
                 style={{ textDecoration: "none" }}
               >
-                查看刚刚创建的 Issue 详情 ↗
+                查看 Issue 详情 ↗
               </ExternalLink>
             )}
             <button
@@ -168,9 +168,9 @@ export default function FeedbackSection({
           </div>
         </div>
       ) : (
-        <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+        <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: 10, flex: 1 }}>
           {/* 反馈类型切换 */}
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
             {FEEDBACK_TYPES.map((t) => {
               const active = type === t.id;
               return (
@@ -179,9 +179,9 @@ export default function FeedbackSection({
                   type="button"
                   onClick={() => setType(t.id)}
                   style={{
-                    padding: "6px 12px",
-                    borderRadius: 20,
-                    fontSize: 12,
+                    padding: "4px 10px",
+                    borderRadius: 16,
+                    fontSize: 11.5,
                     fontWeight: active ? 600 : 500,
                     cursor: "pointer",
                     border: "1px solid",
@@ -210,18 +210,19 @@ export default function FeedbackSection({
           </div>
 
           {/* 内容输入 */}
-          <div>
+          <div style={{ flex: 1, minHeight: 70 }}>
             <textarea
-              rows={4}
+              rows={3}
               required
-              placeholder="详细描述具体情况、复现步骤或你的想法期望...（必填）"
+              placeholder="详细描述具体情况、复现步骤或新功能建议...（必填）"
               value={content}
               onChange={(e) => setContent(e.target.value)}
               disabled={submitting}
               style={{
-                lineHeight: 1.6,
+                lineHeight: 1.5,
                 resize: "vertical",
-                minHeight: 88,
+                minHeight: 65,
+                height: "100%",
               }}
             />
           </div>
@@ -230,7 +231,7 @@ export default function FeedbackSection({
           <div>
             <input
               type="text"
-              placeholder="联系方式（选填：微信号 / 邮箱 / GitHub ID，方便作者跟进与告知修复进展）"
+              placeholder="联系方式（选填：微信号 / 邮箱 / GitHub ID，方便后续跟进）"
               value={contact}
               onChange={(e) => setContact(e.target.value)}
               disabled={submitting}
@@ -242,17 +243,17 @@ export default function FeedbackSection({
           <div
             style={{
               background: "var(--surface-2)",
-              borderRadius: "var(--radius)",
-              padding: "8px 12px",
+              borderRadius: 6,
+              padding: "6px 10px",
               border: "1px solid var(--border)",
-              fontSize: 12,
+              fontSize: 11.5,
               display: "flex",
               flexDirection: "column",
-              gap: 6,
+              gap: 4,
             }}
           >
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
-              <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", color: "var(--text)" }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 6 }}>
+              <label style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer", color: "var(--text-dim)" }}>
                 <input
                   type="checkbox"
                   checked={includeDiagnostics}
@@ -260,16 +261,16 @@ export default function FeedbackSection({
                   disabled={submitting}
                   style={{ width: "auto", margin: 0 }}
                 />
-                <span>附带运行环境诊断信息（软件版本、系统环境、数据概况，不含任何私人 Token）</span>
+                <span>自动附带运行诊断信息（版本、OS、数据量，不含隐私）</span>
               </label>
               {includeDiagnostics && (
                 <button
                   type="button"
                   className="btn sm"
-                  style={{ padding: "2px 8px", fontSize: 11 }}
+                  style={{ padding: "1px 6px", fontSize: 11 }}
                   onClick={() => setShowDiagnosticsPreview(!showDiagnosticsPreview)}
                 >
-                  {showDiagnosticsPreview ? "收起明细" : "预览明细"}
+                  {showDiagnosticsPreview ? "收起" : "预览"}
                 </button>
               )}
             </div>
@@ -277,16 +278,18 @@ export default function FeedbackSection({
             {includeDiagnostics && showDiagnosticsPreview && (
               <pre
                 style={{
-                  margin: "6px 0 0 0",
-                  padding: "8px 10px",
-                  borderRadius: 6,
+                  margin: "4px 0 0 0",
+                  padding: "6px 8px",
+                  borderRadius: 4,
                   background: "var(--bg)",
                   color: "var(--text-dim)",
                   fontFamily: "var(--mono)",
-                  fontSize: 11.5,
+                  fontSize: 11,
                   whiteSpace: "pre-wrap",
                   wordBreak: "break-all",
                   border: "1px solid var(--border)",
+                  maxHeight: 120,
+                  overflowY: "auto",
                 }}
               >
                 {diagnostics}
@@ -301,12 +304,12 @@ export default function FeedbackSection({
                 background: "var(--bad-bg)",
                 border: "1px solid var(--bad-border)",
                 color: "var(--bad-text)",
-                padding: "8px 12px",
+                padding: "6px 10px",
                 borderRadius: "var(--radius)",
-                fontSize: 12.5,
+                fontSize: 12,
                 display: "flex",
                 alignItems: "center",
-                gap: 8,
+                gap: 6,
               }}
             >
               <span>⚠️</span>
@@ -315,20 +318,17 @@ export default function FeedbackSection({
           )}
 
           {/* 操作按钮栏 */}
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 10, marginTop: 2 }}>
-            <div style={{ fontSize: 11.5, color: "var(--text-faint)" }}>
-              由 Deno Deploy 边缘代理安全直连 GitHub API
-            </div>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 8, marginTop: 4 }}>
             <button
               type="submit"
               className="btn primary"
               disabled={submitting || !content.trim()}
-              style={{ minWidth: 100, justifyContent: "center" }}
+              style={{ minWidth: 90, justifyContent: "center" }}
             >
               {submitting ? (
                 <>
                   <span className="spin" />
-                  <span>正在提交…</span>
+                  <span>提交中…</span>
                 </>
               ) : (
                 <>
