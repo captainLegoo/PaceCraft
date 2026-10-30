@@ -4,6 +4,7 @@ import { sqlite } from "../db/client.ts";
 import { getFitDir } from "../altitude.ts";
 import { parseLapsFromFit } from "../fit-parser.ts";
 import { computeUnifiedTrimp, detectActivityConflicts } from "../conflicts.ts";
+import { loadSportTypeCodes, mapGarminSportType } from "../sports/types.ts";
 import { getGarminMultiAuthStatus } from "./auth.ts";
 import { downloadGarminFit, fetchAllGarminActivities } from "./client.ts";
 import { syncGarminHealth } from "./health.ts";
@@ -62,17 +63,7 @@ function updateProgress(patch: Partial<GarminSyncProgress>) {
   };
 }
 
-function mapSportType(typeKey: string = "", sportTypeId?: number): { code: number; label: string } {
-  const key = typeKey.toLowerCase();
-  if (key === "running" || sportTypeId === 1) return { code: 100, label: "户外跑" };
-  if (key === "treadmill_running") return { code: 101, label: "室内跑" };
-  if (key === "trail_running") return { code: 102, label: "越野跑" };
-  if (key === "track_running") return { code: 103, label: "场地跑" };
-  if (key.includes("cycling") || key.includes("biking")) return { code: 200, label: "骑行" };
-  if (key.includes("swimming")) return { code: 300, label: "游泳" };
-  if (key.includes("hiking") || key.includes("walking")) return { code: 104, label: "徒步" };
-  return { code: 100, label: "跑步" };
-}
+// mapSportType 已收拢至 ../sports/types.ts 中的 mapGarminSportType 统一基准
 
 export type SyncGarminOptions = {
   region?: GarminRegion | "all";
@@ -190,14 +181,21 @@ export async function syncGarminActivities(opts?: number | SyncGarminOptions): P
           : undefined,
       });
 
+      const sportTypeCodes = loadSportTypeCodes();
+      const allowedSportCodes = new Set(sportTypeCodes);
+
       let regionNewCount = 0;
       sqlite.transaction(() => {
         for (const act of activities) {
+          const sport = mapGarminSportType(act.activityType?.typeKey, act.sportTypeId);
+          // 运动类型白名单过滤：如果该类型未在设置中勾选，则跳过同步入库
+          if (!allowedSportCodes.has(sport.code)) {
+            continue;
+          }
+
           const labelId = `garmin_${act.activityId}`;
           const existing = sqlite.query("SELECT 1 FROM activities WHERE label_id = ?").get(labelId);
           if (!existing) regionNewCount++;
-
-          const sport = mapSportType(act.activityType?.typeKey, act.sportTypeId);
           const dateLabel = act.startTimeLocal ? act.startTimeLocal.slice(0, 10) : new Date().toISOString().slice(0, 10);
           const date = dateLabel.replace(/-/g, "");
           const startTs = act.beginTimestamp ? Math.floor(act.beginTimestamp / 1000) : null;
@@ -279,8 +277,11 @@ export async function syncGarminActivities(opts?: number | SyncGarminOptions): P
       totalSyncedCount += activities.length;
       totalNewActivities += regionNewCount;
 
-      // 接下来只下载并解析缺失 .FIT 或缺失分圈的活动
+      // 接下来只对符合类型白名单且缺失 .FIT 或分圈的活动下载解析
       const pendingFitList = activities.filter((act) => {
+        const sport = mapGarminSportType(act.activityType?.typeKey, act.sportTypeId);
+        if (!allowedSportCodes.has(sport.code)) return false;
+
         const labelId = `garmin_${act.activityId}`;
         const fitPath = join(fitDir, `${labelId}.fit`);
         const hasFit = existsSync(fitPath);

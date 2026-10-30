@@ -7,6 +7,7 @@ import WorkflowPanel from "./WorkflowPanel";
 import { useCorosAuth } from "../use-coros-auth";
 import { DEFAULT_APP_VERSION } from "../version";
 import { openExternal, ExternalLink } from "../openExternal";
+import FeedbackSection from "./FeedbackSection";
 
 export type PopularModel = {
   model: string;
@@ -1817,10 +1818,9 @@ export default function Settings({
               平台采用纯本地运行与主动拉取机制，数据完全保存在你本机。建议每次训练后或定期点击同步一次。
             </p>
 
-            <div className="hint" style={{ marginBottom: 6 }}>同步哪些运动类型</div>
+            <div className="hint" style={{ marginBottom: 6 }}>跨品牌同步运动类型过滤</div>
             <p className="card-sub" style={{ marginBottom: 10 }}>
-              决定「立即同步」会拉回哪些训练。没勾选的类别即使手表上有记录也不会出现在看板里 ——
-              之前版本把这份名单写死在代码里，只认跑步，室内有氧之类的会被丢掉。
+              决定「立即同步」会拉回哪些训练类别，已对<strong>高驰 (COROS) 与佳明 (Garmin) 双生态</strong>全量生效。没勾选的类别在同步时会自动忽略，不会出现在看板与负荷统计中。
             </p>
 
             {sports && (
@@ -2037,6 +2037,9 @@ export default function Settings({
           <li>高驰 FIT 原始文件每日限 50 次下载（官方限制，Garmin 不受此限），超出后保留基础时序指标。</li>
         </ul>
       </div>
+
+      {/* 反馈与建议 */}
+      <FeedbackSection appVersion={appVersion} status={status} />
 
       {/* 模拟测试数据清理 */}
       {testDataInfo && (testDataInfo.count > 0 || testCleanMsg) && (

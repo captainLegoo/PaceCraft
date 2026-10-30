@@ -18,7 +18,7 @@ import {
   users,
 } from "../db/schema.ts";
 import { callTool } from "../coros/mcp.ts";
-import { loadSportTypeCodes } from "../coros/sport-types.ts";
+import { loadSportTypeCodes } from "../sports/types.ts";
 import {
   parseActivityDetail,
   parseAvgHeartRate,

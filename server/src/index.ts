@@ -20,7 +20,7 @@ import {
   cleanMockTestData,
 } from "./conflicts.ts";
 import { syncAll, type SyncProgress } from "./coros/sync.ts";
-import { saveSportTypeCodes, sportSettingsPayload } from "./coros/sport-types.ts";
+import { saveSportTypeCodes, sportSettingsPayload } from "./sports/types.ts";
 import { backfillAltitude, fitQuotaStatus, followState, startFollow, stopFollow } from "./auto-sync.ts";
 import {
   buildRaceProfile,

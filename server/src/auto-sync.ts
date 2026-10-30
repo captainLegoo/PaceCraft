@@ -15,7 +15,7 @@
  *  - 跟随状态下拉 FIT 有节流，不会把额度一天烧光
  */
 import { callTool } from "./coros/mcp.ts";
-import { loadSportTypeCodes } from "./coros/sport-types.ts";
+import { loadSportTypeCodes } from "./sports/types.ts";
 import { FIT_DAILY_LIMIT } from "./config.ts";
 import { db, sqlite } from "./db/client.ts";
 import { activities } from "./db/schema.ts";
