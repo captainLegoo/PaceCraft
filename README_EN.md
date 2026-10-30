@@ -1,5 +1,7 @@
 <div align="center">
 
+<img src="web/public/favicon.svg" alt="PaceCraft Logo" width="100" height="100" />
+
 # PaceCraft
 
 > **Cross-platform, Privacy-first AI Running & Endurance Hub with Local-Only Data Storage**  

@@ -1,5 +1,7 @@
 <div align="center">
 
+<img src="web/public/favicon.svg" alt="PaceCraft Logo" width="100" height="100" />
+
 # PaceCraft
 
 > **跨生态跑者 AI 数据与训练中心 · 隐私至上的个人耐力运动操作系统**  
