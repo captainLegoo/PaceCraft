@@ -33,6 +33,25 @@ fn main() {
             let sidecar_for_close = sidecar_child.clone();
             let main_window = app.get_webview_window("main").expect("failed to get main window");
 
+            // 根据显示器实际可用工作区（排除了 Windows 任务栏 / macOS Dock 与菜单栏）动态自适应最佳长宽
+            if let Ok(Some(monitor)) = main_window.current_monitor() {
+                let scale_factor = monitor.scale_factor();
+                let work_area = monitor.work_area();
+                let work_w = work_area.size.width as f64 / scale_factor;
+                let work_h = work_area.size.height as f64 / scale_factor;
+
+                // 高度不超过工作区实际可用高度的 85%（保证上下留出呼吸空间，绝不被任务栏/Dock遮挡或顶死上边框）
+                // 宽度不超过可用宽度的 88%
+                let max_w = (work_w * 0.88).max(900.0);
+                let max_h = (work_h * 0.85).max(560.0);
+
+                let target_w = 1280.0_f64.min(max_w);
+                let target_h = 840.0_f64.min(max_h);
+
+                let _ = main_window.set_size(tauri::Size::Logical(tauri::LogicalSize::new(target_w, target_h)));
+                let _ = main_window.center();
+            }
+
             // 监听窗口关闭事件，保证随应用关闭退出后台后端进程
             main_window.on_window_event(move |event| {
                 if let tauri::WindowEvent::CloseRequested { .. } = event {
