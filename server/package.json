@@ -1,6 +1,6 @@
 {
   "name": "@coros-dashboard/server",
-  "version": "0.1.8",
+  "version": "0.1.13",
   "license": "MIT",
   "private": true,
   "type": "module",
