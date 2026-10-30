@@ -183,8 +183,8 @@ PaceCraft/
 
 ## 📄 License & Disclaimer
 
-- **License**: Released under the [MIT License](LICENSE).
-- **Disclaimer**: By using PaceCraft, you acknowledge and agree to the terms in [DISCLAIMER.md](DISCLAIMER.md):
-  1. **AI Auxiliary Role**: PaceCraft is a local software tool and does not operate centralized AI services. AI-generated analysis is for informational purposes only.
-  2. **Health & Medical**: Predictive figures and AI feedback do not constitute medical diagnoses or prescriptive exercise advice. Endurance sports entail physical risk; train rationally within your physiological limits.
-  3. **Trademarks**: COROS, Garmin, Suunto, and other associated brand marks are the property of their respective owners. PaceCraft is an independent third-party application.
+- **License**: Released under the standard [MIT License](LICENSE).
+- **Disclaimer**: By using PaceCraft, you acknowledge and unconditionally agree to all terms in [DISCLAIMER.md](DISCLAIMER.md) ([English Version](DISCLAIMER_EN.md)), including:
+  1. **AI Auxiliary Role & Model Variations**: PaceCraft is a local software tool and does not operate centralized AI services. All AI insights, coach interactions, and workout plans are dynamically derived by user-configured models. Outputs vary significantly across model architectures, parameter sizes, and prompt variations, and carry inherent algorithmic biases.
+  2. **AI Workout Plans & Athletic Safety (Body Signals Priority)**: All predictive figures, training load assessments, and AI-generated periodized plans are **athletic simulation references, NOT medically certified prescriptions**. The athlete's real-time subjective physical feedback (RPE) and safety hold absolute priority. Never force through pain or blindly comply with AI targets; immediately decelerate or stop if discomfort arises. All athletic risks are assumed solely by the user.
+  3. **Third-Party Trademarks**: COROS, Garmin, Suunto, and other associated brand marks belong to their respective owners. PaceCraft is an independent third-party open-source application with no official affiliation or endorsement.
