@@ -535,8 +535,31 @@ export default function Settings({
 
   type ZoneRow = { zone: string; label: string; hrLo: number | ""; hrHi: number | "" };
 
-  // 心率档案：支持自动推算（HRR）与自定义五区间
+  const computeAge = (birthdayStr: string): number | null => {
+    if (!birthdayStr) return null;
+    const b = new Date(birthdayStr);
+    if (Number.isNaN(b.getTime())) return null;
+    const diff = Date.now() - b.getTime();
+    if (diff <= 0) return null;
+    return Math.floor(diff / (365.25 * 86400000));
+  };
+
+  const computeBmi = (heightCm: number | "", weightKg: number | ""): { bmi: number; label: string; color: string } | null => {
+    if (typeof heightCm !== "number" || typeof weightKg !== "number" || heightCm <= 0 || weightKg <= 0) return null;
+    const hM = heightCm / 100;
+    const bmi = Math.round((weightKg / (hM * hM)) * 10) / 10;
+    if (bmi < 18.5) return { bmi, label: "偏瘦", color: "var(--accent)" };
+    if (bmi <= 23.9) return { bmi, label: "正常 · 耐力跑适宜", color: "var(--success, #10b981)" };
+    if (bmi <= 27.9) return { bmi, label: "微胖 / 超重", color: "var(--warning, #f59e0b)" };
+    return { bmi, label: "偏重 / 肥胖", color: "var(--danger, #ef4444)" };
+  };
+
+  // 跑者身体档案与心率配置
   const [hr, setHr] = useState<{
+    birthday: string;
+    gender: "male" | "female" | "";
+    heightCm: number | "";
+    weightKg: number | "";
     calcMode: "auto" | "custom";
     maxHr: number | null; restingHr: number | null;
     observedMaxHr?: number;
@@ -545,6 +568,10 @@ export default function Settings({
     method?: string;
     saving?: boolean; msg?: { kind: "ok" | "error"; text: string } | null;
   }>({
+    birthday: "",
+    gender: "",
+    heightCm: "",
+    weightKg: "",
     calcMode: "auto",
     maxHr: null,
     restingHr: null,
@@ -596,6 +623,10 @@ export default function Settings({
 
       setHr((h) => ({
         ...h,
+        birthday: p?.birthday ? String(p.birthday).slice(0, 10) : "",
+        gender: p?.gender === "male" || p?.gender === "female" ? p.gender : "",
+        heightCm: p?.heightCm != null ? Number(p.heightCm) : "",
+        weightKg: p?.weightKg != null ? Number(p.weightKg) : "",
         calcMode: p?.hrCalcMode === "custom" ? "custom" : "auto",
         maxHr: p?.maxHr ?? null,
         restingHr: p?.restingHr ?? null,
@@ -649,14 +680,18 @@ export default function Settings({
         }
       }
 
-      await api.saveHrProfile({
+      await api.saveProfile({
+        birthday: hr.birthday ? hr.birthday : null,
+        gender: hr.gender || null,
+        heightCm: hr.heightCm !== "" ? Number(hr.heightCm) : null,
+        weightKg: hr.weightKg !== "" ? Number(hr.weightKg) : null,
         maxHr: hr.maxHr,
         restingHr: hr.restingHr,
         hrCalcMode: hr.calcMode,
         customHrZones: customPayload,
       });
       await loadHr();
-      setHr((h) => ({ ...h, msg: { kind: "ok", text: "已保存。所有心率区间会按新配置立即重算生效。" } }));
+      setHr((h) => ({ ...h, msg: { kind: "ok", text: "已保存。个人身体指标与心率区间已更新生效。" } }));
       onStatus();
     } catch (e) {
       setHr((h) => ({ ...h, msg: { kind: "error", text: (e as Error).message } }));
@@ -1230,13 +1265,120 @@ export default function Settings({
             )}
           </div>
 
-          {/* 心率档案：支持自动推算与直接自定义五区间 */}
+          {/* 跑者个人档案与心率配置 */}
           <div className="card">
-            <h3 className="card-title"><IconHeart size={14} />心率档案</h3>
+            <h3 className="card-title"><IconHeart size={14} />跑者档案与心率</h3>
             <p className="card-sub">
-              心率区间决定了训练场次和周报里的 Z1–Z5 统计。
-              支持自动推算（按 HRR 储备百分比），也可以直接自定义绝对心率（可直接照抄 COROS 或手表 App 设置）。
+              管理你的身体基础指标（生日、身高、体重）与心率区间配置。
+              心率区间决定训练和周报中的 Z1–Z5 分布；身高与体重用于精确计算运动卡路里、步态特征与爬坡能耗。
             </p>
+
+            {/* 1. 身体基础指标表单 */}
+            <div style={{ marginBottom: 18, paddingBottom: 16, borderBottom: "1px solid var(--border)" }}>
+              <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text-main)", marginBottom: 10 }}>
+                🏃 身体基础生理指标
+              </div>
+              <div className="grid g2" style={{ marginBottom: 10 }}>
+                <label className="field">
+                  <span>出生日期</span>
+                  <input
+                    type="date"
+                    value={hr.birthday}
+                    onChange={(e) => setHr({ ...hr, birthday: e.target.value })}
+                  />
+                  <div className="hint">
+                    {computeAge(hr.birthday) !== null ? (
+                      <>
+                        当前 <strong>{computeAge(hr.birthday)} 岁</strong> · Tanaka 推算理论最大心率约 <strong>{Math.round(208 - 0.7 * computeAge(hr.birthday)!)} bpm</strong>
+                      </>
+                    ) : (
+                      "用于推算最大心率基准、疲劳恢复曲线与赛事年龄组对标"
+                    )}
+                  </div>
+                </label>
+
+                <label className="field">
+                  <span>生理性别</span>
+                  <select
+                    value={hr.gender}
+                    onChange={(e) => setHr({ ...hr, gender: e.target.value as any })}
+                  >
+                    <option value="">未指定（保密）</option>
+                    <option value="male">男 (Male)</option>
+                    <option value="female">女 (Female)</option>
+                  </select>
+                  <div className="hint">用于生理心率储备计算与同性别水平对齐</div>
+                </label>
+              </div>
+
+              <div className="grid g2" style={{ marginBottom: 10 }}>
+                <label className="field">
+                  <span>身高 (cm)</span>
+                  <input
+                    type="number"
+                    step="0.5"
+                    min="50"
+                    max="250"
+                    placeholder="例如 175"
+                    value={hr.heightCm}
+                    onChange={(e) => setHr({ ...hr, heightCm: e.target.value === "" ? "" : Number(e.target.value) })}
+                  />
+                  <div className="hint">用于评估步频步幅比（Stride-to-Height Ratio）与跑姿防伤</div>
+                </label>
+
+                <label className="field">
+                  <span>体重 (kg)</span>
+                  <input
+                    type="number"
+                    step="0.1"
+                    min="25"
+                    max="250"
+                    placeholder="例如 65.5"
+                    value={hr.weightKg}
+                    onChange={(e) => setHr({ ...hr, weightKg: e.target.value === "" ? "" : Number(e.target.value) })}
+                  />
+                  <div className="hint">用于精准计算单次与周运动卡路里及越野爬坡做功</div>
+                </label>
+              </div>
+
+              {computeBmi(hr.heightCm, hr.weightKg) && (
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 10,
+                    padding: "8px 12px",
+                    background: "var(--surface-2)",
+                    borderRadius: 6,
+                    border: "1px solid var(--border)",
+                    marginTop: 6,
+                  }}
+                >
+                  <span style={{ fontSize: 13, color: "var(--text-dim)" }}>身体质量指数 (BMI):</span>
+                  <strong style={{ fontSize: 14, color: computeBmi(hr.heightCm, hr.weightKg)!.color }}>
+                    {computeBmi(hr.heightCm, hr.weightKg)!.bmi}
+                  </strong>
+                  <span
+                    className="pill"
+                    style={{
+                      fontSize: 11,
+                      borderColor: computeBmi(hr.heightCm, hr.weightKg)!.color,
+                      color: computeBmi(hr.heightCm, hr.weightKg)!.color,
+                    }}
+                  >
+                    {computeBmi(hr.heightCm, hr.weightKg)!.label}
+                  </span>
+                  <span style={{ fontSize: 12, color: "var(--text-faint)", marginLeft: "auto" }}>
+                    体重不直接削减平路配速预测，专注身体做功与能量计算
+                  </span>
+                </div>
+              )}
+            </div>
+
+            {/* 2. 心率区间设置 */}
+            <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text-main)", marginBottom: 10 }}>
+              ❤️ 心率区间与极限基准
+            </div>
 
             <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
               <button
@@ -1415,7 +1557,7 @@ export default function Settings({
             </div>
 
             <button className="btn primary" onClick={saveHr} disabled={hr.saving}>
-              {hr.saving ? "保存中…" : "保存心率档案"}
+              {hr.saving ? "保存中…" : "保存跑者档案与心率"}
             </button>
             {hr.msg && (
               <div className={`banner ${hr.msg.kind === "ok" ? "info" : "error"}`} style={{ marginTop: 12, marginBottom: 0 }}>

@@ -416,6 +416,18 @@ export const api = {
     customHrZones?: { zone: string; label: string; hrLo: number; hrHi?: number | null }[] | null;
   }) => req<any>("/api/profile/hr", { method: "PUT", body: JSON.stringify(body) }),
 
+  /** 保存跑者个人档案（身体基础指标与心率配置） */
+  saveProfile: (body: {
+    birthday?: string | null;
+    gender?: string | null;
+    heightCm?: number | null;
+    weightKg?: number | null;
+    maxHr?: number | null;
+    restingHr?: number | null;
+    hrCalcMode?: "auto" | "custom";
+    customHrZones?: { zone: string; label: string; hrLo: number; hrHi?: number | null }[] | null;
+  }) => req<any>("/api/profile", { method: "PUT", body: JSON.stringify(body) }),
+
   status: () => req<any>("/api/status"),
   sync: (days = 365) => req<any>("/api/sync?days=" + days, { method: "POST" }),
   /** 快速增量同步：智能自适应窗口，无数据时自动拉取 1 年全量 */

@@ -139,6 +139,190 @@ function getStaticMimeType(filePath: string): string {
   return "application/octet-stream";
 }
 
+async function saveProfileHandler(body: unknown) {
+  const b = (body ?? {}) as Record<string, unknown>;
+  let row = one(db.select().from(users).all());
+  if (!row) {
+    sqlite.query("INSERT INTO users (nickname) VALUES ('跑者')").run();
+    row = one(db.select().from(users).all());
+  }
+  if (!row) {
+    return new Response(JSON.stringify({ error: "初始化用户档案失败" }), { status: 500 });
+  }
+
+  const parseNum = (v: unknown): number | null => {
+    if (v === null || v === undefined || v === "") return null;
+    const n = Number(v);
+    return Number.isFinite(n) ? n : NaN;
+  };
+
+  // 1. 身体基础指标校验
+  let validBirthday: string | null = row.birthday;
+  if (b.birthday !== undefined) {
+    if (b.birthday === null || b.birthday === "") {
+      validBirthday = null;
+    } else {
+      const bStr = String(b.birthday).trim();
+      const bDate = new Date(bStr);
+      if (Number.isNaN(bDate.getTime())) {
+        return new Response(JSON.stringify({ error: "出生日期格式无效，请填写类似 1995-05-20" }), { status: 400 });
+      }
+      const age = Math.floor((Date.now() - bDate.getTime()) / (365.25 * 86400000));
+      if (age < 5 || age > 120) {
+        return new Response(JSON.stringify({ error: "出生日期计算的年龄超出合理范围 (5-120 岁)" }), { status: 400 });
+      }
+      validBirthday = bStr;
+    }
+  }
+
+  let validGender: string | null = row.gender;
+  if (b.gender !== undefined) {
+    const g = String(b.gender || "").trim().toLowerCase();
+    validGender = g === "male" || g === "female" ? g : null;
+  }
+
+  let validHeight: number | null = row.heightCm;
+  if (b.heightCm !== undefined) {
+    const h = parseNum(b.heightCm);
+    if (Number.isNaN(h)) {
+      return new Response(JSON.stringify({ error: "身高必须为有效数字" }), { status: 400 });
+    }
+    if (h !== null && (h < 50 || h > 250)) {
+      return new Response(JSON.stringify({ error: "身高需在 50–250 cm 之间" }), { status: 400 });
+    }
+    validHeight = h !== null ? Math.round(h * 10) / 10 : null;
+  }
+
+  let validWeight: number | null = row.weightKg;
+  if (b.weightKg !== undefined) {
+    const w = parseNum(b.weightKg);
+    if (Number.isNaN(w)) {
+      return new Response(JSON.stringify({ error: "体重必须为有效数字" }), { status: 400 });
+    }
+    if (w !== null && (w < 25 || w > 250)) {
+      return new Response(JSON.stringify({ error: "体重需在 25–250 kg 之间" }), { status: 400 });
+    }
+    validWeight = w !== null ? Math.round(w * 10) / 10 : null;
+  }
+
+  // 2. 心率指标校验
+  const maxHr = b.maxHr !== undefined ? (b.maxHr === null || b.maxHr === "" ? null : Math.round(Number(b.maxHr))) : row.maxHr;
+  const restingHr = b.restingHr !== undefined ? (b.restingHr === null || b.restingHr === "" ? null : Math.round(Number(b.restingHr))) : row.restingHr;
+
+  if (Number.isNaN(maxHr) || Number.isNaN(restingHr)) {
+    return new Response(JSON.stringify({ error: "心率必须是有效数字，或留空表示自动推算" }), { status: 400 });
+  }
+  if (maxHr !== null && (maxHr < 60 || maxHr > 230)) {
+    return new Response(JSON.stringify({ error: "最大心率需在 60–230 bpm 之间（留空表示自动推算）" }), { status: 400 });
+  }
+  if (restingHr !== null && (restingHr < 25 || restingHr > 120)) {
+    return new Response(JSON.stringify({ error: "静息心率需在 25–120 bpm 之间（留空表示自动推算）" }), { status: 400 });
+  }
+
+  const effMax = maxHr ?? 200;
+  const effRest = restingHr ?? 55;
+  if (effMax - effRest < 30) {
+    return new Response(
+      JSON.stringify({ error: `最大心率 ${effMax} 与静息心率 ${effRest} 差距太小，无法划分心率区间` }),
+      { status: 400 },
+    );
+  }
+
+  const hrCalcMode = b.hrCalcMode === "custom" ? "custom" : (b.hrCalcMode === "auto" ? "auto" : (row.hrCalcMode ?? "auto"));
+  let customHrZonesStr: string | null = null;
+
+  if (hrCalcMode === "custom" && b.customHrZones !== undefined) {
+    const cz = b.customHrZones;
+    if (!Array.isArray(cz) || cz.length < 5) {
+      return new Response(JSON.stringify({ error: "自定义心率模式需填写全部 5 个区间" }), { status: 400 });
+    }
+    const validatedZones: Array<{ zone: string; label: string; hrLo: number; hrHi: number | null }> = [];
+    const DEFAULT_ZONE_NAMES = [
+      { zone: "Z1", label: "有氧耐力" },
+      { zone: "Z2", label: "有氧动力" },
+      { zone: "Z3", label: "乳酸阈" },
+      { zone: "Z4", label: "速度耐力" },
+      { zone: "Z5", label: "无氧动力" },
+    ];
+    for (let i = 0; i < 5; i++) {
+      const item = cz[i];
+      const lo = parseNum(item?.hrLo);
+      const hi = parseNum(item?.hrHi);
+      if (lo === null || Number.isNaN(lo)) {
+        return new Response(
+          JSON.stringify({ error: `第 ${i + 1} 区间（${DEFAULT_ZONE_NAMES[i].label}）必须填写有效的心率下限` }),
+          { status: 400 },
+        );
+      }
+      if (lo < 40 || lo > 240) {
+        return new Response(JSON.stringify({ error: `第 ${i + 1} 区间心率需在 40–240 bpm 之间` }), { status: 400 });
+      }
+      if (i < 4) {
+        if (hi === null || Number.isNaN(hi)) {
+          return new Response(
+            JSON.stringify({ error: `第 ${i + 1} 区间（${DEFAULT_ZONE_NAMES[i].label}）必须填写有效的心率上限` }),
+            { status: 400 },
+          );
+        }
+        if (hi < 40 || hi > 240) {
+          return new Response(JSON.stringify({ error: `第 ${i + 1} 区间上限需在 40–240 bpm 之间` }), { status: 400 });
+        }
+        if (lo >= hi) {
+          return new Response(JSON.stringify({ error: `第 ${i + 1} 区间下限 (${lo}) 必须小于上限 (${hi})` }), { status: 400 });
+        }
+      } else {
+        if (hi !== null && !Number.isNaN(hi) && (hi <= lo || hi > 250)) {
+          return new Response(JSON.stringify({ error: `第 5 区间若设置上限，必须大于下限 (${lo}) 且不超过 250` }), { status: 400 });
+        }
+      }
+      if (i > 0 && lo < validatedZones[i - 1].hrLo) {
+        return new Response(
+          JSON.stringify({ error: `第 ${i + 1} 区间起点 (${lo}) 不能低于前一个区间起点 (${validatedZones[i - 1].hrLo})` }),
+          { status: 400 },
+        );
+      }
+      validatedZones.push({
+        zone: DEFAULT_ZONE_NAMES[i].zone,
+        label: String(item?.label || DEFAULT_ZONE_NAMES[i].label),
+        hrLo: Math.round(lo),
+        hrHi: hi !== null && !Number.isNaN(hi) ? Math.round(hi) : null,
+      });
+    }
+    customHrZonesStr = JSON.stringify(validatedZones);
+  } else if (Array.isArray(b.customHrZones)) {
+    try {
+      customHrZonesStr = JSON.stringify(b.customHrZones);
+    } catch {}
+  }
+
+  // 3. 提交持久化
+  const updatePayload: Record<string, any> = {
+    maxHr,
+    restingHr,
+    hrCalcMode,
+    birthday: validBirthday,
+    gender: validGender,
+    heightCm: validHeight,
+    weightKg: validWeight,
+  };
+  if (customHrZonesStr !== null) {
+    updatePayload.customHrZones = customHrZonesStr;
+  }
+
+  db.update(users).set(updatePayload).run();
+
+  const updated = one(db.select().from(users).all());
+  const age = ageFromBirthday(updated?.birthday ?? null);
+  const z = hrZones([], hrZoneOptions(age));
+  return {
+    ...updated,
+    age,
+    effectiveZones: z?.zones ?? [],
+    observedMaxHr: z?.maxHr ?? null,
+    hrMethod: z?.method ?? "五区间心率法",
+  };
+}
+
 const app = new Elysia()
   .onError(({ code, error, path }) => {
     console.error(`[Elysia Error] ${code} on ${path}:`, error);
@@ -1171,6 +1355,7 @@ const app = new Elysia()
     const z = hrZones([], hrZoneOptions(age));
     return {
       ...row,
+      age,
       effectiveZones: z?.zones ?? [],
       observedMaxHr: z?.maxHr ?? null,
       hrMethod: z?.method ?? "五区间心率法",
@@ -1178,133 +1363,15 @@ const app = new Elysia()
   })
 
   /**
-   * 写入心率档案。
+   * 写入跑者个人档案与心率配置。
    *
-   * 支持两种模式：
-   *  - auto：只配置 max_hr / resting_hr，由系统按 HRR 储备百分比推导
-   *  - custom：用户直接设定 Z1–Z5 各自的绝对心率范围（可直接对标手表设置）
+   * 包含：
+   *  - 身体基本指标：birthday（生日）、gender（性别）、heightCm（身高）、weightKg（体重）
+   *  - 心率模式：auto（按 HRR 百分比推导）| custom（自定义五区间绝对数值）
    */
-  .put("/api/profile/hr", async ({ body }) => {
-    const b = (body ?? {}) as Record<string, unknown>;
-    const row = one(db.select().from(users).all());
-    if (!row) return new Response(JSON.stringify({ error: "没有用户档案，请先同步一次数据" }), { status: 400 });
+  .put("/api/profile", async ({ body }) => saveProfileHandler(body))
+  .put("/api/profile/hr", async ({ body }) => saveProfileHandler(body))
 
-    const parse = (v: unknown): number | null => {
-      if (v === null || v === undefined || v === "") return null;
-      const n = Number(v);
-      return Number.isFinite(n) ? Math.round(n) : NaN;
-    };
-    const maxHr = parse(b.maxHr);
-    const restingHr = parse(b.restingHr);
-
-    if (Number.isNaN(maxHr) || Number.isNaN(restingHr)) {
-      return new Response(JSON.stringify({ error: "心率必须是数字，或留空表示自动推算" }), { status: 400 });
-    }
-    // 下限 60 保证 HRR 有足够跨度；上限 230 覆盖耐力运动员的真实上限
-    if (maxHr !== null && (maxHr < 60 || maxHr > 230)) {
-      return new Response(JSON.stringify({ error: "最大心率需在 60–230 之间（留空表示自动推算）" }), { status: 400 });
-    }
-    if (restingHr !== null && (restingHr < 25 || restingHr > 120)) {
-      return new Response(JSON.stringify({ error: "静息心率需在 25–120 之间（留空表示自动推算）" }), { status: 400 });
-    }
-    // HRR 是分区的分母，<=0 会让整个分区计算失效
-    const effMax = maxHr ?? row.maxHr ?? 200;
-    const effRest = restingHr ?? row.restingHr ?? 55;
-    if (effMax - effRest < 30) {
-      return new Response(
-        JSON.stringify({ error: `最大心率 ${effMax} 与静息心率 ${effRest} 差距太小，无法划分心率区间` }),
-        { status: 400 },
-      );
-    }
-
-    const hrCalcMode = b.hrCalcMode === "custom" ? "custom" : "auto";
-    let customHrZonesStr: string | null = null;
-
-    if (hrCalcMode === "custom") {
-      const cz = b.customHrZones;
-      if (!Array.isArray(cz) || cz.length < 5) {
-        return new Response(JSON.stringify({ error: "自定义心率模式需填写全部 5 个区间" }), { status: 400 });
-      }
-      const validatedZones: Array<{ zone: string; label: string; hrLo: number; hrHi: number | null }> = [];
-      const DEFAULT_ZONE_NAMES = [
-        { zone: "Z1", label: "有氧耐力" },
-        { zone: "Z2", label: "有氧动力" },
-        { zone: "Z3", label: "乳酸阈" },
-        { zone: "Z4", label: "速度耐力" },
-        { zone: "Z5", label: "无氧动力" },
-      ];
-      for (let i = 0; i < 5; i++) {
-        const item = cz[i];
-        const lo = parse(item?.hrLo);
-        const hi = parse(item?.hrHi);
-        if (lo === null || Number.isNaN(lo)) {
-          return new Response(
-            JSON.stringify({ error: `第 ${i + 1} 区间（${DEFAULT_ZONE_NAMES[i].label}）必须填写有效的心率下限` }),
-            { status: 400 },
-          );
-        }
-        if (lo < 40 || lo > 240) {
-          return new Response(JSON.stringify({ error: `第 ${i + 1} 区间心率需在 40–240 bpm 之间` }), { status: 400 });
-        }
-        if (i < 4) {
-          if (hi === null || Number.isNaN(hi)) {
-            return new Response(
-              JSON.stringify({ error: `第 ${i + 1} 区间（${DEFAULT_ZONE_NAMES[i].label}）必须填写有效的心率上限` }),
-              { status: 400 },
-            );
-          }
-          if (hi < 40 || hi > 240) {
-            return new Response(JSON.stringify({ error: `第 ${i + 1} 区间上限需在 40–240 bpm 之间` }), { status: 400 });
-          }
-          if (lo >= hi) {
-            return new Response(JSON.stringify({ error: `第 ${i + 1} 区间下限 (${lo}) 必须小于上限 (${hi})` }), { status: 400 });
-          }
-        } else {
-          // 第 5 区间（无氧动力）：上限允许留空（表示无上限 / > lo）
-          if (hi !== null && !Number.isNaN(hi) && (hi <= lo || hi > 250)) {
-            return new Response(JSON.stringify({ error: `第 5 区间若设置上限，必须大于下限 (${lo}) 且不超过 250` }), { status: 400 });
-          }
-        }
-        if (i > 0 && lo < validatedZones[i - 1].hrLo) {
-          return new Response(
-            JSON.stringify({ error: `第 ${i + 1} 区间起点 (${lo}) 不能低于前一个区间起点 (${validatedZones[i - 1].hrLo})` }),
-            { status: 400 },
-          );
-        }
-        validatedZones.push({
-          zone: DEFAULT_ZONE_NAMES[i].zone,
-          label: String(item?.label || DEFAULT_ZONE_NAMES[i].label),
-          hrLo: lo,
-          hrHi: hi ?? null,
-        });
-      }
-      customHrZonesStr = JSON.stringify(validatedZones);
-    } else if (Array.isArray(b.customHrZones)) {
-      try {
-        customHrZonesStr = JSON.stringify(b.customHrZones);
-      } catch {}
-    }
-
-    db.update(users)
-      .set({
-        maxHr,
-        restingHr,
-        hrCalcMode,
-        ...(customHrZonesStr !== null ? { customHrZones: customHrZonesStr } : {}),
-      })
-      .where(eq(users.nickname, row.nickname ?? ""))
-      .run();
-
-    const updated = one(db.select().from(users).all());
-    const age = ageFromBirthday(updated?.birthday ?? null);
-    const z = hrZones([], hrZoneOptions(age));
-    return {
-      ...updated,
-      effectiveZones: z?.zones ?? [],
-      observedMaxHr: z?.maxHr ?? null,
-      hrMethod: z?.method ?? "五区间心率法",
-    };
-  })
 
   // ---------- 训练次（session）：同一天的多次记录合并 ----------
   .get("/api/sessions", ({ query }) => {
