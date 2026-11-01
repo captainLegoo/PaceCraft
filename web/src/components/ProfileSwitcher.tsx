@@ -44,7 +44,7 @@ export default function ProfileSwitcher({
     return () => window.removeEventListener("mousedown", onClick);
   }, [open]);
 
-  const activeProfile = data?.profiles.find((p) => p.id === data.activeId);
+  const activeProfile = data?.profiles?.find((p) => p.id === data.activeId);
 
   const handleSwitch = async (id: string) => {
     if (id === data?.activeId) {
@@ -340,7 +340,7 @@ export default function ProfileSwitcher({
                         >
                           ✎
                         </button>
-                        {data.profiles.length > 1 && (
+                        {(data?.profiles?.length ?? 0) > 1 && (
                           <button
                             type="button"
                             onClick={(e) => handleDelete(e, p.id, nameText)}

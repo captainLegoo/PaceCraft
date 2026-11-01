@@ -95,6 +95,12 @@ import {
   updateProfileMeta,
   wipeAllLocalData,
 } from "./profile-manager.ts";
+import {
+  getLanStatus,
+  isLanEnabled,
+  isLoopbackAddress,
+  setLanEnabled,
+} from "./lan-service.ts";
 
 const one = <T>(rows: T[]) => rows[0] ?? null;
 
@@ -121,6 +127,18 @@ function updateSyncProgress(patch: Partial<SyncProgress>) {
   };
 }
 
+function getStaticMimeType(filePath: string): string {
+  if (filePath.endsWith(".html")) return "text/html; charset=utf-8";
+  if (filePath.endsWith(".js") || filePath.endsWith(".mjs")) return "application/javascript; charset=utf-8";
+  if (filePath.endsWith(".css")) return "text/css; charset=utf-8";
+  if (filePath.endsWith(".svg")) return "image/svg+xml; charset=utf-8";
+  if (filePath.endsWith(".png")) return "image/png";
+  if (filePath.endsWith(".jpg") || filePath.endsWith(".jpeg")) return "image/jpeg";
+  if (filePath.endsWith(".ico")) return "image/x-icon";
+  if (filePath.endsWith(".json")) return "application/json; charset=utf-8";
+  return "application/octet-stream";
+}
+
 const app = new Elysia()
   .onError(({ code, error, path }) => {
     console.error(`[Elysia Error] ${code} on ${path}:`, error);
@@ -142,6 +160,77 @@ const app = new Elysia()
         },
       });
     }
+
+    // 局域网访问控制：若局域网访问未开启，严格拦截所有非回环设备请求
+    const clientIp = (app as any).server?.requestIP?.(request)?.address;
+    if (clientIp && !isLoopbackAddress(clientIp) && !isLanEnabled()) {
+      const url = new URL(request.url);
+      if (url.pathname.startsWith("/api/")) {
+        return new Response(
+          JSON.stringify({
+            error: "LAN_DISABLED",
+            message: "局域网访问未开启。为保护隐私，请在电脑端【系统设置】中开启「允许局域网设备访问」。",
+          }),
+          {
+            status: 403,
+            headers: {
+              "Content-Type": "application/json; charset=utf-8",
+              "Access-Control-Allow-Origin": "*",
+            },
+          }
+        );
+      }
+
+      // 网页直接请求时返回友好的引导提示页面
+      const blockedHtml = `<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>PaceCraft - 局域网访问提示</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0f1115; color: #f1f5f9; display: flex; align-items: center; justify-content: center; min-height: 100vh; margin: 0; padding: 20px; box-sizing: border-box; }
+    .card { max-width: 440px; width: 100%; background: #1a1d24; border: 1px solid rgba(255,255,255,0.08); border-radius: 16px; padding: 28px; box-shadow: 0 20px 40px rgba(0,0,0,0.4); text-align: center; }
+    .icon { font-size: 40px; margin-bottom: 12px; }
+    h2 { margin: 0 0 10px; font-size: 20px; color: #f8fafc; font-weight: 600; }
+    p { margin: 8px 0; font-size: 14px; line-height: 1.6; color: #94a3b8; text-align: left; }
+    .step-box { background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06); border-radius: 10px; padding: 12px 14px; margin: 16px 0; text-align: left; }
+    .btn { display: inline-block; width: 100%; box-sizing: border-box; padding: 12px; background: #3b82f6; color: #fff; text-decoration: none; border-radius: 8px; font-size: 15px; font-weight: 500; cursor: pointer; border: none; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="icon">🔒</div>
+    <h2>局域网访问尚未开启</h2>
+    <p>为保护您的跑步与生理健康数据隐私，PaceCraft 默认仅允许电脑本机访问。</p>
+    <div class="step-box">
+      <div style="color: #cbd5e1; font-weight: 600; font-size: 14px; margin-bottom: 4px;">💡 如何开启？</div>
+      <div style="font-size: 13px; color: #94a3b8; line-height: 1.5;">请在电脑端的 PaceCraft 软件中进入<strong>【系统设置】</strong>➔ 找到<strong>「局域网访问与手机端」</strong>卡片，开启「允许局域网设备访问」开关即可。</div>
+    </div>
+    <button class="btn" onclick="location.reload()">已在电脑开启，点击刷新</button>
+  </div>
+</body>
+</html>`;
+      return new Response(blockedHtml, {
+        status: 403,
+        headers: { "Content-Type": "text/html; charset=utf-8" },
+      });
+    }
+  })
+  /** 局域网共享与手机 PWA */
+  .get("/api/lan/status", () => {
+    return getLanStatus();
+  })
+  .post("/api/lan/toggle", ({ body, request }) => {
+    const clientIp = (app as any).server?.requestIP?.(request)?.address;
+    if (clientIp && !isLoopbackAddress(clientIp)) {
+      return new Response(JSON.stringify({ error: "安全保护：仅允许在电脑本机切换局域网开关" }), {
+        status: 403,
+        headers: { "Content-Type": "application/json; charset=utf-8" },
+      });
+    }
+    const enabled = Boolean((body as any)?.enabled);
+    return setLanEnabled(enabled);
   })
   /** 软件自动更新与网络线路检测 */
   .get("/api/updater/check", async ({ query }) => {
@@ -1589,10 +1678,18 @@ const app = new Elysia()
     const distDir = join(import.meta.dir, "../../web/dist");
     if (existsSync(distDir)) {
       const file = Bun.file(join(distDir, rel));
-      if (await file.exists()) return new Response(file);
+      if (await file.exists()) {
+        return new Response(file, {
+          headers: { "Content-Type": getStaticMimeType(rel) },
+        });
+      }
 
       const index = Bun.file(join(distDir, "index.html"));
-      if (await index.exists()) return new Response(index);
+      if (await index.exists()) {
+        return new Response(index, {
+          headers: { "Content-Type": "text/html; charset=utf-8" },
+        });
+      }
     }
 
     // 2. 桌面安装包 / 单文件编译场景：从内嵌静态资源表中读取

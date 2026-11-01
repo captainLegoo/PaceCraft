@@ -42,11 +42,11 @@ export const TOKEN_PATH = {
 
 export const SERVER_PORT = Number(process.env.PORT ?? 43124);
 /**
- * 监听地址。默认只绑回环 —— 本服务没有任何鉴权，
- * 绑 0.0.0.0 等于把全部训练数据暴露给同一个网络里的任何设备。
- * 需要局域网访问时用 HOST=0.0.0.0 显式打开。
+ * 监听地址。默认监听 0.0.0.0 以支持通过系统设置动态开启局域网访问。
+ * 未开启时由应用层中间件严格拦截非回环请求，保证隐私安全。
+ * 如需在操作系统层面强制锁定回环，可通过 HOST=127.0.0.1 显式覆盖。
  */
-export const SERVER_HOST = process.env.HOST ?? "127.0.0.1";
+export const SERVER_HOST = process.env.HOST ?? "0.0.0.0";
 export const WEB_ORIGIN = process.env.WEB_ORIGIN ?? "http://localhost:43125";
 
 /** token 剩余寿命低于这个秒数就提前刷新，避免请求打到一半过期 */

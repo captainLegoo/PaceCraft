@@ -8,6 +8,7 @@ import { useCorosAuth } from "../use-coros-auth";
 import { DEFAULT_APP_VERSION } from "../version";
 import { openExternal, ExternalLink } from "../openExternal";
 import FeedbackSection from "./FeedbackSection";
+import LanAccessSection from "../components/LanAccessSection";
 
 export type PopularModel = {
   model: string;
@@ -930,6 +931,9 @@ export default function Settings({
 
   return (
     <>
+      {/* 手机端访问与局域网共享 (PWA)：全宽横向展开，保持下方双列网格自然对称平衡 */}
+      <LanAccessSection />
+
       <div className="grid g2" style={{ alignItems: "start", marginBottom: 14 }}>
         {/* 左列：AI 模型配置 + 心率档案 */}
         <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>

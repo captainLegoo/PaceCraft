@@ -559,4 +559,17 @@ export const api = {
 
   systemDataInfo: () => req<{ rootDataDir: string }>("/api/system/data-info"),
   wipeAllData: () => req<{ ok: boolean; activeId: string }>("/api/system/wipe-data", { method: "POST" }),
+
+  getLanStatus: () => req<LanStatus>("/api/lan/status"),
+  toggleLan: (enabled: boolean) =>
+    req<LanStatus>("/api/lan/toggle", { method: "POST", body: JSON.stringify({ enabled }) }),
+};
+
+export type LanStatus = {
+  enabled: boolean;
+  port: number;
+  primaryIp: string | null;
+  url: string | null;
+  allIps: { name: string; ip: string }[];
+  hostName: string;
 };

@@ -47,13 +47,13 @@ export default function Training({
   }, [weeks]);
 
   if (err) return <div className="banner error">{err}</div>;
-  if (weekly.length === 0) return <div className="empty-run"><IconRun size={42} /><span>暂无数据，请先在「设置」页同步</span></div>;
+  if (!Array.isArray(weekly) || weekly.length === 0) return <div className="empty-run"><IconRun size={42} /><span>暂无数据，请先在「设置」页同步</span></div>;
 
   const last = weekly[weekly.length - 1];
   const prev = weekly[weekly.length - 2];
   const deltaKm = prev ? last.distanceKm - prev.distanceKm : null;
-  const totalKm = weekly.reduce((s, w) => s + w.distanceKm, 0);
-  const totalRun = weekly.reduce((s, w) => s + w.count, 0);
+  const totalKm = Array.isArray(weekly) ? weekly.reduce((s, w) => s + (w?.distanceKm ?? 0), 0) : 0;
+  const totalRun = Array.isArray(weekly) ? weekly.reduce((s, w) => s + (w?.count ?? 0), 0) : 0;
 
   const recentLoad = load.slice(-42);
   const multiSessions = sessions.filter((s) => s.activityCount > 1);
