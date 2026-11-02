@@ -129,14 +129,53 @@ Navigate to **<http://127.0.0.1:43124>** in your browser.
 
 ---
 
-## 🧠 Race Prediction Engine
+## 🧠 Core Methodology & Physiology
 
-Rather than relying on closed-source, vendor-controlled fitness scores, PaceCraft's predictive model is grounded in empirical lap data:
+PaceCraft’s predictive and analytical pipeline is **built strictly on empirical lap splits and real-world race records**, completely free from proprietary, black-box vendor scores. Rather than blindly applying elite world-record formulas to recreational runners, PaceCraft models your true endurance using straightforward sports science logic:
 
-1. **Anchor Extraction**: Scans contiguous split laps across historical workouts using a dynamic sliding window to pinpoint best efforts while discarding GPS leaps or rest-stitched segments.
-2. **Lactate Threshold Regression**: Fits an exponential regression curve over aerobic heart rate and pace pairings to calculate velocity at 88.5% HRmax.
-3. **Personalized Riegel Exponent ($k$)**: Pairs homologous intensity efforts across historical records to compute your individual endurance decay rate (typically $1.05 \le k \le 1.15$).
-4. **Weighted Ensemble**: Weights models by anchor distance tier (Tier A: $\ge 15\text{ km}$, Tier B: $8\text{--}15\text{ km}$, Tier C: $\le 5\text{ km}$) and generates realistic performance boundaries.
+### 🏃‍♂️ 1. Structured Workout Classification: No More Interval Mislabeling
+- **The Problem**: A runner completes a `1km×6` interval session totaling 10 km including warm-up and cool-down. Most running apps look only at total distance and label it as a "medium-distance easy run", misleading your weekly reports and AI coach into believing you did zero speedwork.
+- **The PaceCraft Solution**: PaceCraft examines the **actual cadence and rhythm of every split lap**. It detects pace variance, cleanly separating high-intensity repetitions from slow recovery jogs to identify your exact workout structure (e.g., `1km×6 reps` at 3:38/km with 165s rest).
+- **Zero False Positives**: Steady 10 km runs have uniform splits and will never be misclassified as intervals; non-steady interval sessions are automatically shielded from irrelevant "aerobic decoupling" metrics.
+
+### 📈 2. Race Performance Prediction: Realistic & Unbiased
+- **No Rest-Stitched Illusions**: PaceCraft slides through continuous splits to locate your true best 5K and 10K efforts. If recovery walks or jogs are detected within a window, the algorithm **strictly rejects stitching them together**, preventing fake "continuous 8 km" efforts from exaggerating your marathon prediction.
+- **Dynamic Marathon Decay Adjusted by Real Weekly Mileage**:
+  - Classical formulas (like Riegel's) assume world-record fatigue curves, predicting marathon times that are dangerously optimistic for amateur runners (often leading to severe wall-hitting past 30 km);
+  - PaceCraft dynamically calibrates your fatigue exponent using your **actual 8-week average weekly volume**—the higher your mileage base, the more confident the prediction; if mileage is modest, the model automatically adds conservative late-race decay buffers.
+- **Pure Lactate Threshold Pace**: Regresses heart rate and pace strictly within steady aerobic zones, excluding non-steady interval heart-rate lag to pinpoint your real lactate threshold (88.5% HRmax).
+- **Ground-Truth Long Run Comparison**: Benchmarks predictions against your fastest real-world long run ($\ge 40\text{ km}$) with transparent confidence ratings (Tier A / B / C).
+
+### 🏁 3. Race Day Simulation & Readiness Check
+- **Course Elevation & Altitude Normalization**: Uphill climbs, downhill benefits, and thin altitude air are converted into flat, sea-level equivalent times, so challenging mountain courses don't skew your baseline.
+- **Rolling 28-Day Window**: Anchored strictly to your latest workout date, eliminating misleading dips at the start of calendar weeks and preventing phantom score drift when resting.
+- **Long-Run Readiness ($\ge 28\text{ km}$)**: Automatically checks whether you've completed $\ge 28\text{ km}$ efforts in the past 4 weeks to evaluate late-race muscular endurance.
+
+### 💓 4. Physiological Load & Aerobic Decoupling
+- **Acute-to-Chronic Workload Ratio (ACWR)**: Exponentially weights heart-rate reserve (TRIMP) to balance acute fatigue (7 days) and chronic fitness (42 days), keeping you within the 0.8–1.3 sweet spot to prevent overtraining injuries.
+- **Aerobic Decoupling (Decoupling %)**: Evaluated only on steady-state continuous runs ($\ge 5\text{ km}$). Compares first-half vs. second-half pace-to-heart-rate efficiency. A drift $<5\%$ confirms a rock-solid aerobic base, while $>8\%$ signals cardiovascular strain, dehydration, or glycogen depletion.
+
+<details>
+<summary>🔬 <b>Click to expand: Mathematical Formulations & Peer-Reviewed Literature</b></summary>
+
+<br />
+
+1. **Structured Interval Clustering & Intermittent Dynamics**:
+   - Grounded in **Billat (1996, 2000)** on $v\text{VO}_2\max$ interval mechanics and **Skiba et al. (2012, 2015, MSSE/IJSPP)** Critical Speed ($CS$) and intermittent work recovery models.
+2. **Daniels & Gilbert (1979) VDOT Exact Bisection Solution**:
+   - Replaces discrete lookup tables with exact numerical root-finding using the coupled physiological equations:
+     $$\text{VO}_2 = -4.60 + 0.182258 \cdot v + 0.000104 \cdot v^2 \quad (v \text{ in m/min})$$
+     $$\%\max = 0.8 + 0.1894393 \cdot e^{-0.012778 \cdot t} + 0.2989558 \cdot e^{-0.1932605 \cdot t} \quad (t \text{ in minutes})$$
+     $$\text{VDOT} = \text{VO}_2 / \%\max$$
+3. **Riegel (1981) Power Law & Vickers & Vertosick (2016, $n=2303$) Mileage Adjustment**:
+   - Riegel formula: $T_2 = T_1 \cdot (D_2 / D_1)^k$. Verified across 2,300+ marathoners, weekly volume is the only significant factor explaining marathon fatigue decay:
+     $$k_{\text{Marathon}} = 1.4510756 - 0.23797948 \cdot k_{12} - 0.01410023 \cdot (\text{Weekly Miles} / 10)$$
+4. **Banister (1991) / Morton TRIMP Impulse-Response**:
+   - Heart Rate Reserve exponential weighting: $\text{TRIMP} = t \cdot \Delta\text{HR} \cdot 0.64 e^{1.92 \cdot \Delta\text{HR}}$, driving EWMA ACWR tracking.
+5. **Altitude & Terrain Compensation**:
+   - Grade penalty $1.244\text{ s/km per m/km}$; altitude penalty $2.5\text{ s/km per 1000m}$ based on Saunders et al. altitude running physiology.
+
+</details>
 
 ---
 

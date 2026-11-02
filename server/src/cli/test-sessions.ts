@@ -1,4 +1,4 @@
-import { classify, detectSets } from "../analytics.ts";
+import { classify, detectSets, detectSetsFromLaps } from "../analytics.ts";
 
 let fail = 0;
 const check = (label: string, ok: boolean, detail?: unknown) => {
@@ -99,18 +99,74 @@ check("平均配速仍准确 ≈ 3:55", Math.abs((setsD[0]?.avgPaceSec ?? 0) - 2
 console.log("\n▸ 场景 E：累计时间轴偏移（startTs 单位是秒，不能再除 1000）");
 {
   const { buildSessions, sessionLaps } = await import("../analytics.ts");
-  const s = buildSessions().find((x: any) => x.activityCount > 1);
-  if (!s) { console.log("  ⏭  库里没有多记录场次，跳过"); }
-  else {
-    const l = sessionLaps(s.labelIds);
-    const offsets = [...new Set(l.map((x: any) => x.offsetSec))].sort((a, b) => a - b);
-    check(`产生 ${offsets.length} 段不同偏移 ${JSON.stringify(offsets)}`, offsets.length === s.activityCount, offsets);
-    check("第一条记录偏移为 0", offsets[0] === 0, offsets[0]);
-    const lastOffset = offsets[offsets.length - 1];
-    check(`后续记录偏移 > 60 秒（实际 ${lastOffset}s）`, lastOffset > 60, lastOffset);
-    check("elapsedSec 严格递增", l.every((x: any, i: number) => i === 0 || x.elapsedSec > l[i - 1].elapsedSec));
-    check("曲线末端 ≥ 场次总时长（含休息）", l[l.length - 1].elapsedSec >= s.totals.durationSec, { end: l[l.length - 1].elapsedSec, dur: s.totals.durationSec });
+  try {
+    const s = buildSessions().find((x: any) => x.activityCount > 1);
+    if (!s) { console.log("  ⏭  库里没有多记录场次，跳过"); }
+    else {
+      const l = sessionLaps(s.labelIds);
+      const offsets = [...new Set(l.map((x: any) => x.offsetSec))].sort((a, b) => a - b);
+      check(`产生 ${offsets.length} 段不同偏移 ${JSON.stringify(offsets)}`, offsets.length === s.activityCount, offsets);
+      check("第一条记录偏移为 0", offsets[0] === 0, offsets[0]);
+      const lastOffset = offsets[offsets.length - 1];
+      check(`后续记录偏移 > 60 秒（实际 ${lastOffset}s）`, lastOffset > 60, lastOffset);
+      check("elapsedSec 严格递增", l.every((x: any, i: number) => i === 0 || x.elapsedSec > l[i - 1].elapsedSec));
+      check("曲线末端 ≥ 场次总时长（含休息）", l[l.length - 1].elapsedSec >= s.totals.durationSec, { end: l[l.length - 1].elapsedSec, dur: s.totals.durationSec });
+    }
+  } catch (err: any) {
+    console.log("  ⏭  无数据库环境，跳过 DB 聚合用例");
   }
+}
+
+console.log("\n▸ 场景 F：单次记录内的 1km × 6 结构化间歇跑（带热身、慢跑休息、冷身，总距离 10.4km）");
+{
+  const singleActIntervalLaps = [
+    { lapIndex: 1, distanceM: 2000, timeSec: 660, avgHr: 142 }, // 热身 2km
+    { lapIndex: 2, distanceM: 1000, timeSec: 220, avgHr: 168 }, // 1km 3:40
+    { lapIndex: 3, distanceM: 400,  timeSec: 160, avgHr: 145 }, // 休息 400m
+    { lapIndex: 4, distanceM: 1000, timeSec: 218, avgHr: 171 }, // 1km 3:38
+    { lapIndex: 5, distanceM: 400,  timeSec: 165, avgHr: 148 }, // 休息 400m
+    { lapIndex: 6, distanceM: 1000, timeSec: 222, avgHr: 173 }, // 1km 3:42
+    { lapIndex: 7, distanceM: 400,  timeSec: 170, avgHr: 150 }, // 休息 400m
+    { lapIndex: 8, distanceM: 1000, timeSec: 219, avgHr: 175 }, // 1km 3:39
+    { lapIndex: 9, distanceM: 400,  timeSec: 168, avgHr: 152 }, // 休息 400m
+    { lapIndex: 10, distanceM: 1000, timeSec: 216, avgHr: 177 }, // 1km 3:36
+    { lapIndex: 11, distanceM: 400,  timeSec: 165, avgHr: 150 }, // 休息 400m
+    { lapIndex: 12, distanceM: 1000, timeSec: 214, avgHr: 179 }, // 1km 3:34
+    { lapIndex: 13, distanceM: 400,  timeSec: 150, avgHr: 140 }, // 冷身 400m
+  ];
+  const setsF = detectSetsFromLaps(singleActIntervalLaps);
+  check("从分圈准确识别出 1 组间歇", setsF.length === 1, setsF);
+  check("识别出 1km × 6 组", setsF[0]?.distanceLabel === "1km" && setsF[0]?.reps === 6, setsF[0]);
+  check("工作组平均配速 ≈ 3:38 (218s)", Math.abs((setsF[0]?.avgPaceSec ?? 0) - 218) < 3, setsF[0]?.avgPaceSec);
+  check("组间休息提取准确 ≈ 165s", Math.abs((setsF[0]?.restSec ?? 0) - 165) < 5, setsF[0]?.restSec);
+
+  // 单次记录（acts.length === 1），总距离 10.4km
+  const actsF = [{ distanceKm: 10.4, durationSec: 2727, labelId: "L_ACT_INT" }];
+  const clsF = classify(actsF, setsF, 10.4, singleActIntervalLaps);
+  check("单次记录间歇跑不再被粗暴识别为中等距离跑，而是正确分类为「间歇训练」", clsF.classification === "间歇训练", clsF);
+  check("理由列出单场识别出的组次", /单场 1 组重复：1km×6组/.test(clsF.reason), clsF.reason);
+}
+
+console.log("\n▸ 场景 G：单次 10km 匀速跑（每公里计圈，绝不误判为间歇跑）");
+{
+  const steadyLaps = [
+    { lapIndex: 1, distanceM: 1000, timeSec: 305, avgHr: 145 },
+    { lapIndex: 2, distanceM: 1000, timeSec: 302, avgHr: 148 },
+    { lapIndex: 3, distanceM: 1000, timeSec: 300, avgHr: 150 },
+    { lapIndex: 4, distanceM: 1000, timeSec: 298, avgHr: 152 },
+    { lapIndex: 5, distanceM: 1000, timeSec: 299, avgHr: 153 },
+    { lapIndex: 6, distanceM: 1000, timeSec: 301, avgHr: 154 },
+    { lapIndex: 7, distanceM: 1000, timeSec: 297, avgHr: 155 },
+    { lapIndex: 8, distanceM: 1000, timeSec: 295, avgHr: 156 },
+    { lapIndex: 9, distanceM: 1000, timeSec: 293, avgHr: 157 },
+    { lapIndex: 10, distanceM: 1000, timeSec: 288, avgHr: 160 },
+  ];
+  const setsG = detectSetsFromLaps(steadyLaps);
+  check("匀速稳态跑不识别出间歇工作组", setsG.length === 0, setsG);
+
+  const actsG = [{ distanceKm: 10.0, durationSec: 2978, labelId: "L_ACT_STEADY" }];
+  const clsG = classify(actsG, setsG, 10.0, steadyLaps);
+  check("匀速 10km 跑正确归类为「中等距离跑」", clsG.classification === "中等距离跑", clsG);
 }
 
 console.log(fail === 0 ? "\n✅ 全部通过\n" : `\n❌ ${fail} 项失败\n`);

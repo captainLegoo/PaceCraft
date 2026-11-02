@@ -145,6 +145,23 @@ function makeLaps(perKm: number[], startTs = 1_780_000_000, labelId = "L1", date
   check("跨超长空档不会拼出假成绩（返回 null 或只覆盖少量段）", e === null || e.actualKm < 5.1, e?.actualKm);
 }
 {
+  // 真实间歇场景：1km 快跑 (220s) + 400m 慢跑休息 (160s, 配速 400s/km) × 5 组
+  // 连续滑动窗口不能跨越间歇休息段拼凑成 5km 假成绩
+  const realIntervalLaps: LapInput[] = [];
+  for (let i = 0; i < 5; i++) {
+    realIntervalLaps.push({
+      labelId: "L_INT", date: "2026-11-01", startTs: i * 380, lapIndex: i * 2 + 1,
+      distanceM: 1000, timeSec: 220, avgHr: 172, elevGain: 0, climbRate: 0, gapPaceSec: 220,
+    });
+    realIntervalLaps.push({
+      labelId: "L_INT", date: "2026-11-01", startTs: i * 380 + 220, lapIndex: i * 2 + 2,
+      distanceM: 400, timeSec: 160, avgHr: 145, elevGain: 0, climbRate: 0, gapPaceSec: 400,
+    });
+  }
+  const e = bestContinuousEffort(realIntervalLaps, 5);
+  check("真实间歇跑快慢交替不拼凑 5K 伪连续成绩（返回 null）", e === null, e);
+}
+{
   // 末段不足整公里时应被计入
   const laps: LapInput[] = [
     ...makeLaps([300, 300, 300, 300]),
