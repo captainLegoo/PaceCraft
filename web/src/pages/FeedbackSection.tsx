@@ -168,7 +168,7 @@ export default function FeedbackSection({
           </div>
         </div>
       ) : (
-        <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: 10, flex: 1 }}>
+        <form onSubmit={handleSubmit} className="feedback-form">
           {/* 反馈类型切换 */}
           <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
             {FEEDBACK_TYPES.map((t) => {
@@ -178,18 +178,7 @@ export default function FeedbackSection({
                   key={t.id}
                   type="button"
                   onClick={() => setType(t.id)}
-                  style={{
-                    padding: "4px 10px",
-                    borderRadius: 16,
-                    fontSize: 11.5,
-                    fontWeight: active ? 600 : 500,
-                    cursor: "pointer",
-                    border: "1px solid",
-                    borderColor: active ? "var(--accent)" : "var(--border)",
-                    background: active ? "var(--accent)" : "var(--surface-2)",
-                    color: active ? "var(--accent-ink)" : "var(--text)",
-                    transition: "all 0.15s ease",
-                  }}
+                  className={`feedback-type-btn ${active ? "active" : ""}`}
                 >
                   {t.label}
                 </button>
@@ -201,7 +190,7 @@ export default function FeedbackSection({
           <div>
             <input
               type="text"
-              placeholder={`概括主题（选填，例如：${FEEDBACK_TYPES.find((t) => t.id === type)?.hint}）`}
+              placeholder={`概括主题（选填，如：${FEEDBACK_TYPES.find((t) => t.id === type)?.hint}）`}
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               disabled={submitting}
@@ -231,7 +220,7 @@ export default function FeedbackSection({
           <div>
             <input
               type="text"
-              placeholder="联系方式（选填：微信号 / 邮箱 / GitHub ID，方便后续跟进）"
+              placeholder="联系方式（选填：微信号 / 邮箱 / GitHub ID）"
               value={contact}
               onChange={(e) => setContact(e.target.value)}
               disabled={submitting}
@@ -240,34 +229,25 @@ export default function FeedbackSection({
           </div>
 
           {/* 环境诊断信息勾选 */}
-          <div
-            style={{
-              background: "var(--surface-2)",
-              borderRadius: 6,
-              padding: "6px 10px",
-              border: "1px solid var(--border)",
-              fontSize: 11.5,
-              display: "flex",
-              flexDirection: "column",
-              gap: 4,
-            }}
-          >
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 6 }}>
-              <label style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer", color: "var(--text-dim)" }}>
+          <div className="feedback-diag-box">
+            <div className="feedback-diag-row">
+              <label className="feedback-diag-label">
                 <input
                   type="checkbox"
                   checked={includeDiagnostics}
                   onChange={(e) => setIncludeDiagnostics(e.target.checked)}
                   disabled={submitting}
-                  style={{ width: "auto", margin: 0 }}
+                  style={{ width: "auto", margin: 0, flexShrink: 0 }}
                 />
-                <span>自动附带运行诊断信息（版本、OS、数据量，不含隐私）</span>
+                <span>
+                  附带运行诊断信息
+                  <span className="feedback-diag-sub">（版本/OS/数据量，不含隐私）</span>
+                </span>
               </label>
               {includeDiagnostics && (
                 <button
                   type="button"
-                  className="btn sm"
-                  style={{ padding: "1px 6px", fontSize: 11 }}
+                  className="feedback-diag-btn"
                   onClick={() => setShowDiagnosticsPreview(!showDiagnosticsPreview)}
                 >
                   {showDiagnosticsPreview ? "收起" : "预览"}
@@ -276,22 +256,7 @@ export default function FeedbackSection({
             </div>
 
             {includeDiagnostics && showDiagnosticsPreview && (
-              <pre
-                style={{
-                  margin: "4px 0 0 0",
-                  padding: "6px 8px",
-                  borderRadius: 4,
-                  background: "var(--bg)",
-                  color: "var(--text-dim)",
-                  fontFamily: "var(--mono)",
-                  fontSize: 11,
-                  whiteSpace: "pre-wrap",
-                  wordBreak: "break-all",
-                  border: "1px solid var(--border)",
-                  maxHeight: 120,
-                  overflowY: "auto",
-                }}
-              >
+              <pre className="feedback-diag-pre">
                 {diagnostics}
               </pre>
             )}

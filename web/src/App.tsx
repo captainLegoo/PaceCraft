@@ -280,6 +280,42 @@ export default function App() {
     garmin?: { synced: boolean; scannedCount: number; newCount: number; fitCount: number };
     conflicts?: { detected: number; resolved: number };
   } | null>(null);
+  const summaryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // 同步成果结算卡片自动定时消失（正常 7 秒，有错误提示 12 秒；悬停时暂停倒计时）
+  useEffect(() => {
+    if (!syncSummary) {
+      if (summaryTimerRef.current) clearTimeout(summaryTimerRef.current);
+      return;
+    }
+    const duration = syncSummary.hasErrors ? 12000 : 7000;
+    summaryTimerRef.current = setTimeout(() => {
+      setSyncSummary(null);
+    }, duration);
+
+    return () => {
+      if (summaryTimerRef.current) {
+        clearTimeout(summaryTimerRef.current);
+        summaryTimerRef.current = null;
+      }
+    };
+  }, [syncSummary]);
+
+  const handleSummaryMouseEnter = () => {
+    if (summaryTimerRef.current) {
+      clearTimeout(summaryTimerRef.current);
+      summaryTimerRef.current = null;
+    }
+  };
+
+  const handleSummaryMouseLeave = () => {
+    if (syncSummary) {
+      summaryTimerRef.current = setTimeout(() => {
+        setSyncSummary(null);
+      }, 4000);
+    }
+  };
+
   const progressTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [syncMsg, setSyncMsg] = useState<{ text: string; kind: "ok" | "err" } | null>(null);
   const [showSyncDropdown, setShowSyncDropdown] = useState(false);
@@ -618,7 +654,7 @@ export default function App() {
         errorMessage: syncError || undefined,
         coros: corosSummary,
         garmin: garminSummary,
-        conflicts: totalConflictsDetected > 0 ? { detected: totalConflictsDetected, resolved: totalConflictsResolved } : undefined,
+        conflicts: totalConflictsResolved > 0 ? { detected: totalConflictsDetected, resolved: totalConflictsResolved } : undefined,
       };
 
       setSyncSummary(summaryData);
@@ -994,7 +1030,11 @@ export default function App() {
 
         {/* 同步完成成果结算卡片（跨平台浮动通知，兼容 Mac 和 Windows，自适应深浅主题） */}
         {syncSummary && (
-          <div className="sync-summary-toast">
+          <div
+            className="sync-summary-toast"
+            onMouseEnter={handleSummaryMouseEnter}
+            onMouseLeave={handleSummaryMouseLeave}
+          >
             <div className="sync-summary-header">
               <div className="sync-summary-title">
                 <span style={{ fontSize: 16 }}>{syncSummary.hasErrors ? "⚠️" : "🎉"}</span>
@@ -1043,7 +1083,7 @@ export default function App() {
                 </div>
               )}
 
-              {syncSummary.conflicts && syncSummary.conflicts.detected > 0 && (
+              {syncSummary.conflicts && syncSummary.conflicts.resolved > 0 && (
                 <div className="sync-summary-item dedup">
                   <span className="sync-summary-tag dedup">智能去重</span>
                   <div className="sync-summary-item-content">
