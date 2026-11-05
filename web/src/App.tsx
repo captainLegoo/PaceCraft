@@ -157,21 +157,60 @@ export default function App() {
   const [showUpdateModal, setShowUpdateModal] = useState(false);
   const [hasNewUpdate, setHasNewUpdate] = useState(false);
 
-  // 桌面应用启动 3 秒后静默检测是否有新更新
+  // 应用冷启动 2.5 秒后自动静默检测 Releases 是否有新版本发布
   useEffect(() => {
-    if (!isTauriEnv()) return;
+    let cancelled = false;
     const timer = setTimeout(async () => {
       try {
-        const update = await check();
-        if (update && update.available) {
-          setHasNewUpdate(true);
+        const clientPlatform =
+          typeof navigator !== "undefined"
+            ? /Win/i.test(navigator.userAgent || (navigator as any).platform)
+              ? "windows"
+              : /Mac/i.test(navigator.userAgent || (navigator as any).platform)
+              ? "macos"
+              : "linux"
+            : undefined;
+
+        const res = await fetch(
+          `/api/updater/check?currentVersion=${encodeURIComponent(appVersion)}&channel=auto&platform=${clientPlatform || ""}&_t=${Date.now()}`,
+          { signal: AbortSignal.timeout(4000) }
+        );
+        if (res.ok) {
+          const data = await res.json();
+          if (!cancelled && data && data.hasUpdate && data.latestVersion) {
+            setHasNewUpdate(true);
+            // 自动用现有弹窗提示（每个版本在当前会话中仅自动提示一次，避免过度打扰）
+            const notifiedKey = `pacecraft_notified_release_${data.latestVersion}`;
+            if (!sessionStorage.getItem(notifiedKey)) {
+              sessionStorage.setItem(notifiedKey, "1");
+              setShowUpdateModal(true);
+            }
+            return;
+          }
         }
       } catch {
-        // 静默检查忽略错误
+        // 后端接口请求失败且在 Tauri 环境时，兜底使用 Tauri 原生 check()
+        if (isTauriEnv()) {
+          try {
+            const update = await check();
+            if (!cancelled && update && update.available) {
+              setHasNewUpdate(true);
+              const notifiedKey = `pacecraft_notified_release_${update.version}`;
+              if (!sessionStorage.getItem(notifiedKey)) {
+                sessionStorage.setItem(notifiedKey, "1");
+                setShowUpdateModal(true);
+              }
+            }
+          } catch {}
+        }
       }
-    }, 3000);
-    return () => clearTimeout(timer);
-  }, []);
+    }, 2500);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [appVersion]);
   const { theme, toggle } = useTheme();
 
   /** 窄屏下侧边栏变成抽屉，默认收起 */
@@ -339,6 +378,61 @@ export default function App() {
     refreshGarminAuth();
   }, [refreshGarminAuth]);
 
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
+  /** 点击刷新页面：显示原生刷新动画，静默刷新跑步数据；若有新版本 Releases 则弹窗提示，没有则不弹窗 */
+  const handleRefreshPage = useCallback(async () => {
+    if (isRefreshing) return;
+
+    setIsRefreshing(true);
+
+    // 1. 刷新跑步数据与应用全局状态
+    setDataVersion((v) => v + 1);
+    refresh();
+
+    // 保证刷新的旋转动画至少持续 600ms（与以往点击刷新的视觉反馈一致）
+    const minAnimationPromise = new Promise((resolve) => setTimeout(resolve, 600));
+
+    // 2. 静默检测最新 Releases 是否发布
+    const checkUpdatePromise = (async () => {
+      try {
+        const clientPlatform =
+          typeof navigator !== "undefined"
+            ? /Win/i.test(navigator.userAgent || (navigator as any).platform)
+              ? "windows"
+              : /Mac/i.test(navigator.userAgent || (navigator as any).platform)
+              ? "macos"
+              : "linux"
+            : undefined;
+
+        const res = await fetch(
+          `/api/updater/check?currentVersion=${encodeURIComponent(appVersion)}&channel=auto&force=true&platform=${clientPlatform || ""}&_t=${Date.now()}`,
+          { signal: AbortSignal.timeout(2000) }
+        );
+
+        if (res.ok) {
+          const data = await res.json();
+          // 仅在明确检测到新版本时才弹窗
+          if (data && data.hasUpdate && data.latestVersion) {
+            setHasNewUpdate(true);
+            setShowUpdateModal(true);
+          }
+        }
+      } catch {
+        // 接口异常或网络超时完全静默忽略，绝不弹窗打扰
+      }
+    })();
+
+    try {
+      await Promise.allSettled([minAnimationPromise, checkUpdatePromise]);
+    } finally {
+      setIsRefreshing(false);
+    }
+  }, [isRefreshing, refresh, appVersion]);
+
+  const handleRefreshPageRef = useRef(handleRefreshPage);
+  handleRefreshPageRef.current = handleRefreshPage;
+
   const stopProgressPolling = useCallback(() => {
     if (progressTimerRef.current) {
       clearInterval(progressTimerRef.current);
@@ -425,8 +519,10 @@ export default function App() {
 
     const handleKeyDown = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && (e.key === "r" || e.key === "R")) {
-        e.preventDefault();
-        window.location.reload();
+        if (!e.shiftKey) {
+          e.preventDefault();
+          handleRefreshPageRef.current();
+        }
       }
     };
     window.addEventListener("keydown", handleKeyDown);
@@ -758,7 +854,8 @@ export default function App() {
         <div className="sidebar-foot">
           <button
             className="sync-btn"
-            onClick={() => window.location.reload()}
+            onClick={handleRefreshPage}
+            disabled={isRefreshing}
             title="刷新页面（快捷键 Cmd+R / Ctrl+R）"
           >
             <IconRefresh size={14} />
@@ -1463,6 +1560,7 @@ export default function App() {
         open={showUpdateModal}
         onClose={() => setShowUpdateModal(false)}
         currentAppVersion={appVersion}
+        onReloadPage={() => window.location.reload()}
       />
 
       <ConnectWatchModal
