@@ -3,8 +3,9 @@ import { api } from "./api";
 import type { QuickSyncResult, SyncProgress } from "./api";
 import { ThemeToggle, useTheme } from "./theme";
 import { useTableScroll } from "./table-scroll";
-import { IconBack, IconCloudSync, IconDatabase, IconFlag, IconMenu, IconPulse, IconRefresh, IconShoe, IconSync } from "./icons";
+import { IconBack, IconCloudSync, IconDatabase, IconFlag, IconMenu, IconPulse, IconRefresh, IconShoe, IconSync, IconTarget } from "./icons";
 import Training from "./pages/Training";
+import AiCoach from "./pages/AiCoach";
 import ActivityDetailView from "./pages/ActivityDetail";
 import Settings from "./pages/Settings";
 import SessionView from "./pages/Session";
@@ -26,6 +27,7 @@ export { formatElapsed };
 type Route = {
   page:
     | "training"
+    | "coach"
     | "race"
     | "readiness"
     | "settings"
@@ -45,15 +47,18 @@ type Route = {
   weekStart?: string;
 };
 
-const NAV: { key: "training" | "race" | "readiness" | "settings"; label: string; sub: string; icon: any }[] = [
-  { key: "training", label: "训练看板", sub: "跑量 · 课表 · 负荷", icon: IconShoe },
-  { key: "race", label: "赛事中心", sub: "赛道 · 预测 · 备赛", icon: IconFlag },
-  { key: "readiness", label: "身体状态", sub: "恢复 · 睡眠 · 体能", icon: IconPulse },
-  { key: "settings", label: "系统设置", sub: "AI · 同步 · 工作流", icon: IconDatabase },
+const NAV: { key: "training" | "coach" | "race" | "readiness" | "settings"; label: string; shortLabel?: string; sub: string; icon: any }[] = [
+  { key: "training", label: "训练看板", shortLabel: "训练", sub: "跑量 · 场次 · 负荷", icon: IconShoe },
+  { key: "coach", label: "AI 科学课表", shortLabel: "AI 课表", sub: "双周滚动 · 科学自适应", icon: IconTarget },
+  { key: "race", label: "赛事中心", shortLabel: "赛事", sub: "赛道 · 预测 · 备赛", icon: IconFlag },
+  { key: "readiness", label: "身体状态", shortLabel: "状态", sub: "恢复 · 睡眠 · 体能", icon: IconPulse },
+  { key: "settings", label: "系统设置", shortLabel: "设置", sub: "AI · 同步 · 工作流", icon: IconDatabase },
 ];
 
 function routeToHash(r: Route): string {
   switch (r.page) {
+    case "coach":
+      return `#/coach`;
     case "activity":
       return `#/activity?id=${encodeURIComponent(r.labelId ?? "")}${r.fromSessionKey ? `&from=${encodeURIComponent(r.fromSessionKey)}` : ""}`;
     case "session":
@@ -103,6 +108,8 @@ function hashToRoute(hash: string): Route {
     }
     case "race":
       return { page: "race" };
+    case "coach":
+      return { page: "coach" };
     case "prediction":
       return { page: "prediction" };
     case "prep":
@@ -178,13 +185,8 @@ export default function App() {
         if (res.ok) {
           const data = await res.json();
           if (!cancelled && data && data.hasUpdate && data.latestVersion) {
+            // 静默标记新版本红点与徽标，绝不自动弹窗打扰用户当前操作
             setHasNewUpdate(true);
-            // 自动用现有弹窗提示（每个版本在当前会话中仅自动提示一次，避免过度打扰）
-            const notifiedKey = `pacecraft_notified_release_${data.latestVersion}`;
-            if (!sessionStorage.getItem(notifiedKey)) {
-              sessionStorage.setItem(notifiedKey, "1");
-              setShowUpdateModal(true);
-            }
             return;
           }
         }
@@ -195,11 +197,6 @@ export default function App() {
             const update = await check();
             if (!cancelled && update && update.available) {
               setHasNewUpdate(true);
-              const notifiedKey = `pacecraft_notified_release_${update.version}`;
-              if (!sessionStorage.getItem(notifiedKey)) {
-                sessionStorage.setItem(notifiedKey, "1");
-                setShowUpdateModal(true);
-              }
             }
           } catch {}
         }
@@ -412,10 +409,9 @@ export default function App() {
 
         if (res.ok) {
           const data = await res.json();
-          // 仅在明确检测到新版本时才弹窗
+          // 静默更新版本状态，不强制弹窗打扰
           if (data && data.hasUpdate && data.latestVersion) {
             setHasNewUpdate(true);
-            setShowUpdateModal(true);
           }
         }
       } catch {
@@ -844,7 +840,21 @@ export default function App() {
             >
               <span className="nav-icon"><Icon size={17} /></span>
               <span className="nav-text">
-                <span className="nav-label">{n.label}</span>
+                <span className="nav-label" style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                  <span>{n.label}</span>
+                  {n.key === "settings" && hasNewUpdate && (
+                    <span
+                      style={{
+                        width: 6,
+                        height: 6,
+                        borderRadius: "50%",
+                        background: "var(--accent)",
+                        flexShrink: 0,
+                      }}
+                      title="有新版本可用"
+                    />
+                  )}
+                </span>
                 <span className="nav-sub">{n.sub}</span>
               </span>
             </button>
@@ -1001,25 +1011,21 @@ export default function App() {
                 {/* 版本号 */}
                 <span
                   className="version-tag"
-                  style={{ cursor: "pointer", userSelect: "none", fontSize: 10, padding: "0 6px" }}
+                  style={{
+                    cursor: "pointer",
+                    userSelect: "none",
+                    fontSize: 10,
+                    padding: hasNewUpdate ? "1px 7px" : "0 6px",
+                    background: hasNewUpdate ? "var(--accent-bg)" : undefined,
+                    borderColor: hasNewUpdate ? "var(--accent)" : undefined,
+                    color: hasNewUpdate ? "var(--accent)" : undefined,
+                    fontWeight: hasNewUpdate ? 600 : 400,
+                  }}
                   onClick={() => setShowUpdateModal(true)}
-                  title={`当前版本：${appVersion}（点击检查更新）`}
+                  title={`当前版本：${appVersion}（${hasNewUpdate ? "发现新版本，点击查看与升级" : "点击检查更新"}）`}
                 >
-                  <span className="dot" style={{ width: 4, height: 4 }} />
-                  <span>{appVersion}</span>
-                  {hasNewUpdate && (
-                    <span
-                      style={{
-                        width: 5,
-                        height: 5,
-                        borderRadius: "50%",
-                        background: "var(--accent)",
-                        display: "inline-block",
-                        marginLeft: 1,
-                      }}
-                      title="发现新版本"
-                    />
-                  )}
+                  <span className="dot" style={{ width: 4, height: 4, background: hasNewUpdate ? "var(--accent)" : undefined }} />
+                  <span>{hasNewUpdate ? `${appVersion} (新版本)` : appVersion}</span>
                 </span>
               </div>
               <div style={{ color: "var(--text-dim)", fontSize: 11 }}>
@@ -1296,8 +1302,17 @@ export default function App() {
               onOpenWeek={openWeek}
               onGoRace={() => go("race")}
               onGoReadiness={() => go("readiness")}
+              onGoCoach={() => go("coach")}
             />
           </>
+        )}
+
+        {route.page === "coach" && (
+          <AiCoach
+            key={`coach-${dataVersion}`}
+            onOpenActivity={openActivity}
+            onOpenConnect={() => setShowConnectModal(true)}
+          />
         )}
 
         {route.page === "week" && route.weekStart && (
@@ -1550,7 +1565,7 @@ export default function App() {
               onClick={() => go(n.key)}
             >
               <Icon size={19} />
-              <span>{n.label}</span>
+              <span>{n.shortLabel || n.label}</span>
             </button>
           );
         })}

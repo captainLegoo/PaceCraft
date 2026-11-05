@@ -9,12 +9,14 @@ export default function Training({
   onOpenWeek,
   onGoRace,
   onGoReadiness,
+  onGoCoach,
 }: {
   onOpen: (labelId: string) => void;
   onOpenSession: (key: string) => void;
   onOpenWeek: (weekStart: string) => void;
   onGoRace?: () => void;
   onGoReadiness?: () => void;
+  onGoCoach?: () => void;
 }) {
   const [weekly, setWeekly] = useState<Weekly[]>([]);
   const [load, setLoad] = useState<LoadPoint[]>([]);
@@ -195,6 +197,15 @@ export default function Training({
 
           {/* 快捷跳转操作 */}
           <div style={{ display: "flex", gap: 8, alignItems: "center", flexShrink: 0 }}>
+            {onGoCoach && (
+              <button
+                className="btn primary"
+                onClick={onGoCoach}
+                style={{ fontSize: 12, padding: "6px 14px", background: "var(--accent)", color: "#fff", border: "none" }}
+              >
+                🎯 AI 课表
+              </button>
+            )}
             {onGoRace && (
               <button className="btn" onClick={onGoRace} style={{ fontSize: 12, padding: "6px 12px" }}>
                 <IconFlag size={13} />

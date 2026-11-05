@@ -575,6 +575,172 @@ export const api = {
   getLanStatus: () => req<LanStatus>("/api/lan/status"),
   toggleLan: (enabled: boolean) =>
     req<LanStatus>("/api/lan/toggle", { method: "POST", body: JSON.stringify({ enabled }) }),
+
+  // ---------- AI 科学教练与课表 ----------
+  coachProfile: () => req<CoachProfile>("/api/coach/profile"),
+  updateCoachProfile: (data: any) =>
+    req<{ ok: boolean; profile: CoachProfile }>("/api/coach/profile", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+  coachBaseline: () => req<CoachBaseline>("/api/coach/baseline"),
+  coachPlan: () =>
+    req<{ plan: CoachPlan | null; workouts: CoachWorkout[]; reviews: CoachReview[] }>("/api/coach/plan"),
+  generateCoachPlan: (startDate?: string) =>
+    req<{ ok: boolean; planId: number; totalWeeks: number; generatedDays: number }>("/api/coach/plan/generate", {
+      method: "POST",
+      body: JSON.stringify({ startDate }),
+    }),
+  reviewCoachPlan: (planId: number, weekIndex: number) =>
+    req<any>("/api/coach/plan/review", {
+      method: "POST",
+      body: JSON.stringify({ planId, weekIndex }),
+    }),
+  setCoachTravel: (city: string | null, untilDate: string | null) =>
+    req<{ ok: boolean; travelMode: any }>("/api/coach/travel", {
+      method: "POST",
+      body: JSON.stringify({ city, untilDate }),
+    }),
+  endCoachPlan: (planId?: number) =>
+    req<{ ok: boolean; message: string }>("/api/coach/plan/end", {
+      method: "POST",
+      body: JSON.stringify({ planId }),
+    }),
+};
+
+export type CoachProfile = {
+  id: number;
+  targetType: "race" | "fitness";
+  raceId: number | null;
+  targetRaceDate: string | null;
+  targetDistance: string;
+  targetTimeSec: number | null;
+  daysPerWeek: number;
+  preferredDaysJson: string;
+  longRunDay: number;
+  methodology: string;
+  intensityTarget: string;
+  includeStrength: number;
+  climateType: string;
+  hasTreadmill: number;
+  travelModeJson: string | null;
+};
+
+export type CoachBaseline = {
+  hasData?: boolean;
+  vdot: number;
+  ctl: number;
+  atl: number;
+  tsb: number;
+  acwr: number;
+  weeklyMileageAvgKm: number;
+  longestRunKm: number;
+  maxHr: number;
+  restingHr: number;
+  zones: {
+    hr: {
+      z1: [number, number];
+      z2: [number, number];
+      z3: [number, number];
+      z4: [number, number];
+      z5: [number, number];
+    };
+    pace: {
+      easy: [number, number];
+      marathon: [number, number];
+      threshold: [number, number];
+      interval: [number, number];
+      repetition: [number, number];
+    };
+  };
+  cardiacDecoupling: {
+    tested: boolean;
+    driftPct: number | null;
+    status: "healthy" | "drifted" | "insufficient_data";
+    summary: string;
+  };
+  detectedClimate: {
+    avgTempC: number | null;
+    isHotHumid: boolean;
+    isCold: boolean;
+  };
+  predictions?: {
+    marathonSec: number;
+    halfMarathonSec: number;
+    tenKSec: number;
+    fiveKSec: number;
+  };
+  phenotype?: {
+    type: "speed_dominant" | "endurance_dominant" | "balanced";
+    label: string;
+    badge: string;
+    badgeColor: string;
+    badgeBg: string;
+    characteristics: string;
+    diagnosis: string;
+    prescription: {
+      title: string;
+      focusDesc: string;
+      easyRunAdvice: string;
+      qualityRunAdvice: string;
+      longRunAdvice: string;
+    };
+  };
+};
+
+export type CoachWorkout = {
+  id: number;
+  planId: number;
+  date: string;
+  weekIndex: number;
+  dayOfWeek: number;
+  phase: string;
+  workoutType: string;
+  title: string;
+  description: string;
+  distanceKm: number;
+  durationMinutes: number;
+  targetPaceMinSec: number | null;
+  targetPaceMaxSec: number | null;
+  targetHrMin: number | null;
+  targetHrMax: number | null;
+  structureJson: string | null;
+  alternativeJson: string | null;
+  actualLabelId: string | null;
+  actualDistanceKm: number | null;
+  actualAvgPaceSec: number | null;
+  actualAvgHr: number | null;
+  complianceScore: number | null;
+  status: "pending" | "completed" | "missed" | "skipped";
+};
+
+export type CoachReview = {
+  id: number;
+  planId: number;
+  weekIndex: number;
+  startDate: string;
+  endDate: string;
+  plannedVolumeKm: number;
+  actualVolumeKm: number;
+  completionRatePct: number;
+  acwr: number | null;
+  cardiacDecouplingStatus: string;
+  fatigueAssessment: string;
+  adjustmentDecision: string;
+  reviewMarkdown: string;
+};
+
+export type CoachPlan = {
+  id: number;
+  profileId: number;
+  title: string;
+  startDate: string;
+  endDate: string;
+  totalWeeks: number;
+  currentWeek: number;
+  status: string;
+  baselineSnapshotJson: string;
+  macroOutlineJson: string;
 };
 
 export type LanStatus = {

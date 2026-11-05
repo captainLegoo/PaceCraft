@@ -353,40 +353,168 @@ export const races = sqliteTable(
     /** 比赛日期 yyyy-mm-dd */
     date: text("date").notNull(),
     name: text("name").notNull(),
-    /**
-     * 关联的那次训练（activities.label_id）。
-     *
-     * 为什么要有：比赛当天在手表里就是一次普通训练，没有额外标记。
-     * 关联之后才能把「这场比赛的实际分段数据」和「登记时的目标成绩」分开看 ——
-     * 赛前是目标，赛后是实测，只有能对上同一次训练才做得了对比。
-     *
-     * 可空：未来的比赛（还没跑）、或当天训练没同步到，都允许先登记。
-     */
     labelId: text("label_id"),
-    /**
-     * 主观体感备注 —— 累不累、有没有抽筋、哪一段不舒服、哪一段状态好。
-     *
-     * 这类信息 COROS 完全没有，只有本人知道，但往往是解释客观数据的关键线索
-     * （比如配速下降到底是疲劳、上坡、还是补给不足）。
-     * 写在这里而不是训练记录里，是因为它属于「这场比赛」而不是「这次训练」——
-     * 同一天可能有多条记录，比赛指的是那一场。
-     */
     notes: text("notes"),
     city: text("city"),
-    /** 全程 42.195 / 半马 21.0975 / 其他 */
     distanceKm: real("distance_km").notNull(),
-    /** 目标成绩（秒），可空 */
     goalSec: integer("goal_sec"),
-    /** gpx | waypoints | none（none = 先登记、之后补路线） */
     routeSource: text("route_source").notNull().default("waypoints"),
-    /** 路线原始数据：GPX 全文，或路书路点的 JSON */
     routeData: text("route_data"),
-    /** 分析结果缓存（RouteProfile 的 JSON），避免每次都重算 DEM */
     profileJson: text("profile_json"),
-    /** 分析时的数据来源说明，用于在 UI 上标注可信度 */
     sourceNote: text("source_note"),
     createdAt: integer("created_at").notNull().default(sql`(unixepoch())`),
     updatedAt: integer("updated_at").notNull().default(sql`(unixepoch())`),
   },
   (t) => [index("idx_races_date").on(t.date)],
+);
+
+/**
+ * AI 教练用户档案与偏好配置表
+ */
+export const aiCoachProfiles = sqliteTable("ai_coach_profiles", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  /** 目标类型: 'race' (有具体比赛) | 'fitness' (常态进阶/保持) */
+  targetType: text("target_type").notNull().default("fitness"),
+  /** 关联 races 表的 id，若无具体比赛可为空 */
+  raceId: integer("race_id"),
+  /** 目标比赛日期 yyyy-mm-dd (若无比赛则为 null) */
+  targetRaceDate: text("target_race_date"),
+  /** 目标距离类型: 'marathon' | 'half_marathon' | '10k' | '5k' | 'general' */
+  targetDistance: text("target_distance").notNull().default("general"),
+  /** 目标完赛时间（秒） */
+  targetTimeSec: integer("target_time_sec"),
+  /** 每周训练天数: 3 | 4 | 5 | 6 */
+  daysPerWeek: integer("days_per_week").notNull().default(4),
+  /** 偏好的训练日 (JSON 数组，如 [1, 3, 5, 0]，0代表周日) */
+  preferredDaysJson: text("preferred_days_json").notNull().default("[2,4,6,0]"),
+  /** 偏好长距离跑的星期几 (通常为 0 周日或 6 周六) */
+  longRunDay: integer("long_run_day").notNull().default(0),
+  /** 训练体系偏好: 'hybrid' (极化80/20+丹尼尔斯改良) | 'daniels' | 'norwegian' | 'maf' */
+  methodology: text("methodology").notNull().default("hybrid"),
+  /** 训练锚点偏好: 'balanced' (混合) | 'heart_rate' (心率优先) | 'pace' (配速优先) */
+  intensityTarget: text("intensity_target").notNull().default("balanced"),
+  /** 是否纳入核心与力量训练 (0 = 否, 1 = 是) */
+  includeStrength: integer("include_strength").notNull().default(1),
+  /** 所在气候类型: 'auto' | 'humid_hot' (湿热) | 'cold_snow' (极寒降雪) | 'temperate' (温带) */
+  climateType: text("climate_type").notNull().default("auto"),
+  /** 是否拥有跑步机备用方案 (0 = 无, 1 = 有) */
+  hasTreadmill: integer("has_treadmill").notNull().default(1),
+  /** 临时出差/出行信息 (JSON: { city: string, untilDate: string } 或 null) */
+  travelModeJson: text("travel_mode_json"),
+  createdAt: integer("created_at").notNull().default(sql`(unixepoch())`),
+  updatedAt: integer("updated_at").notNull().default(sql`(unixepoch())`),
+});
+
+/**
+ * AI 教练宏观周期规划表 (Macrocycle Plan)
+ */
+export const aiCoachPlans = sqliteTable("ai_coach_plans", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  profileId: integer("profile_id").notNull().references(() => aiCoachProfiles.id, { onDelete: "cascade" }),
+  /** 计划标题 */
+  title: text("title").notNull(),
+  /** 计划起始日期 yyyy-mm-dd */
+  startDate: text("start_date").notNull(),
+  /** 计划截止日期 yyyy-mm-dd (通常为比赛日或阶段结束日) */
+  endDate: text("end_date").notNull(),
+  /** 总周数 */
+  totalWeeks: integer("total_weeks").notNull(),
+  /** 当前推进到第几周 (1-indexed) */
+  currentWeek: integer("current_week").notNull().default(1),
+  /** 计划状态: 'active' | 'completed' | 'archived' */
+  status: text("status").notNull().default("active"),
+  /** 基准体能快照 (JSON: { vdot: number, ctl: number, atl: number, tsb: number, maxHr: number, restingHr: number }) */
+  baselineSnapshotJson: text("baseline_snapshot_json").notNull(),
+  /** 全周期阶段与跑量包络线大纲 (JSON 数组: [{ week: 1, phase: 'base', targetVolumeKm: 40, isDeload: false }]) */
+  macroOutlineJson: text("macro_outline_json").notNull(),
+  createdAt: integer("created_at").notNull().default(sql`(unixepoch())`),
+  updatedAt: integer("updated_at").notNull().default(sql`(unixepoch())`),
+});
+
+/**
+ * AI 教练每日课表项 (滚动微周期 Workout Schedules)
+ */
+export const aiCoachWorkouts = sqliteTable(
+  "ai_coach_workouts",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    planId: integer("plan_id").notNull().references(() => aiCoachPlans.id, { onDelete: "cascade" }),
+    /** 课表所属日期 yyyy-mm-dd */
+    date: text("date").notNull(),
+    /** 第几周 (1-indexed) */
+    weekIndex: integer("week_index").notNull(),
+    /** 星期几 (0-6, 0为周日) */
+    dayOfWeek: integer("day_of_week").notNull(),
+    /** 阶段: 'base' | 'build' | 'peak' | 'taper' | 'maintenance' */
+    phase: text("phase").notNull().default("base"),
+    /** 课表主类型: 'easy' | 'long' | 'tempo' | 'interval' | 'repetition' | 'fartlek' | 'recovery' | 'strength' | 'rest' */
+    workoutType: text("workout_type").notNull(),
+    /** 训练主题名称 (如: "渐进加速长跑 18km", "30-30 高原氧间歇", "核心抗阻激活") */
+    title: text("title").notNull(),
+    /** 教练详细指导语 (包含趣味性说明、动作注意、防厌跑要领) */
+    description: text("description").notNull(),
+    /** 计划总跑量 (km, 休息/纯力量课为 0) */
+    distanceKm: real("distance_km").notNull().default(0),
+    /** 计划预估时长 (分钟) */
+    durationMinutes: integer("duration_minutes").notNull().default(0),
+    /** 目标配速下限 (秒/km, 如 330 = 5:30/km) */
+    targetPaceMinSec: integer("target_pace_min_sec"),
+    /** 目标配速上限 (秒/km, 如 345 = 5:45/km) */
+    targetPaceMaxSec: integer("target_pace_max_sec"),
+    /** 目标心率下限 (bpm) */
+    targetHrMin: integer("target_hr_min"),
+    /** 目标心率上限 (bpm) */
+    targetHrMax: integer("target_hr_max"),
+    /** 结构化训练段落 (JSON 数组: [{ step: 'warmup', distKm: 2, pace: '6:15', note: '关节活动' }, ...]) */
+    structureJson: text("structure_json"),
+    /** 恶劣天气备用方案 (JSON: { type: 'treadmill' | 'indoor_core', inclinePct: 1.0, paceSec: 340, note: string }) */
+    alternativeJson: text("alternative_json"),
+    /** 关联的实际完成活动 labelId (来自 activities 表) */
+    actualLabelId: text("actual_label_id"),
+    /** 实际完成距离 (km) */
+    actualDistanceKm: real("actual_distance_km"),
+    /** 实际平均配速 (秒/km) */
+    actualAvgPaceSec: real("actual_avg_pace_sec"),
+    /** 实际平均心率 (bpm) */
+    actualAvgHr: integer("actual_avg_hr"),
+    /** 遵从度评分 (0-100, 综合考量距离、强度、心率吻合度) */
+    complianceScore: integer("compliance_score"),
+    /** 状态: 'pending' (待练) | 'completed' (已完成) | 'missed' (未达标/缺卡) | 'skipped' (主动跳过) */
+    status: text("status").notNull().default("pending"),
+    createdAt: integer("created_at").notNull().default(sql`(unixepoch())`),
+    updatedAt: integer("updated_at").notNull().default(sql`(unixepoch())`),
+  },
+  (t) => [index("idx_coach_workouts_date").on(t.date), index("idx_coach_workouts_plan").on(t.planId)],
+);
+
+/**
+ * AI 教练周度复盘与自适应调整记录 (Weekly Reviews)
+ */
+export const aiCoachReviews = sqliteTable(
+  "ai_coach_reviews",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    planId: integer("plan_id").notNull().references(() => aiCoachPlans.id, { onDelete: "cascade" }),
+    weekIndex: integer("week_index").notNull(),
+    startDate: text("start_date").notNull(),
+    endDate: text("end_date").notNull(),
+    /** 计划跑量 (km) */
+    plannedVolumeKm: real("planned_volume_km").notNull(),
+    /** 实际完成跑量 (km) */
+    actualVolumeKm: real("actual_volume_km").notNull(),
+    /** 周总体完成率 (百分比 0-100) */
+    completionRatePct: integer("completion_rate_pct").notNull(),
+    /** 急性/慢性负荷比率 ACWR */
+    acwr: real("acwr"),
+    /** 心率脱偶合/漂移评估结果: 'normal' (<5%) | 'moderate_drift' (5-8%) | 'severe_drift' (>8%) | 'insufficient_data' */
+    cardiacDecouplingStatus: text("cardiac_decoupling_status").notNull().default("insufficient_data"),
+    /** 疲劳诊断: 'optimal' (适应良好) | 'overreaching' (轻微过载) | 'overtrained' (过度疲劳) | 'undertrained' (欠练) */
+    fatigueAssessment: text("fatigue_assessment").notNull().default("optimal"),
+    /** AI 调整决策: 'advance' (按部就班递增) | 'hold' (维持当前负荷) | 'deload' (强制减负周) | 'prune' (剪枝欠练) */
+    adjustmentDecision: text("adjustment_decision").notNull().default("advance"),
+    /** 教练详细点评与下周导言 (自然语言 Markdown) */
+    reviewMarkdown: text("review_markdown").notNull(),
+    createdAt: integer("created_at").notNull().default(sql`(unixepoch())`),
+  },
+  (t) => [index("idx_coach_reviews_plan").on(t.planId)],
 );

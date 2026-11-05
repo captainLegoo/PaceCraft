@@ -909,6 +909,26 @@ export function Markdown({ text }: { text: string }) {
     } else if (/^\d+\.\s/.test(t)) {
       flushPara(`p${i}`);
       list.push(t.replace(/^\d+\.\s/, ""));
+    } else if (/^(\-{3,}|\*{3,}|_{3,})$/.test(t)) {
+      flushList(`l${i}`); flushPara(`p${i}`);
+      blocks.push(<hr key={i} style={{ border: "none", borderTop: "1px solid var(--border)", margin: "14px 0", opacity: 0.8 }} />);
+    } else if (/^>\s*/.test(t)) {
+      flushList(`l${i}`); flushPara(`p${i}`);
+      const quoteLines: string[] = [];
+      let k = i;
+      while (k < lines.length && /^>\s*/.test((lines[k] ?? "").trim())) {
+        quoteLines.push((lines[k] ?? "").trim().replace(/^>\s*/, ""));
+        k++;
+      }
+      blocks.push(
+        <blockquote key={i}>
+          {quoteLines.map((ql, qIdx) => (
+            <p key={qIdx} style={{ margin: "3px 0" }}>{inline(ql)}</p>
+          ))}
+        </blockquote>
+      );
+      i = k;
+      continue;
     } else if (t === "") {
       flushList(`l${i}`); flushPara(`p${i}`);
     } else {
@@ -923,10 +943,14 @@ export function Markdown({ text }: { text: string }) {
 }
 
 function inline(text: string): ReactNode {
-  const parts = text.split(/(\*\*[^*]+\*\*|`[^`]+`)/g);
+  const parts = text.split(/(\*\*[\s\S]+?\*\*|`[^`]+`)/g);
   return parts.map((p, i) => {
-    if (p.startsWith("**") && p.endsWith("**")) return <strong key={i}>{p.slice(2, -2)}</strong>;
-    if (p.startsWith("`") && p.endsWith("`")) return <code key={i}>{p.slice(1, -1)}</code>;
+    if (p.startsWith("**") && p.endsWith("**") && p.length >= 4) {
+      return <strong key={i}>{p.slice(2, -2)}</strong>;
+    }
+    if (p.startsWith("`") && p.endsWith("`") && p.length >= 2) {
+      return <code key={i}>{p.slice(1, -1)}</code>;
+    }
     return <span key={i}>{p}</span>;
   });
 }

@@ -8,7 +8,11 @@ import { db, sqlite } from "./db/client.ts";
 import {
   aiReports, aiSessionReports, aiSettings, aiWeekReports, activities, activityDetails, dailyHealth, fitness,
   heartRate, laps, races, recovery, sleep, stress, syncLog, trainingLoad, users,
+  aiCoachProfiles, aiCoachPlans, aiCoachWorkouts, aiCoachReviews,
 } from "./db/schema.ts";
+import { computeAthleteBaseline } from "./ai/coach/baseline.ts";
+import { generateTwoWeekRollingPlan } from "./ai/coach/generator.ts";
+import { executeWeeklyReview } from "./ai/coach/reviewer.ts";
 import { SERVER_HOST, SERVER_PORT, WEB_ORIGIN } from "./config.ts";
 import { ageFromBirthday, buildSessions, hrZoneOptions, hrZones, loadSeries, monthlyVolume, paceHrScatter, sessionLaps, weeklyVolume } from "./analytics.ts";
 import {
@@ -1162,6 +1166,294 @@ const app = new Elysia()
       return { ok: true, labelId, excluded: b.excluded, reason };
     } catch (e) {
       return new Response(JSON.stringify({ error: e instanceof Error ? e.message : String(e) }), { status: 400 });
+    }
+  });
+
+function ensureCoachTables() {
+  sqlite.exec(`
+    CREATE TABLE IF NOT EXISTS ai_coach_profiles (
+      id integer PRIMARY KEY AUTOINCREMENT NOT NULL,
+      target_type text DEFAULT 'fitness' NOT NULL,
+      race_id integer,
+      target_race_date text,
+      target_distance text DEFAULT 'general' NOT NULL,
+      target_time_sec integer,
+      days_per_week integer DEFAULT 4 NOT NULL,
+      preferred_days_json text DEFAULT '[2,4,6,0]' NOT NULL,
+      long_run_day integer DEFAULT 0 NOT NULL,
+      methodology text DEFAULT 'hybrid' NOT NULL,
+      intensity_target text DEFAULT 'balanced' NOT NULL,
+      include_strength integer DEFAULT 1 NOT NULL,
+      climate_type text DEFAULT 'auto' NOT NULL,
+      has_treadmill integer DEFAULT 1 NOT NULL,
+      travel_mode_json text,
+      created_at integer DEFAULT (unixepoch()) NOT NULL,
+      updated_at integer DEFAULT (unixepoch()) NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS ai_coach_plans (
+      id integer PRIMARY KEY AUTOINCREMENT NOT NULL,
+      profile_id integer NOT NULL,
+      title text NOT NULL,
+      start_date text NOT NULL,
+      end_date text NOT NULL,
+      total_weeks integer NOT NULL,
+      current_week integer DEFAULT 1 NOT NULL,
+      status text DEFAULT 'active' NOT NULL,
+      baseline_snapshot_json text NOT NULL,
+      macro_outline_json text NOT NULL,
+      created_at integer DEFAULT (unixepoch()) NOT NULL,
+      updated_at integer DEFAULT (unixepoch()) NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS ai_coach_workouts (
+      id integer PRIMARY KEY AUTOINCREMENT NOT NULL,
+      plan_id integer NOT NULL,
+      date text NOT NULL,
+      week_index integer NOT NULL,
+      day_of_week integer NOT NULL,
+      phase text DEFAULT 'base' NOT NULL,
+      workout_type text NOT NULL,
+      title text NOT NULL,
+      description text NOT NULL,
+      distance_km real DEFAULT 0 NOT NULL,
+      duration_minutes integer DEFAULT 0 NOT NULL,
+      target_pace_min_sec integer,
+      target_pace_max_sec integer,
+      target_hr_min integer,
+      target_hr_max integer,
+      structure_json text,
+      alternative_json text,
+      actual_label_id text,
+      actual_distance_km real,
+      actual_avg_pace_sec real,
+      actual_avg_hr integer,
+      compliance_score integer,
+      status text DEFAULT 'pending' NOT NULL,
+      created_at integer DEFAULT (unixepoch()) NOT NULL,
+      updated_at integer DEFAULT (unixepoch()) NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS ai_coach_reviews (
+      id integer PRIMARY KEY AUTOINCREMENT NOT NULL,
+      plan_id integer NOT NULL,
+      week_index integer NOT NULL,
+      start_date text NOT NULL,
+      end_date text NOT NULL,
+      planned_volume_km real NOT NULL,
+      actual_volume_km real NOT NULL,
+      completion_rate_pct integer NOT NULL,
+      acwr real,
+      cardiac_decoupling_status text DEFAULT 'insufficient_data' NOT NULL,
+      fatigue_assessment text DEFAULT 'optimal' NOT NULL,
+      adjustment_decision text DEFAULT 'advance' NOT NULL,
+      review_markdown text NOT NULL,
+      created_at integer DEFAULT (unixepoch()) NOT NULL
+    );
+  `);
+}
+
+app
+
+  // ---------- AI 科学教练与自适应课表 ----------
+  .get("/api/coach/profile", () => {
+    try {
+      ensureCoachTables();
+      let profile = db.select().from(aiCoachProfiles).where(eq(aiCoachProfiles.id, 1)).get();
+      if (!profile) {
+        profile = db
+          .insert(aiCoachProfiles)
+          .values({
+            id: 1,
+            targetType: "fitness",
+            targetDistance: "general",
+            daysPerWeek: 4,
+            preferredDaysJson: JSON.stringify([2, 4, 6, 0]),
+            longRunDay: 0,
+            methodology: "hybrid",
+            intensityTarget: "balanced",
+            includeStrength: 1,
+            climateType: "auto",
+            hasTreadmill: 1,
+          })
+          .returning()
+          .get();
+      }
+      return profile;
+    } catch (e: any) {
+      return new Response(JSON.stringify({ error: e.message || String(e) }), {
+        status: 500,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+  })
+  .post("/api/coach/profile", async ({ body }) => {
+    try {
+      ensureCoachTables();
+      const b = (body ?? {}) as any;
+      const existing = db.select().from(aiCoachProfiles).where(eq(aiCoachProfiles.id, 1)).get();
+
+      const isRaceTarget = b.targetType === "race";
+      const dataToSave = {
+        targetType: isRaceTarget ? "race" : "fitness",
+        raceId: isRaceTarget && b.raceId ? Number(b.raceId) : null,
+        targetRaceDate: isRaceTarget && b.targetRaceDate ? b.targetRaceDate : null,
+        targetDistance: b.targetDistance || (isRaceTarget ? "marathon" : "general"),
+        targetTimeSec: b.targetTimeSec ? Number(b.targetTimeSec) : null,
+        daysPerWeek: Math.max(3, Math.min(6, Number(b.daysPerWeek || 4))),
+        preferredDaysJson: typeof b.preferredDaysJson === "string" ? b.preferredDaysJson : JSON.stringify(b.preferredDays || [2, 4, 6, 0]),
+        longRunDay: b.longRunDay != null ? Number(b.longRunDay) : 0,
+        methodology: b.methodology || "hybrid",
+        intensityTarget: b.intensityTarget || "balanced",
+        includeStrength: b.includeStrength !== undefined && b.includeStrength !== null ? (b.includeStrength ? 1 : 0) : 1,
+        climateType: b.climateType || "auto",
+        hasTreadmill: b.hasTreadmill ? 1 : 0,
+        travelModeJson: b.travelModeJson ? (typeof b.travelModeJson === "string" ? b.travelModeJson : JSON.stringify(b.travelModeJson)) : null,
+        updatedAt: Math.floor(Date.now() / 1000),
+      };
+
+      if (existing) {
+        db.update(aiCoachProfiles).set(dataToSave).where(eq(aiCoachProfiles.id, 1)).run();
+      } else {
+        db.insert(aiCoachProfiles).values({ id: 1, ...dataToSave }).run();
+      }
+      return { ok: true, profile: db.select().from(aiCoachProfiles).where(eq(aiCoachProfiles.id, 1)).get() };
+    } catch (e: any) {
+      return new Response(JSON.stringify({ error: e.message || String(e) }), {
+        status: 500,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+  })
+  .get("/api/coach/baseline", () => {
+    try {
+      ensureCoachTables();
+      return computeAthleteBaseline();
+    } catch (e: any) {
+      return new Response(JSON.stringify({ error: e.message || String(e) }), {
+        status: 500,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+  })
+  .get("/api/coach/plan", () => {
+    try {
+      ensureCoachTables();
+      const profile = db.select().from(aiCoachProfiles).where(eq(aiCoachProfiles.id, 1)).get();
+      if (!profile) return { plan: null, workouts: [], reviews: [] };
+
+      const plan = db
+        .select()
+        .from(aiCoachPlans)
+        .where(and(eq(aiCoachPlans.profileId, profile.id), eq(aiCoachPlans.status, "active")))
+        .orderBy(desc(aiCoachPlans.id))
+        .get();
+
+      if (!plan) return { plan: null, workouts: [], reviews: [] };
+
+      const workouts = db
+        .select()
+        .from(aiCoachWorkouts)
+        .where(eq(aiCoachWorkouts.planId, plan.id))
+        .orderBy(asc(aiCoachWorkouts.date))
+        .all();
+
+      const reviews = db
+        .select()
+        .from(aiCoachReviews)
+        .where(eq(aiCoachReviews.planId, plan.id))
+        .orderBy(desc(aiCoachReviews.weekIndex))
+        .all();
+
+      return { plan, workouts, reviews };
+    } catch (e: any) {
+      return new Response(JSON.stringify({ error: e.message || String(e) }), {
+        status: 500,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+  })
+  .post("/api/coach/plan/generate", async ({ body }) => {
+    try {
+      ensureCoachTables();
+      const b = (body ?? {}) as any;
+      let profile = db.select().from(aiCoachProfiles).where(eq(aiCoachProfiles.id, 1)).get();
+      if (!profile) {
+        profile = db.insert(aiCoachProfiles).values({ id: 1 }).returning().get();
+      }
+      const res = await generateTwoWeekRollingPlan(profile.id, b.startDate);
+      return { ok: true, ...res };
+    } catch (e: any) {
+      return new Response(JSON.stringify({ error: e.message || String(e) }), {
+        status: 500,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+  })
+  .post("/api/coach/plan/review", async ({ body }) => {
+    try {
+      ensureCoachTables();
+      const b = (body ?? {}) as any;
+      const planId = Number(b.planId);
+      const weekIndex = Number(b.weekIndex);
+      if (!planId || !weekIndex) {
+        return new Response(JSON.stringify({ error: "缺少 planId 或 weekIndex" }), {
+          status: 400,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+      const result = await executeWeeklyReview(planId, weekIndex);
+      return { ok: true, ...result };
+    } catch (e: any) {
+      return new Response(JSON.stringify({ error: e.message || String(e) }), {
+        status: 500,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+  })
+  .post("/api/coach/travel", async ({ body }) => {
+    try {
+      ensureCoachTables();
+      const b = (body ?? {}) as any;
+      const city = b.city ? String(b.city).trim() : null;
+      const untilDate = b.untilDate ? String(b.untilDate).trim() : null;
+      const travelJson = city && untilDate ? JSON.stringify({ city, untilDate }) : null;
+
+      db.update(aiCoachProfiles)
+        .set({ travelModeJson: travelJson, updatedAt: Math.floor(Date.now() / 1000) })
+        .where(eq(aiCoachProfiles.id, 1))
+        .run();
+
+      return { ok: true, travelMode: travelJson ? JSON.parse(travelJson) : null };
+    } catch (e: any) {
+      return new Response(JSON.stringify({ error: e.message || String(e) }), {
+        status: 500,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+  })
+  .post("/api/coach/plan/end", async ({ body }) => {
+    try {
+      ensureCoachTables();
+      const b = (body ?? {}) as any;
+      const profile = db.select().from(aiCoachProfiles).where(eq(aiCoachProfiles.id, 1)).get();
+      if (!profile) return { ok: true, message: "无活跃计划" };
+
+      const planId = b.planId ? Number(b.planId) : null;
+      if (planId) {
+        db.update(aiCoachPlans)
+          .set({ status: "archived", updatedAt: Math.floor(Date.now() / 1000) })
+          .where(and(eq(aiCoachPlans.id, planId), eq(aiCoachPlans.profileId, profile.id)))
+          .run();
+      } else {
+        db.update(aiCoachPlans)
+          .set({ status: "archived", updatedAt: Math.floor(Date.now() / 1000) })
+          .where(and(eq(aiCoachPlans.profileId, profile.id), eq(aiCoachPlans.status, "active")))
+          .run();
+      }
+      return { ok: true, message: "训练计划已归档结束" };
+    } catch (e: any) {
+      return new Response(JSON.stringify({ error: e.message || String(e) }), {
+        status: 500,
+        headers: { "Content-Type": "application/json" },
+      });
     }
   })
 

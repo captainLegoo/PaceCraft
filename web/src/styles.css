@@ -2090,3 +2090,239 @@ tbody tr.expanded-detail-row:hover > td {
     padding: 2px 8px !important;
   }
 }
+
+/* ============================================================
+   AI 科学教练与课表响应式自适应布局系统
+   ============================================================ */
+
+/* 1. 顶部生理指标 Hero 网格自适应 */
+.coach-hero-grid {
+  position: relative;
+  z-index: 60;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+/* 顶部指标卡释义浮层 (Hero Stat Popover - 桌面端) */
+.coach-hero-popover {
+  position: absolute;
+  top: calc(100% + 6px);
+  width: 295px;
+  max-width: calc(100vw - 32px);
+  background: var(--surface);
+  border: 1px solid var(--accent-border, var(--border));
+  border-radius: var(--radius-lg, 10px);
+  padding: 14px 16px;
+  box-shadow: 0 14px 36px rgba(0, 0, 0, 0.4), 0 4px 12px rgba(0, 0, 0, 0.2);
+  z-index: 1001;
+  text-align: left;
+  cursor: default;
+  user-select: text;
+}
+
+/* 桌面端防止鼠标从卡片滑向浮层时穿过 6px 空隙导致 mouseleave 意外关闭 */
+.coach-hero-popover::before {
+  content: "";
+  position: absolute;
+  top: -10px;
+  left: 0;
+  right: 0;
+  height: 10px;
+}
+
+/* 移动端手机端原生底部抽屉通用把手与按钮（通过 createPortal 挂在 document.body） */
+.coach-sheet-handle {
+  width: 38px;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--border-strong, #888);
+  opacity: 0.6;
+  margin: 0 auto 14px auto;
+}
+
+.coach-sheet-close-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+  font-size: 13px;
+  cursor: pointer;
+  line-height: 1;
+  padding: 0;
+  transition: all 0.15s;
+}
+
+.coach-sheet-close-btn:hover {
+  background: var(--surface-3);
+  color: var(--text);
+}
+
+@media (min-width: 641px) and (max-width: 1100px) {
+  .coach-hero-grid {
+    grid-template-columns: repeat(3, 1fr);
+    gap: 10px;
+    margin-bottom: 12px;
+  }
+}
+
+@media (max-width: 640px) {
+  .coach-hero-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 8px;
+    margin-bottom: 12px;
+  }
+  .coach-hero-grid .stat-card {
+    padding: 10px 12px !important;
+  }
+  .coach-hero-grid .stat .value {
+    font-size: 19px !important;
+  }
+  .coach-hero-grid .stat .label {
+    font-size: 11px !important;
+  }
+  .coach-hero-grid .stat .hint {
+    font-size: 10px !important;
+  }
+}
+
+@keyframes coachSheetSlideUp {
+  from {
+    transform: translateY(100%);
+    opacity: 0.6;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+/* 2. Page Head 移动端自适应 */
+@media (max-width: 640px) {
+  .coach-page-head {
+    flex-direction: column !important;
+    align-items: flex-start !important;
+    gap: 10px !important;
+  }
+  .coach-page-head h2 {
+    font-size: 19px !important;
+  }
+  .coach-page-head .sub {
+    font-size: 11px !important;
+    line-height: 1.4 !important;
+  }
+  .coach-head-actions {
+    width: 100% !important;
+    justify-content: flex-start !important;
+  }
+}
+
+/* 3. 课表滑动轨道 (Schedule Track) */
+.coach-schedule-track {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(160px, 1fr));
+  gap: 10px;
+  overflow-x: auto;
+  padding-bottom: 8px;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+}
+
+/* 桌面大屏：7列平铺舒展 */
+@media (min-width: 1400px) {
+  .coach-schedule-track {
+    grid-template-columns: repeat(7, 1fr);
+    gap: 12px;
+  }
+}
+
+/* 中等屏幕（iPad / 小笔记本 / 侧边栏开启 769px ~ 1200px）：保底 185px 宽度，避免文字压扁 */
+@media (min-width: 769px) and (max-width: 1200px) {
+  .coach-schedule-track {
+    grid-template-columns: repeat(7, minmax(185px, 1fr));
+    scroll-snap-type: x proximity;
+    gap: 10px;
+  }
+  .coach-workout-card {
+    scroll-snap-align: start;
+  }
+}
+
+/* 移动端手机端（<= 768px）：触控吸附轮播 (Mobile Snap Carousel) */
+@media (max-width: 768px) {
+  .coach-schedule-track {
+    display: flex !important;
+    overflow-x: auto !important;
+    scroll-snap-type: x mandatory !important;
+    gap: 12px !important;
+    padding: 4px 16px 16px 16px !important;
+    margin: 0 -16px !important;
+    scrollbar-width: none;
+  }
+  .coach-schedule-track::-webkit-scrollbar {
+    display: none;
+  }
+  .coach-workout-card {
+    flex: 0 0 calc(85vw - 20px) !important;
+    max-width: 320px !important;
+    min-width: 260px !important;
+    scroll-snap-align: center !important;
+    border-radius: 12px !important;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.06) !important;
+  }
+}
+
+/* 4. 移动端专属：星期快速跳转条 (Mobile Week Strip) */
+.coach-mobile-week-strip {
+  display: none;
+}
+
+@media (max-width: 768px) {
+  .coach-mobile-week-strip {
+    display: flex;
+    justify-content: space-between;
+    gap: 4px;
+    margin-bottom: 12px;
+    background: var(--surface-2);
+    padding: 4px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+  }
+  .coach-mobile-day-btn {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 6px 2px;
+    border-radius: 6px;
+    font-size: 11px;
+    cursor: pointer;
+    background: transparent;
+    border: 1px solid transparent;
+    color: var(--text-dim);
+    transition: all 0.15s ease;
+  }
+  .coach-mobile-day-btn.active {
+    background: var(--accent);
+    color: #fff;
+    font-weight: 700;
+    box-shadow: 0 2px 8px var(--accent-dim);
+  }
+  .coach-mobile-day-btn.today:not(.active) {
+    border-color: var(--accent);
+    color: var(--accent);
+    font-weight: 700;
+  }
+  .coach-mobile-day-btn .day-dot {
+    width: 4px;
+    height: 4px;
+    border-radius: 50%;
+    margin-top: 3px;
+  }
+}
