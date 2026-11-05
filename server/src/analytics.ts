@@ -751,7 +751,24 @@ function makeSession(
     if (g > maxGapSec) maxGapSec = g;
   }
 
-  let sets = detectSets(effectiveDetails);
+  // 1. 优先检查单个 activity 内部是否记录了结构化分圈间歇跑（如单条记录内包含 1km×3组 快慢交替）
+  let sets: SessionSet[] = [];
+  for (const a of effectiveActs) {
+    const actLaps = lapsByLabel.get(a.labelId) ?? [];
+    if (actLaps.length >= 3) {
+      const actSets = detectSetsFromLaps(actLaps);
+      if (actSets.length > 0) {
+        sets.push(...actSets);
+      }
+    }
+  }
+
+  // 2. 若单个 activity 内未识别到间歇组，再检查是否为跨 activity 拆分的等长间歇跑（如每组按一次计圈并结束活动）
+  if (sets.length === 0) {
+    sets = detectSets(effectiveDetails);
+  }
+
+  // 3. 若仍未识别出，且总分圈数 >= 3，尝试在全场分圈中检测
   if (sets.length === 0 && sessionLaps.length >= 3) {
     sets = detectSetsFromLaps(sessionLaps);
   }

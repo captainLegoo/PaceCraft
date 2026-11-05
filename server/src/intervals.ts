@@ -208,6 +208,10 @@ export function detectSetsFromLaps(rawLaps: any[]): SessionSet[] {
       }
     }
 
+    // 生理学核心判据：间歇跑各工作组之间必须存在休息/恢复（慢跑恢复圈或停顿时间），
+    // 若各分圈之间连续无间隔，属于连续稳态跑（如 1km 自动计圈的常规慢跑），坚决不误判为间歇
+    if (rests.length === 0) continue;
+
     let hrS = 0, hrW = 0;
     for (const x of sortedGroup) {
       if (x.avgHr) { hrS += x.avgHr * x.timeSec; hrW += x.timeSec; }
