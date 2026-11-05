@@ -33,10 +33,12 @@ export default function UpdateModal({
   open,
   onClose,
   currentAppVersion,
+  onReloadPage,
 }: {
   open: boolean;
   onClose: () => void;
   currentAppVersion: string;
+  onReloadPage?: () => void;
 }) {
   const [checking, setChecking] = useState(false);
   const [updateObj, setUpdateObj] = useState<Update | null>(null);
@@ -618,6 +620,20 @@ export default function UpdateModal({
 
           {status === "available" && (
             <>
+              {onReloadPage && (
+                <button
+                  type="button"
+                  className="btn btn-subtle"
+                  onClick={() => {
+                    onClose();
+                    onReloadPage();
+                  }}
+                  style={{ padding: "5px 12px", fontSize: 12 }}
+                  title="跳过本次更新并直接刷新当前页面"
+                >
+                  仅刷新页面
+                </button>
+              )}
               <button
                 type="button"
                 className="btn btn-subtle"
