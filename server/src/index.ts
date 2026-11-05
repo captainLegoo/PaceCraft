@@ -1682,7 +1682,7 @@ const app = new Elysia()
       apiKey,
       model: String(b.model),
       temperature: Number(b.temperature ?? 0.7),
-      maxTokens: Number(b.maxTokens ?? 2000),
+      maxTokens: Number(b.maxTokens ?? 64000),
     });
     return { ok: true };
   })

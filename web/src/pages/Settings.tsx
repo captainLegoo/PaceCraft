@@ -365,7 +365,7 @@ export default function Settings({
 
   const [cfg, setCfg] = useState<any>({
     provider: "openai", baseUrl: "https://api.deepseek.com/v1", apiKey: "",
-    model: "", temperature: 0.7, maxTokens: 8000,
+    model: "", temperature: 0.7, maxTokens: 64000,
   });
   // 记录各平台草稿配置（多平台独立记忆）
   const [providerDrafts, setProviderDrafts] = useState<Record<string, { apiKey: string; model: string; baseUrl?: string; provider?: string }>>(() => {
@@ -1227,14 +1227,14 @@ export default function Settings({
                         type="number"
                         step="1000"
                         min="1000"
-                        max="64000"
-                        value={cfg.maxTokens ?? 8000}
-                        onChange={(e) => setCfg({ ...cfg, maxTokens: parseInt(e.target.value, 10) || 8000 })}
+                        max="128000"
+                        value={cfg.maxTokens ?? 64000}
+                        onChange={(e) => setCfg({ ...cfg, maxTokens: parseInt(e.target.value, 10) || 64000 })}
                       />
                     </label>
                   </div>
                   <div className="hint">
-                    提示：像 DeepSeek-R1、OpenAI o1/o3-mini 等推理模型，内置思考过程与正文共用 Token 预算，建议保留 ≥8000。
+                    提示：默认 64000。像 DeepSeek-R1、OpenAI o1/o3-mini 等推理模型，其深度思考（Thinking）与最终正文共用 Token 预算；针对官方硬性限制较低的平台（如 DeepSeek 官方 8K），系统会在调用时自动做安全封顶。
                   </div>
                 </div>
               )}

@@ -105,8 +105,8 @@ export type LapInput = {
 /**
  * 在一次训练内部找「连续若干段」中累计距离达标的最快窗口。
  *
- * 必须连续：间歇训练里 1km×10 组各自很快，但拼起来不是一次有效成绩，
- * 所以只允许在同一次训练的连续分圈内滑动。
+ * 必须连续且稳态：间歇训练里 1km×10 组各自很快，但拼起来不是一次有效成绩，
+ * 所以只允许在同一次训练的连续分圈内滑动，且窗口内部绝不能跨越慢跑慢走的休息恢复圈。
  *
  * 比较窗口快慢时一律用 gapPaceSec（平路等效配速）而不是实跑配速：
  * 否则「最快 10 公里」很可能选中的是山路里一段下坡，
@@ -126,21 +126,38 @@ export function bestContinuousEffort(laps: LapInput[], targetKm: number): Effort
       hrW += laps[j].timeSec;
       if (dist < targetKm) continue;
 
-      const candidate: Effort = {
-        date: laps[i].date,
-        startTs: laps[i].startTs,
-        targetKm,
-        actualKm: dist,
-        seconds: time,
-        paceSec: gapAcc / dist,
-        rawPaceSec: time / dist,
-        climbRate: rateAcc / dist,
-        avgHr: hrW > 0 ? hrAcc / hrW : 0,
-        fromLap: laps[i].lapIndex,
-        toLap: laps[j].lapIndex,
-        loadThatDay: null,
-      };
-      if (!best || candidate.paceSec < best.paceSec) best = candidate;
+      // 检查窗口 [i..j] 内部是否跨越了间歇休息圈/慢摇停顿：
+      // 稳态连续跑内部各圈配速相对稳定，而间歇休息圈配速显著慢于窗口平均（慢 >= 35% 且每公里慢 60 秒以上，耗时 >= 20 秒）
+      let hasRestLap = false;
+      if (j > i) {
+        const windowPace = time / dist;
+        for (let k = i; k <= j; k++) {
+          const lapKm = laps[k].distanceM / 1000;
+          const lapPace = lapKm > 0 ? laps[k].timeSec / lapKm : 0;
+          if (lapPace > windowPace * 1.35 && (lapPace - windowPace) >= 60 && laps[k].timeSec >= 20) {
+            hasRestLap = true;
+            break;
+          }
+        }
+      }
+
+      if (!hasRestLap) {
+        const candidate: Effort = {
+          date: laps[i].date,
+          startTs: laps[i].startTs,
+          targetKm,
+          actualKm: dist,
+          seconds: time,
+          paceSec: gapAcc / dist,
+          rawPaceSec: time / dist,
+          climbRate: rateAcc / dist,
+          avgHr: hrW > 0 ? hrAcc / hrW : 0,
+          fromLap: laps[i].lapIndex,
+          toLap: laps[j].lapIndex,
+          loadThatDay: null,
+        };
+        if (!best || candidate.paceSec < best.paceSec) best = candidate;
+      }
       break;
     }
   }

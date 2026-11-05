@@ -1,7 +1,7 @@
 import { asc, desc, eq, ne } from "drizzle-orm";
 import { db } from "../db/client.ts";
 import { activities, activityDetails, dailyHealth, fitness, laps, trainingLoad, users } from "../db/schema.ts";
-import { round } from "../analytics.ts";
+import { round, detectSetsFromLaps } from "../analytics.ts";
 import {
   climbAbility,
   classifyTerrain,
@@ -120,9 +120,25 @@ export function buildReport() {
     l.gapPaceSec = flatEquivalentPace(l.timeSec / (l.distanceM / 1000), l.climbRate, climbModel);
   }
 
-  // ---- 阈值配速：只在有氧区间做回归，且用平路等效配速 ----
+  // ---- 按活动分桶分圈并标定间歇跑活动 ----
+  const byAct = new Map<string, typeof clean>();
+  for (const l of clean) {
+    const arr = byAct.get(l.labelId) ?? [];
+    arr.push(l);
+    byAct.set(l.labelId, arr);
+  }
+
+  // 标定哪些活动是间歇跑：间歇跑分圈非稳态，心率有滞后和无氧成分
+  const intervalActLabels = new Set<string>();
+  for (const [labelId, lapsOfAct] of byAct.entries()) {
+    if (lapsOfAct.length >= 3 && detectSetsFromLaps(lapsOfAct).length > 0) {
+      intervalActLabels.add(labelId);
+    }
+  }
+
+  // ---- 阈值配速：只在有氧区间做回归，且用平路等效配速（排除间歇跑非稳态分圈） ----
   const paceHrSamples = clean
-    .filter((l) => l.distanceM > 850 && l.distanceM < 1150 && l.avgHr > 90)
+    .filter((l) => !intervalActLabels.has(l.labelId) && l.distanceM > 850 && l.distanceM < 1150 && l.avgHr > 90)
     .map((l) => ({ paceSec: l.gapPaceSec, hr: l.avgHr }));
 
   const slowestPaceSeen = clean.length
@@ -130,14 +146,6 @@ export function buildReport() {
     : 300;
 
   const threshold: Threshold = estimateThreshold(paceHrSamples, { hrMax, slowestPaceSeen });
-
-  // ---- 每个目标距离的最佳连续成绩 ----
-  const byAct = new Map<string, typeof clean>();
-  for (const l of clean) {
-    const arr = byAct.get(l.labelId) ?? [];
-    arr.push(l);
-    byAct.set(l.labelId, arr);
-  }
 
   const loadMap = new Map<string, number>();
   for (const l of db.select().from(trainingLoad).all()) loadMap.set(l.date, l.shortLoad ?? 0);

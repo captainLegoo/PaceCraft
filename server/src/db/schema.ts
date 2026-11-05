@@ -247,7 +247,7 @@ export const aiSettings = sqliteTable("ai_settings", {
   apiKey: text("api_key").notNull(),
   model: text("model").notNull(),
   temperature: real("temperature").notNull().default(0.7),
-  maxTokens: integer("max_tokens").notNull().default(8000),
+  maxTokens: integer("max_tokens").notNull().default(64000),
   updatedAt: integer("updated_at").notNull().default(sql`(unixepoch())`),
 });
 

@@ -24,13 +24,15 @@ export type AiConfig = {
 export function getAiConfig(): AiConfig | null {
   const row = db.select().from(aiSettings).where(eq(aiSettings.id, 1)).get();
   if (!row) return null;
+  // 若数据库中仍保留历史旧默认值（2000 或 8000），自动平滑升级为 64000
+  const maxTokens = (row.maxTokens === 2000 || row.maxTokens === 8000) ? 64000 : row.maxTokens;
   return {
     provider: row.provider as AiConfig["provider"],
     baseUrl: row.baseUrl,
     apiKey: row.apiKey,
     model: row.model,
     temperature: row.temperature,
-    maxTokens: row.maxTokens,
+    maxTokens,
   };
 }
 
@@ -81,7 +83,7 @@ function assertNotTruncated(
     throw new AiError(
       `模型输出被 max_tokens 截断（已用满 ${total}/${limit}，${split}）。` +
         `推理模型的"思考"和"正文"共用同一个预算，所以数值要比普通模型大得多 —— ` +
-        `请到设置页把「最大输出 token」调大到 ${Math.max(limit * 4, 8000)} 以上后重试。` +
+        `请到设置页把「最大输出 token」调大到 ${Math.max(limit * 2, 64000)} 后重试。` +
         (content ? `本次已拿到 ${content.length} 字，但内容不完整，已丢弃。` : "本次一个字正文都没写出来。"),
     );
   }
@@ -94,6 +96,28 @@ function assertNotTruncated(
   }
 }
 
+/**
+ * 针对官方有明确硬性上限的平台，自动做一层安全封顶，避免发送 64000 导致 API 返回 400 校验错误：
+ * - DeepSeek 官方 (api.deepseek.com): max_tokens <= 8192
+ * - OpenAI 官方非 o 系列 (api.openai.com): max_tokens <= 16384
+ * - Anthropic Claude 3.5: max_tokens <= 8192
+ */
+export function resolveEffectiveMaxTokens(cfg: AiConfig): number {
+  let limit = cfg.maxTokens || 64000;
+  const b = (cfg.baseUrl || "").toLowerCase();
+  const m = (cfg.model || "").toLowerCase();
+
+  if (b.includes("api.deepseek.com")) {
+    limit = Math.min(limit, 8192);
+  } else if (b.includes("api.openai.com") && !/^(o1|o3|o4)(-|$)/i.test(m)) {
+    limit = Math.min(limit, 16384);
+  } else if (cfg.provider === "anthropic" && m.includes("claude-3-5")) {
+    limit = Math.min(limit, 8192);
+  }
+
+  return limit;
+}
+
 /** 统一返回模型输出文本；两种协议都走这里。 */
 export async function callModel(cfg: AiConfig, system: string, user: string): Promise<string> {
   if (cfg.provider === "anthropic") return callAnthropic(cfg, system, user);
@@ -103,6 +127,7 @@ export async function callModel(cfg: AiConfig, system: string, user: string): Pr
 async function callOpenAiCompatible(cfg: AiConfig, system: string, user: string): Promise<string> {
   const url = `${cfg.baseUrl.replace(/\/+$/, "")}/chat/completions`;
   const isOpenAiReasoning = /^(o1|o3|o4)(-|$)/i.test(cfg.model);
+  const effectiveMaxTokens = resolveEffectiveMaxTokens(cfg);
   const payload: any = {
     model: cfg.model,
     messages: [
@@ -111,10 +136,10 @@ async function callOpenAiCompatible(cfg: AiConfig, system: string, user: string)
     ],
   };
   if (isOpenAiReasoning) {
-    payload.max_completion_tokens = cfg.maxTokens;
+    payload.max_completion_tokens = effectiveMaxTokens;
   } else {
     payload.temperature = cfg.temperature;
-    payload.max_tokens = cfg.maxTokens;
+    payload.max_tokens = effectiveMaxTokens;
   }
 
   const res = await fetch(url, {
@@ -130,13 +155,14 @@ async function callOpenAiCompatible(cfg: AiConfig, system: string, user: string)
   const content = typeof body?.choices?.[0]?.message?.content === "string"
     ? body.choices[0].message.content
     : "";
-  assertNotTruncated(content, body?.choices?.[0]?.finish_reason, body?.usage, cfg.maxTokens);
+  assertNotTruncated(content, body?.choices?.[0]?.finish_reason, body?.usage, effectiveMaxTokens);
   return content;
 }
 
 async function callAnthropic(cfg: AiConfig, system: string, user: string): Promise<string> {
   const base = cfg.baseUrl.replace(/\/+$/, "");
   const url = base.endsWith("/v1/messages") ? base : `${base}/v1/messages`;
+  const effectiveMaxTokens = resolveEffectiveMaxTokens(cfg);
   const res = await fetch(url, {
     method: "POST",
     headers: {
@@ -146,7 +172,7 @@ async function callAnthropic(cfg: AiConfig, system: string, user: string): Promi
     },
     body: JSON.stringify({
       model: cfg.model,
-      max_tokens: cfg.maxTokens,
+      max_tokens: effectiveMaxTokens,
       temperature: cfg.temperature,
       system,
       messages: [{ role: "user", content: user }],
@@ -162,7 +188,7 @@ async function callAnthropic(cfg: AiConfig, system: string, user: string): Promi
     .map((c: any) => c.text)
     .join("\n");
   // Anthropic 的 stop_reason 用 "max_tokens" 表示截断，语义同上。
-  assertNotTruncated(content, body?.stop_reason, body?.usage, cfg.maxTokens);
+  assertNotTruncated(content, body?.stop_reason, body?.usage, effectiveMaxTokens);
   return content;
 }
 
@@ -438,6 +464,12 @@ export const SESSION_SYSTEM_PROMPT = `你是一位资深跑步教练，专精马
 
 你的任务：把这一天（这一场）的所有记录当作**一个整体**来解读，而不是逐条点评。
 
+⚠ 多条记录的结构归属（极其重要，切勿混淆）：
+  当本场包含多条记录时（如常见的「热身记录 + 间歇主课记录 + 冷身放松记录」）：
+  - 每条记录具有独立的时间、里程与训练目的。**各记录内部的分圈严格归属于该记录本身，绝不可跨记录拼凑组次**！
+  - 严禁将后续独立记录（如第 3 条「放松跑」）的分圈误算作上一条记录（如第 2 条「间歇跑」）的工作组次！
+  - 分析间歇跑时，务必在对应的间歇记录内部核对快跑工作圈与组间休息圈，切勿漏掉第一组或将放松跑当作最后一组。
+
 ⚠ 分析范围（最重要，先读这条）：
   本次分析的对象**只有这一天这一场**。系统不会给你其它日期的训练数据，
   这是刻意的 —— 场次复盘要回答「这场训练本身说明了什么」，
@@ -708,20 +740,51 @@ export function buildSessionUserPrompt(ctx: SessionCtx): string {
   // 而实际最后几公里是全程最快的，从没掉过速）。
   // 段数实测最多几十段，全量带过去不会撑爆上下文，所以不截断也不采样。
   if (lapRows.length > 0) {
-    parts.push(`\n## 逐段明细（共 ${lapRows.length} 段）`);
-    parts.push(`| 段 | 累计km | 用时 | 配速/km | 平均心率 | 峰值心率 | 步频 | 爬升 | 下降 | 记录 |`);
-    parts.push(`|---|---|---|---|---|---|---|---|---|---|`);
-    let cumM = 0;
-    lapRows.forEach((l, i) => {
-      cumM += l.distanceM ?? 0;
-      // 单条记录有多段时标出记录序号，否则多段训练里分不清组归属
-      const actIdx = acts.findIndex((a) => a.labelId === l.labelId) + 1;
-      parts.push(
-        `| ${i + 1} | ${(cumM / 1000).toFixed(2)} | ${fmtDur(l.timeSec)} | ${fmtPace(l.avgPaceSec)} | ${l.avgHr || "—"} | ${l.maxHr || "—"} | ${l.avgCadence || "—"} | ${Math.round(l.elevGain ?? 0)} | ${Math.round(l.totalDescent ?? 0)} | ${actIdx > 0 ? `#${actIdx}` : "—"} |`,
-      );
-    });
-    parts.push("\n> 上表是逐段原始值。判断「哪一段掉速/加速」「掉速时心率升了还是没升」必须用它，");
-    parts.push("> 不要用全场平均配速或平均心率代替——均值会把这些现象完全抹平。");
+    if (acts.length > 1) {
+      parts.push(`\n## 逐条记录的分圈明细（共 ${acts.length} 条记录，${lapRows.length} 段）`);
+      parts.push(`> ⚠ **重要提示**：本场由 ${acts.length} 条独立记录组成，各记录间有停顿/间歇。**每条记录的分圈只属于该记录自身，绝不可跨记录归并组次**（例如：切勿把后续独立记录如「记录 #3」的分圈误当作上一条记录「记录 #2」的间歇组次）！\n`);
+
+      acts.forEach((a, i) => {
+        const d = detailById.get(a.labelId);
+        const t = a.startTs ? new Date(a.startTs * 1000).toTimeString().slice(0, 5) : "—";
+        const aLaps = lapRows.filter((l) => l.labelId === a.labelId);
+        const focusDesc = d?.trainingFocus ? ` · 训练重点: ${d.trainingFocus}` : "";
+        parts.push(`### 记录 #${i + 1}（${t} 开始 · ${a.distanceKm ?? "—"} km · 用时 ${fmtDur(a.durationSec)} · 平均配速 ${fmtPace(a.avgPaceSec)}${focusDesc}）`);
+        if (aLaps.length === 0) {
+          parts.push(`- 无独立分圈数据\n`);
+          return;
+        }
+        parts.push(`| 圈 | 距离 | 用时 | 配速/km | 平均心率 | 峰值心率 | 步频 | 爬升 | 下降 | 阶段属性 |`);
+        parts.push(`|---|---|---|---|---|---|---|---|---|---|`);
+        aLaps.forEach((l, lapIdx) => {
+          // 判定是快跑工作段、组间休息段还是收尾停表：
+          const isTail = lapIdx === aLaps.length - 1 && (l.distanceM ?? 0) < 100 && (l.timeSec ?? 0) < 30;
+          const isRest = !isTail && (
+            (l.avgPaceSec && l.avgPaceSec > 480 && (l.distanceM ?? 0) < 300 && (l.timeSec ?? 0) >= 30) ||
+            (l.avgPaceSec && a.avgPaceSec && l.avgPaceSec > a.avgPaceSec * 1.4 && (l.distanceM ?? 0) < 400)
+          );
+          const typeLabel = isTail ? "停表/收尾" : isRest ? "组间休息/恢复" : "快跑/行进";
+          parts.push(
+            `| 第 ${lapIdx + 1} 圈 | ${(l.distanceM / 1000).toFixed(2)}km | ${fmtDur(l.timeSec)} | ${fmtPace(l.avgPaceSec)} | ${l.avgHr || "—"} | ${l.maxHr || "—"} | ${l.avgCadence || "—"} | ${Math.round(l.elevGain ?? 0)} | ${Math.round(l.totalDescent ?? 0)} | ${typeLabel} |`,
+          );
+        });
+        parts.push("");
+      });
+      parts.push("> ⚠ 判断各段心率与配速表现时，请严格按上述记录分段查看，不要混淆记录之间的边界。\n");
+    } else {
+      parts.push(`\n## 逐段明细（共 ${lapRows.length} 段）`);
+      parts.push(`| 段 | 累计km | 用时 | 配速/km | 平均心率 | 峰值心率 | 步频 | 爬升 | 下降 |`);
+      parts.push(`|---|---|---|---|---|---|---|---|---|`);
+      let cumM = 0;
+      lapRows.forEach((l, i) => {
+        cumM += l.distanceM ?? 0;
+        parts.push(
+          `| ${i + 1} | ${(cumM / 1000).toFixed(2)} | ${fmtDur(l.timeSec)} | ${fmtPace(l.avgPaceSec)} | ${l.avgHr || "—"} | ${l.maxHr || "—"} | ${l.avgCadence || "—"} | ${Math.round(l.elevGain ?? 0)} | ${Math.round(l.totalDescent ?? 0)} |`,
+        );
+      });
+      parts.push("\n> 上表是逐段原始值。判断「哪一段掉速/加速」「掉速时心率升了还是没升」必须用它，");
+      parts.push("> 不要用全场平均配速或平均心率代替——均值会把这些现象完全抹平。");
+    }
     // 起伏场最容易误判的就是「某段特别慢」。爬升列就在表里，必须先用它解释掉速。
     if (lapRows.some((l) => (l.elevGain ?? 0) >= 20)) {
       parts.push(

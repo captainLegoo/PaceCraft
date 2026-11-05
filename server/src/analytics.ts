@@ -508,28 +508,19 @@ export function activityRange(from?: string, to?: string) {
   return conds.length > 0 ? and(...conds) : undefined;
 }
 
-export function round(n: number, digits: number) {
-  const f = 10 ** digits;
-  return Math.round(n * f) / f;
-}
+import {
+  type SessionSet,
+  round,
+  fmtDistLabel,
+  detectSets,
+  detectSetsFromLaps,
+  classify,
+} from "./intervals.ts";
 
 // ---------------- 训练次（session）聚合 ----------------
 
 /** 默认把间隔超过 4 小时的记录视为两次独立训练：早晚各跑一次不会被误并成一场 */
 export const DEFAULT_SESSION_GAP_SEC = 4 * 3600;
-
-export type SessionSet = {
-  /** 例如 "1km" / "800m" */
-  distanceLabel: string;
-  reps: number;
-  avgDurationSec: number;
-  avgPaceSec: number;
-  avgHr: number | null;
-  /** 组间最短休息（秒），无法推断时为 null */
-  restSec: number | null;
-  distanceTolerance: number;
-  paceTolerance: number;
-};
 
 export type SessionDecoupling = {
   pct: number;
@@ -760,8 +751,28 @@ function makeSession(
     if (g > maxGapSec) maxGapSec = g;
   }
 
-  const sets = detectSets(effectiveDetails);
-  const { classification, reason } = classify(effectiveActs, sets, distanceKm);
+  // 1. 优先检查单个 activity 内部是否记录了结构化分圈间歇跑（如单条记录内包含 1km×3组 快慢交替）
+  let sets: SessionSet[] = [];
+  for (const a of effectiveActs) {
+    const actLaps = lapsByLabel.get(a.labelId) ?? [];
+    if (actLaps.length >= 3) {
+      const actSets = detectSetsFromLaps(actLaps);
+      if (actSets.length > 0) {
+        sets.push(...actSets);
+      }
+    }
+  }
+
+  // 2. 若单个 activity 内未识别到间歇组，再检查是否为跨 activity 拆分的等长间歇跑（如每组按一次计圈并结束活动）
+  if (sets.length === 0) {
+    sets = detectSets(effectiveDetails);
+  }
+
+  // 3. 若仍未识别出，且总分圈数 >= 3，尝试在全场分圈中检测
+  if (sets.length === 0 && sessionLaps.length >= 3) {
+    sets = detectSetsFromLaps(sessionLaps);
+  }
+  const { classification, reason } = classify(effectiveActs, sets, distanceKm, sessionLaps);
 
   const hasNonRun = effectiveActs.some((a) => a.sportType != null && ![100, 102, 103, 104].includes(a.sportType));
   const sportTypes = new Set(effectiveActs.map((a) => a.sportType).filter((t) => t != null));
@@ -795,97 +806,14 @@ function makeSession(
   };
 }
 
-/**
- * 识别「n 组等长重复跑」。
- * 间歇训练被手表拆成多条记录后，同组内距离和配速高度一致，
- * 而不同组（1km 组 vs 800m 组）差异明显，所以用滑动比较而不是聚类。
- */
-export function detectSets(items: { a: any; d: any }[]): SessionSet[] {
-  const sets: SessionSet[] = [];
-  let i = 0;
-
-  while (i < items.length) {
-    const first = items[i];
-    const d0 = first.a.distanceKm ?? 0;
-    if (d0 <= 0) { i++; continue; }
-
-    let j = i + 1;
-    let distTol = 0, paceTol = 0;
-
-    while (j < items.length) {
-      const d = items[j].a.distanceKm ?? 0;
-      const distDelta = Math.abs(d - d0) / d0;
-      const p0 = first.a.avgPaceSec, p1 = items[j].a.avgPaceSec;
-      const paceDelta = p0 && p1 ? Math.abs(p1 - p0) / p0 : 0;
-      // GPS 抖动会让等长记录有几米误差，12% / 20% 是实测下来不误并也不漏并的区间
-      if (distDelta > 0.12 || paceDelta > 0.2) break;
-      distTol = Math.max(distTol, distDelta);
-      paceTol = Math.max(paceTol, paceDelta);
-      j++;
-    }
-
-    const group = items.slice(i, j);
-    if (group.length >= 2) {
-      const distSum = group.reduce((s, x) => s + (x.a.distanceKm ?? 0), 0);
-      const durSum = group.reduce((s, x) => s + (x.a.durationSec ?? 0), 0);
-      let hrS = 0, hrW = 0;
-      for (const x of group) {
-        if (x.a.avgHr) { hrS += x.a.avgHr * (x.a.durationSec ?? 0); hrW += x.a.durationSec ?? 0; }
-      }
-      // 组间休息 = 下一组开始 - 上一组结束
-      const rests: number[] = [];
-      for (let k = 1; k < group.length; k++) {
-        const prevEnd = group[k - 1].a.endTs ??
-          (group[k - 1].a.startTs != null ? group[k - 1].a.startTs + (group[k - 1].a.durationSec ?? 0) : 0);
-        const g = (group[k].a.startTs ?? 0) - prevEnd;
-        if (Number.isFinite(g) && g >= 0) rests.push(g);
-      }
-      sets.push({
-        distanceLabel: fmtDistLabel(d0),
-        reps: group.length,
-        avgDurationSec: Math.round(durSum / group.length),
-        avgPaceSec: Math.round((durSum / Math.max(distSum, 0.01))),
-        avgHr: hrW > 0 ? Math.round(hrS / hrW) : null,
-        restSec: rests.length ? Math.round(rests.reduce((a, b) => a + b, 0) / rests.length) : null,
-        distanceTolerance: round(distTol, 3),
-        paceTolerance: round(paceTol, 3),
-      });
-      i = j;
-    } else {
-      i++;
-    }
-  }
-  return sets;
-}
-
-export function classify(acts: any[], sets: SessionSet[], distanceKm: number): { classification: string; reason: string } {
-  const shortOnly = acts.every((a) => (a.distanceKm ?? 0) < 2);
-  const setCount = sets.reduce((s, x) => s + x.reps, 0);
-
-  if (acts.length === 1) {
-    if (distanceKm >= 15) return { classification: "长距离跑", reason: `单次 ${distanceKm.toFixed(1)}km` };
-    if (distanceKm >= 8) return { classification: "中等距离跑", reason: `单次 ${distanceKm.toFixed(1)}km` };
-    return { classification: "单次训练", reason: `单次 ${distanceKm.toFixed(1)}km` };
-  }
-
-  if (sets.length > 0 && setCount >= acts.length * 0.6) {
-    const desc = sets.map((s) => `${s.distanceLabel}×${s.reps}组`).join(" + ");
-    return { classification: "间歇训练", reason: `识别到 ${sets.length} 组重复：${desc}` };
-  }
-
-  if (shortOnly) return { classification: "多次短距离", reason: `${acts.length} 条记录，单条均不足 2km` };
-  return { classification: "组合训练", reason: `${acts.length} 条记录，距离与配速各不相同` };
-}
-
-export function fmtDistLabel(km: number): string {
-  // GPS 抖动会让 1.00km 的组测成 0.99km，直接显示就是刺眼的「990m」。
-  // 所以 ≥0.95km 归整到 0.1km，不足 1km 归整到 50m。
-  if (km >= 0.95) {
-    const v = Math.round(km * 10) / 10;
-    return `${v.toFixed(v % 1 === 0 ? 0 : 1)}km`;
-  }
-  return `${Math.round((km * 1000) / 50) * 50}m`;
-}
+export {
+  type SessionSet,
+  round,
+  fmtDistLabel,
+  detectSets,
+  detectSetsFromLaps,
+  classify,
+} from "./intervals.ts";
 
 /** 取一场训练的全部逐圈数据，并按累计时间拼接成一条曲线 */
 export function sessionLaps(labelIds: string[]) {
