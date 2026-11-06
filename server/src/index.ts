@@ -1348,12 +1348,42 @@ app
 
       if (!plan) return { plan: null, workouts: [], reviews: [] };
 
-      const workouts = db
+      const rawWorkouts = db
         .select()
         .from(aiCoachWorkouts)
         .where(eq(aiCoachWorkouts.planId, plan.id))
-        .orderBy(asc(aiCoachWorkouts.date))
+        .orderBy(asc(aiCoachWorkouts.date), desc(aiCoachWorkouts.id))
         .all();
+
+      // 去重同日期的课表，并自动清理数据库历史遗留的重复脏数据
+      const workoutsMap = new Map<string, typeof rawWorkouts[number]>();
+      const duplicateIdsToDelete: number[] = [];
+
+      for (const w of rawWorkouts) {
+        const prev = workoutsMap.get(w.date);
+        if (!prev) {
+          workoutsMap.set(w.date, w);
+        } else {
+          const prevScore = (prev.status === "completed" || Boolean(prev.actualLabelId)) ? 100 : (prev.status === "missed" ? 50 : 10);
+          const currScore = (w.status === "completed" || Boolean(w.actualLabelId)) ? 100 : (w.status === "missed" ? 50 : 10);
+          if (currScore > prevScore) {
+            duplicateIdsToDelete.push(prev.id);
+            workoutsMap.set(w.date, w);
+          } else {
+            duplicateIdsToDelete.push(w.id);
+          }
+        }
+      }
+
+      if (duplicateIdsToDelete.length > 0) {
+        for (const dupId of duplicateIdsToDelete) {
+          try {
+            db.delete(aiCoachWorkouts).where(eq(aiCoachWorkouts.id, dupId)).run();
+          } catch {}
+        }
+      }
+
+      const workouts = Array.from(workoutsMap.values()).sort((a, b) => a.date.localeCompare(b.date));
 
       const reviews = db
         .select()

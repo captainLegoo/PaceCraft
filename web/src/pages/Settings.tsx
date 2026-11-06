@@ -401,6 +401,7 @@ export default function Settings({
   // 模拟测试数据清理状态
   const [testDataInfo, setTestDataInfo] = useState<{ count: number; items: any[] } | null>(null);
   const [cleaningTest, setCleaningTest] = useState(false);
+  const [confirmingCleanTest, setConfirmingCleanTest] = useState(false);
   const [testCleanMsg, setTestCleanMsg] = useState<string | null>(null);
 
   const loadTestDataStatus = useCallback(async () => {
@@ -411,7 +412,6 @@ export default function Settings({
   }, []);
 
   const handleCleanTestData = async () => {
-    if (!confirm("确定要清理数据库中的模拟测试记录吗？\n清理后将恢复真实主表记录，跑量和负荷将回归完全纯净。")) return;
     setCleaningTest(true);
     setTestCleanMsg(null);
     try {
@@ -423,6 +423,7 @@ export default function Settings({
       alert((e as Error).message);
     } finally {
       setCleaningTest(false);
+      setConfirmingCleanTest(false);
     }
   };
 
@@ -2276,20 +2277,46 @@ export default function Settings({
                     ))}
                   </ul>
                 </div>
-                <button
-                  className="btn sm"
-                  onClick={handleCleanTestData}
-                  disabled={cleaningTest}
-                  style={{
-                    background: "rgba(245, 158, 11, 0.2)",
-                    color: "var(--warn, #f59e0b)",
-                    borderColor: "rgba(245, 158, 11, 0.5)",
-                    fontWeight: 600,
-                    flexShrink: 0,
-                  }}
-                >
-                  {cleaningTest ? "正在清理…" : "一键清理模拟测试数据"}
-                </button>
+                {!confirmingCleanTest ? (
+                  <button
+                    className="btn sm"
+                    onClick={() => setConfirmingCleanTest(true)}
+                    disabled={cleaningTest}
+                    style={{
+                      background: "rgba(245, 158, 11, 0.2)",
+                      color: "var(--warn, #f59e0b)",
+                      borderColor: "rgba(245, 158, 11, 0.5)",
+                      fontWeight: 600,
+                      flexShrink: 0,
+                    }}
+                  >
+                    一键清理模拟测试数据
+                  </button>
+                ) : (
+                  <div style={{ display: "inline-flex", gap: 6, alignItems: "center", flexShrink: 0 }}>
+                    <span style={{ fontSize: 12, color: "var(--warn)", fontWeight: 500 }}>确定清理并恢复？</span>
+                    <button
+                      className="btn sm"
+                      onClick={handleCleanTestData}
+                      disabled={cleaningTest}
+                      style={{
+                        background: "var(--warn)",
+                        color: "#fff",
+                        borderColor: "var(--warn)",
+                        fontWeight: 600,
+                      }}
+                    >
+                      {cleaningTest ? "清理中…" : "确定"}
+                    </button>
+                    <button
+                      className="btn sm"
+                      onClick={() => setConfirmingCleanTest(false)}
+                      disabled={cleaningTest}
+                    >
+                      取消
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
           ) : (

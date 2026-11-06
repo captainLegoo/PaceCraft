@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { api, type RaceDetail, type RouteFilePreview, type Race } from "../api";
 import RouteProfileCard from "./RaceRouteProfile";
 import RaceBriefingCard, { type RaceBriefing } from "./RaceBriefing";
@@ -190,6 +191,11 @@ export default function RaceSetup({
   // 关联的那次训练（若有）
   const [labelId, setLabelId] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [pendingConfirm, setPendingConfirm] = useState<{
+    title: string;
+    message: string;
+    onConfirm: () => void;
+  } | null>(null);
 
 
   const loadBriefing = (id: number) =>
@@ -330,7 +336,7 @@ export default function RaceSetup({
    *  - edit 模式 → 修改，走 PUT /api/races/:id，明确按 id 更新
    *  - create 模式 → 新建，走 POST /api/races
    */
-  const save = async () => {
+  const save = async (options?: { allowReplaceSameDay?: boolean; allowClearRoute?: boolean }) => {
     setBusy(true);
     setErr(null);
     try {
@@ -351,13 +357,17 @@ export default function RaceSetup({
       // 同一天只能参加一场 —— 保存前先提示，别让用户白填一遍
       const targetId = formMode === "edit" ? detail?.race.id : undefined;
       const sameDay = allRaces.find((r) => r.date === date && r.id !== targetId);
-      if (sameDay) {
-        const okToReplace = confirm(
-          `${date} 已经登记过「${sameDay.name}」。\n\n` +
-          `同一天只能参加一场。\n` +
-          `点「确定」用当前设置覆盖它，点「取消」返回修改日期。`,
-        );
-        if (!okToReplace) { setBusy(false); return; }
+      if (sameDay && !options?.allowReplaceSameDay) {
+        setPendingConfirm({
+          title: "同一比赛日冲突提示",
+          message: `${date} 已经登记过「${sameDay.name}」。\n\n同一天只能参加一场。\n确定要用当前设置覆盖并替换它吗？`,
+          onConfirm: () => {
+            setPendingConfirm(null);
+            void save({ allowReplaceSameDay: true, allowClearRoute: options?.allowClearRoute });
+          },
+        });
+        setBusy(false);
+        return;
       }
 
       /*
@@ -376,13 +386,17 @@ export default function RaceSetup({
         !!detail &&
         detail.race.routeSource !== "none" &&
         gpxText.trim().length === 0;
-      if (clearingRoute) {
-        const ok = confirm(
-          `这场比赛已经有一份轨迹文件。\n\n` +
-            `选「先不填路线」会把它清掉，之后只能重新导入才能恢复。\n` +
-            `确定要清掉吗？`,
-        );
-        if (!ok) { setBusy(false); return; }
+      if (clearingRoute && !options?.allowClearRoute) {
+        setPendingConfirm({
+          title: "现有赛道路线清除提示",
+          message: "这场比赛已经有一份轨迹文件。\n\n选「先不填路线」会把它清掉，之后只能重新导入才能恢复。\n确定要清掉现有路线轨迹吗？",
+          onConfirm: () => {
+            setPendingConfirm(null);
+            void save({ allowReplaceSameDay: true, allowClearRoute: true });
+          },
+        });
+        setBusy(false);
+        return;
       }
 
       // 选了"上传/粘贴"却什么都没给：说清楚，别静默存成一条没路线的赛事
@@ -1068,6 +1082,89 @@ export default function RaceSetup({
         <RaceBriefingCard d={briefing} onChanged={() => loadBriefing(briefing.race.id)} />
       ) : (
         <div className="spin" style={{ display: "block", margin: "18px 0" }} />
+      )}
+
+      {/* 确认提示弹窗 (替换原生 confirm，完美适配 macOS / Windows) */}
+      {pendingConfirm && typeof document !== "undefined" && createPortal(
+        <div
+          style={{
+            position: "fixed",
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            background: "rgba(0, 0, 0, 0.6)",
+            backdropFilter: "blur(4px)",
+            WebkitBackdropFilter: "blur(4px)",
+            zIndex: 9999,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: 16,
+          }}
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setPendingConfirm(null);
+          }}
+        >
+          <div
+            className="card"
+            style={{
+              width: "100%",
+              maxWidth: 460,
+              background: "var(--surface)",
+              borderRadius: "var(--radius-lg, 12px)",
+              border: "1px solid var(--border)",
+              boxShadow: "0 24px 48px rgba(0, 0, 0, 0.35)",
+              overflow: "hidden",
+            }}
+          >
+            <div
+              style={{
+                padding: "16px 20px",
+                borderBottom: "1px solid var(--border)",
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                background: "var(--surface-2)",
+              }}
+            >
+              <div style={{ fontSize: 16, fontWeight: 700, color: "var(--text)" }}>
+                {pendingConfirm.title}
+              </div>
+              <button
+                className="btn sm"
+                onClick={() => setPendingConfirm(null)}
+                style={{ padding: "4px 8px" }}
+              >
+                ✕
+              </button>
+            </div>
+            <div style={{ padding: "20px", fontSize: 13.5, color: "var(--text)", lineHeight: 1.7, whiteSpace: "pre-wrap" }}>
+              {pendingConfirm.message}
+            </div>
+            <div
+              style={{
+                padding: "14px 20px",
+                borderTop: "1px solid var(--border)",
+                display: "flex",
+                justifyContent: "flex-end",
+                gap: 10,
+                background: "var(--surface-2)",
+              }}
+            >
+              <button className="btn" onClick={() => setPendingConfirm(null)}>
+                取消
+              </button>
+              <button
+                className="btn primary"
+                onClick={pendingConfirm.onConfirm}
+              >
+                确定
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
       )}
     </div>
   );

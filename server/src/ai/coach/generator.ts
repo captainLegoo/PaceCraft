@@ -770,33 +770,48 @@ ${deterministicWorkouts.map((w, idx) => {
     .where(eq(aiCoachWorkouts.planId, planId))
     .all();
 
+  // 若历史已有同日期的重复课表，优先保留已打卡或更完整的，并清理冗余记录
   const existingMap = new Map<string, typeof aiCoachWorkouts.$inferSelect>();
   for (const ew of existingWorkouts) {
-    existingMap.set(ew.date, ew);
+    const prev = existingMap.get(ew.date);
+    if (!prev) {
+      existingMap.set(ew.date, ew);
+    } else {
+      const prevScore = (prev.status === "completed" || Boolean(prev.actualLabelId)) ? 100 : (prev.status === "missed" ? 50 : 10);
+      const currScore = (ew.status === "completed" || Boolean(ew.actualLabelId)) ? 100 : (ew.status === "missed" ? 50 : 10);
+      if (currScore > prevScore || (currScore === prevScore && ew.id > prev.id)) {
+        db.delete(aiCoachWorkouts).where(eq(aiCoachWorkouts.id, prev.id)).run();
+        existingMap.set(ew.date, ew);
+      } else {
+        db.delete(aiCoachWorkouts).where(eq(aiCoachWorkouts.id, ew.id)).run();
+      }
+    }
   }
 
   // 待更新的 14 天日期集合
   const targetDateSet = new Set(finalWorkouts.map((w) => w.date));
 
   // 仅清理当前 14 天窗口内、且未完成打卡的待办课表 (pending)；
-  // 凡是历史周次或已匹配本地同步活动（COROS、Garmin、FIT/GPX上传等）的已完成课表，绝对物理锁定保留！
+  // 凡是历史周次或已匹配本地同步活动（COROS、Garmin、FIT/GPX上传等）的已完成课表，或已过日期（date < todayStr），绝对物理锁定保留！
   for (const date of targetDateSet) {
     const existing = existingMap.get(date);
     if (!existing) continue;
-    const isCompleted = existing.status === "completed" || Boolean(existing.actualLabelId);
-    if (isCompleted || (existing.date < todayStr && existing.workoutType !== "rest")) {
+    const shouldKeep = existing.status === "completed" || Boolean(existing.actualLabelId) || existing.date < todayStr;
+    if (shouldKeep) {
       // 保持不动
       continue;
     }
-    // 否则删除待重新写入
-    db.delete(aiCoachWorkouts).where(eq(aiCoachWorkouts.id, existing.id)).run();
+    // 否则删除待重新写入（删除该 planId 与该 date 的所有记录，彻底防重）
+    db.delete(aiCoachWorkouts).where(and(eq(aiCoachWorkouts.planId, planId), eq(aiCoachWorkouts.date, date))).run();
+    existingMap.delete(date);
   }
 
   // 6. 存储或更新最新的严格 14 天课表到数据库 ai_coach_workouts
   for (const w of finalWorkouts) {
     const existing = existingMap.get(w.date);
-    // 如果该日已有打卡完成记录，保留原记录，不覆盖
-    if (existing && (existing.status === "completed" || Boolean(existing.actualLabelId))) {
+    // 如果该日已有打卡完成记录，或已属于过去日期，保留原记录，绝不重复插入覆盖
+    const shouldKeep = Boolean(existing) && (existing.status === "completed" || Boolean(existing.actualLabelId) || existing.date < todayStr);
+    if (shouldKeep) {
       continue;
     }
     let actualLabelId: string | null = null;

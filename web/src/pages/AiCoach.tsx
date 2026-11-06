@@ -153,6 +153,7 @@ export default function AiCoach({
   const [showTravelModal, setShowTravelModal] = useState(false);
   const [showStrengthLibraryModal, setShowStrengthLibraryModal] = useState(false);
   const [showAdjustDaysModal, setShowAdjustDaysModal] = useState(false);
+  const [showEndPlanModal, setShowEndPlanModal] = useState(false);
   const [travelCity, setTravelCity] = useState("");
   const [travelUntil, setTravelUntil] = useState("");
 
@@ -390,18 +391,12 @@ export default function AiCoach({
     }
   };
 
-  const handleEndPlan = async () => {
+  const handleConfirmEndPlan = async () => {
     if (!plan) return;
-    const confirmed = window.confirm(
-      "确定要结束并归档当前周期的训练课表吗？\n\n" +
-      "• 当前计划将标记为已归档，历史打卡与周复盘报告将妥善保存。\n" +
-      "• 结束后您可以随时按最新的身体状态，一键开启全新的训练周期。"
-    );
-    if (!confirmed) return;
-
     try {
       setGenerating(true);
       await api.endCoachPlan(plan.id);
+      setShowEndPlanModal(false);
       setShowSettingsModal(false);
       await loadData();
     } catch (e: any) {
@@ -447,7 +442,8 @@ export default function AiCoach({
       showSettingsModal ||
       showTravelModal ||
       showAdjustDaysModal ||
-      showStrengthLibraryModal;
+      showStrengthLibraryModal ||
+      showEndPlanModal;
 
     if (isAnyModalOpen) {
       const prevOverflow = document.body.style.overflow;
@@ -456,7 +452,7 @@ export default function AiCoach({
         document.body.style.overflow = prevOverflow;
       };
     }
-  }, [showSettingsModal, showTravelModal, showAdjustDaysModal, showStrengthLibraryModal]);
+  }, [showSettingsModal, showTravelModal, showAdjustDaysModal, showStrengthLibraryModal, showEndPlanModal]);
 
   // 桌面端快捷键：按 Escape 键关闭当前激活的模态弹窗
   useEffect(() => {
@@ -466,11 +462,12 @@ export default function AiCoach({
         if (showTravelModal) setShowTravelModal(false);
         if (showAdjustDaysModal) setShowAdjustDaysModal(false);
         if (showStrengthLibraryModal) setShowStrengthLibraryModal(false);
+        if (showEndPlanModal && !generating) setShowEndPlanModal(false);
       }
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [showSettingsModal, showTravelModal, showAdjustDaysModal, showStrengthLibraryModal, generating]);
+  }, [showSettingsModal, showTravelModal, showAdjustDaysModal, showStrengthLibraryModal, showEndPlanModal, generating]);
 
   if (loading) {
     return (
@@ -484,14 +481,31 @@ export default function AiCoach({
   // 整理出差信息
   const travelMode = profile?.travelModeJson ? JSON.parse(profile.travelModeJson) : null;
 
-  // 按周次分组课表
+  // 按周次分组课表并做防御性去重（同一日期至多一张卡片，优先保留已打卡或更完整的）
+  const dedupWorkouts = (list: CoachWorkout[]) => {
+    const map = new Map<string, CoachWorkout>();
+    for (const w of list) {
+      const prev = map.get(w.date);
+      if (!prev) {
+        map.set(w.date, w);
+      } else {
+        const prevScore = (prev.status === "completed" || Boolean(prev.actualLabelId)) ? 100 : (prev.status === "missed" ? 50 : 10);
+        const currScore = (w.status === "completed" || Boolean(w.actualLabelId)) ? 100 : (w.status === "missed" ? 50 : 10);
+        if (currScore > prevScore || (currScore === prevScore && w.id > prev.id)) {
+          map.set(w.date, w);
+        }
+      }
+    }
+    return Array.from(map.values()).sort((a, b) => a.date.localeCompare(b.date));
+  };
+
   const currentWeek = plan?.currentWeek && plan.currentWeek >= 1 ? plan.currentWeek : 1;
-  let week1Workouts = workouts.filter((w) => w.weekIndex === currentWeek);
-  let week2Workouts = workouts.filter((w) => w.weekIndex === currentWeek + 1);
+  let week1Workouts = dedupWorkouts(workouts.filter((w) => w.weekIndex === currentWeek));
+  let week2Workouts = dedupWorkouts(workouts.filter((w) => w.weekIndex === currentWeek + 1));
 
   if (week1Workouts.length === 0 && workouts.length > 0) {
-    week1Workouts = workouts.slice(0, 7);
-    week2Workouts = workouts.slice(7, 14);
+    week1Workouts = dedupWorkouts(workouts.slice(0, 7));
+    week2Workouts = dedupWorkouts(workouts.slice(7, 14));
   }
 
   // 解析偏好天数
@@ -618,7 +632,7 @@ export default function AiCoach({
               </button>
               <button
                 className="btn"
-                onClick={handleEndPlan}
+                onClick={() => setShowEndPlanModal(true)}
                 disabled={generating}
                 style={{
                   fontSize: 12.5,
@@ -2289,6 +2303,122 @@ export default function AiCoach({
         </div>,
         document.body
       )}
+
+      {/* 结束并归档课表确认弹窗 Modal (跨平台稳定支持 macOS / Windows) */}
+      {showEndPlanModal && typeof document !== "undefined" && createPortal(
+        <div
+          style={{
+            position: "fixed",
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            background: "rgba(0, 0, 0, 0.6)",
+            backdropFilter: "blur(4px)",
+            WebkitBackdropFilter: "blur(4px)",
+            zIndex: 9999,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: 16,
+          }}
+          onClick={(e) => {
+            if (e.target === e.currentTarget && !generating) setShowEndPlanModal(false);
+          }}
+        >
+          <div
+            className="card"
+            style={{
+              width: "100%",
+              maxWidth: 480,
+              background: "var(--surface)",
+              borderRadius: "var(--radius-lg, 12px)",
+              border: "1px solid var(--border)",
+              boxShadow: "0 24px 48px rgba(0, 0, 0, 0.35)",
+              overflow: "hidden",
+            }}
+          >
+            {/* 弹窗头部 */}
+            <div
+              style={{
+                padding: "16px 20px",
+                borderBottom: "1px solid var(--border)",
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                background: "var(--surface-2)",
+              }}
+            >
+              <div style={{ fontSize: 16, fontWeight: 800, color: "var(--text)" }}>
+                🏁 结束并归档训练课表
+              </div>
+              <button
+                className="btn sm"
+                disabled={generating}
+                onClick={() => setShowEndPlanModal(false)}
+                style={{ padding: "4px 8px" }}
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* 弹窗主体内容 */}
+            <div style={{ padding: "20px", display: "flex", flexDirection: "column", gap: 14 }}>
+              <div style={{ fontSize: 14, color: "var(--text)", lineHeight: 1.6 }}>
+                确定要提前结束或完赛归档当前周期的训练计划吗？
+              </div>
+              <div
+                style={{
+                  background: "var(--surface-2)",
+                  padding: "12px 14px",
+                  borderRadius: 8,
+                  border: "1px solid var(--border)",
+                  fontSize: 13,
+                  color: "var(--text-dim)",
+                  lineHeight: 1.7,
+                }}
+              >
+                <div>• <strong>当前计划将标记为已归档</strong>，历史打卡明细与周复盘报告将完好保存。</div>
+                <div>• <strong>随时重新开启</strong>：结束后您可以根据最新的身体状态与比赛计划，随时一键开启全新的训练周期。</div>
+              </div>
+            </div>
+
+            {/* 弹窗底部操作条 */}
+            <div
+              style={{
+                padding: "14px 20px",
+                borderTop: "1px solid var(--border)",
+                display: "flex",
+                justifyContent: "flex-end",
+                gap: 10,
+                background: "var(--surface-2)",
+              }}
+            >
+              <button
+                className="btn"
+                disabled={generating}
+                onClick={() => setShowEndPlanModal(false)}
+              >
+                取消
+              </button>
+              <button
+                className="btn"
+                disabled={generating}
+                onClick={handleConfirmEndPlan}
+                style={{
+                  background: "var(--warn-bg)",
+                  borderColor: "var(--warn-border)",
+                  color: "var(--warn)",
+                  fontWeight: 600,
+                }}
+              >
+                {generating ? "正在归档..." : "确认结束并归档"}
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
     </>
   );
 }
@@ -2850,11 +2980,11 @@ function WorkoutCard({
     >
       <div>
         {/* 顶部星期与状态 */}
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8, gap: 4 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8, gap: 4, minWidth: 0 }}>
           <span
             style={{
-              fontSize: 13,
-              fontWeight: isToday ? 800 : 600,
+              fontSize: 12.5,
+              fontWeight: isToday ? 700 : 600,
               color: isToday ? "var(--accent)" : "var(--text)",
               whiteSpace: "nowrap",
             }}
@@ -2864,11 +2994,12 @@ function WorkoutCard({
           <span
             className="pill"
             style={{
-              fontSize: 10,
-              padding: "1px 6px",
+              fontSize: 9.5,
+              padding: "1px 5px",
               fontWeight: 700,
               whiteSpace: "nowrap",
               flexShrink: 0,
+              lineHeight: 1.4,
               ...(isRace
                 ? { background: "rgba(245, 158, 11, 0.15)", color: "#d97706", borderColor: "#f59e0b" }
                 : isToday && workout.status === "pending"
@@ -2878,7 +3009,13 @@ function WorkoutCard({
                 : badgeStyle),
             }}
           >
-            {isRace ? "🎯 比赛日" : isToday && workout.status === "pending" ? "今日待练" : isToday && workout.status === "completed" ? (workout.complianceScore ? `今日完成 ${workout.complianceScore}%` : "今日已完成") : badgeText}
+            {isRace
+              ? "🎯 比赛日"
+              : isToday && workout.status === "pending"
+              ? "今日待练"
+              : workout.status === "completed"
+              ? (workout.complianceScore ? `已完成 ${workout.complianceScore}%` : "已完成")
+              : badgeText}
           </span>
         </div>
 

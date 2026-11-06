@@ -2226,7 +2226,7 @@ tbody tr.expanded-detail-row:hover > td {
 /* 3. 课表滑动轨道 (Schedule Track) */
 .coach-schedule-track {
   display: grid;
-  grid-template-columns: repeat(7, minmax(160px, 1fr));
+  grid-template-columns: repeat(7, minmax(170px, 1fr));
   gap: 10px;
   overflow-x: auto;
   padding-bottom: 8px;
@@ -2234,10 +2234,10 @@ tbody tr.expanded-detail-row:hover > td {
   scrollbar-width: thin;
 }
 
-/* 桌面大屏：7列平铺舒展 */
+/* 桌面大屏：7列平铺舒展，保底 170px 宽防文字重叠 */
 @media (min-width: 1400px) {
   .coach-schedule-track {
-    grid-template-columns: repeat(7, 1fr);
+    grid-template-columns: repeat(7, minmax(170px, 1fr));
     gap: 12px;
   }
 }
