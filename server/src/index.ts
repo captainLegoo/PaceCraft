@@ -3,7 +3,7 @@ import { Elysia } from "elysia";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { and, asc, desc, eq, gte, inArray, lte } from "drizzle-orm";
-import { APP_VERSION } from "./version.ts";
+import { APP_VERSION, resolveAppVersion } from "./version.ts";
 import { db, sqlite } from "./db/client.ts";
 import {
   aiReports, aiSessionReports, aiSettings, aiWeekReports, activities, activityDetails, dailyHealth, fitness,
@@ -422,7 +422,7 @@ const app = new Elysia()
   })
   /** 软件自动更新与网络线路检测 */
   .get("/api/updater/check", async ({ query }) => {
-    const curVer = (query as any)?.currentVersion || APP_VERSION;
+    const curVer = (query as any)?.currentVersion || resolveAppVersion();
     const channel = (query as any)?.channel;
     const force = (query as any)?.force === "true" || (query as any)?.force === "1";
     const platform = (query as any)?.platform;
@@ -497,7 +497,7 @@ const app = new Elysia()
     const activeId = getActiveProfileId();
     const currentMeta = listProfileMetas().find((m) => m.id === activeId);
     return {
-      version: APP_VERSION,
+      version: resolveAppVersion(),
       profile: {
         id: activeId,
         name: currentMeta?.name ?? "默认跑友",
