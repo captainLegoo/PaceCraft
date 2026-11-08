@@ -3,7 +3,7 @@ import { Elysia } from "elysia";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { and, asc, desc, eq, gte, inArray, lte } from "drizzle-orm";
-import { APP_VERSION, resolveAppVersion } from "./version.ts";
+import { APP_VERSION } from "./version.ts";
 import { db, sqlite } from "./db/client.ts";
 import {
   aiReports, aiSessionReports, aiSettings, aiWeekReports, activities, activityDetails, dailyHealth, fitness,
@@ -47,7 +47,17 @@ import {
   saveConfig,
   type WorkflowConfig,
 } from "./workflow/engine.ts";
-import { analyzeActivity, analyzeSession, callModel, getAiConfig, saveAiConfig } from "./ai/provider.ts";
+import {
+  analyzeActivity,
+  analyzeSession,
+  callModel,
+  detectProviderId,
+  getAiConfig,
+  getAiProviderPreset,
+  getAllAiProviderPresets,
+  saveAiConfig,
+  saveAiProviderPreset,
+} from "./ai/provider.ts";
 import { analyzeWeek, normalizeWeekStart } from "./ai/week.ts";
 import { buildReport } from "./prediction/pipeline.ts";
 import { analyzeRacePrep, marathonPrep } from "./prediction/prep.ts";
@@ -422,7 +432,7 @@ const app = new Elysia()
   })
   /** 软件自动更新与网络线路检测 */
   .get("/api/updater/check", async ({ query }) => {
-    const curVer = (query as any)?.currentVersion || resolveAppVersion();
+    const curVer = (query as any)?.currentVersion || APP_VERSION;
     const channel = (query as any)?.channel;
     const force = (query as any)?.force === "true" || (query as any)?.force === "1";
     const platform = (query as any)?.platform;
@@ -497,7 +507,7 @@ const app = new Elysia()
     const activeId = getActiveProfileId();
     const currentMeta = listProfileMetas().find((m) => m.id === activeId);
     return {
-      version: resolveAppVersion(),
+      version: APP_VERSION,
       profile: {
         id: activeId,
         name: currentMeta?.name ?? "默认跑友",
@@ -548,9 +558,11 @@ const app = new Elysia()
     const name = (body as any)?.name;
     // 继承当前活跃档案的 AI 配置与运动类型设置
     let aiRow: any = null;
+    let aiPresetRows: any[] = [];
     let syncRow: any = null;
     try {
       aiRow = sqlite.query("SELECT * FROM ai_settings WHERE id = 1 LIMIT 1").get();
+      aiPresetRows = sqlite.query("SELECT * FROM ai_provider_presets").all() as any[];
       syncRow = sqlite.query("SELECT * FROM sync_settings WHERE id = 1 LIMIT 1").get();
     } catch {}
 
@@ -573,6 +585,35 @@ const app = new Elysia()
             max_tokens = excluded.max_tokens,
             updated_at = unixepoch()
         `).run(aiRow.provider, aiRow.base_url, aiRow.api_key, aiRow.model, aiRow.temperature, aiRow.max_tokens);
+      }
+      if (aiPresetRows.length > 0) {
+        sqlite.query(`
+          CREATE TABLE IF NOT EXISTS ai_provider_presets (
+            provider_id TEXT PRIMARY KEY,
+            provider TEXT NOT NULL DEFAULT 'openai',
+            base_url TEXT NOT NULL,
+            api_key TEXT NOT NULL,
+            model TEXT NOT NULL,
+            temperature REAL NOT NULL DEFAULT 0.7,
+            max_tokens INTEGER NOT NULL DEFAULT 64000,
+            updated_at INTEGER NOT NULL DEFAULT (unixepoch())
+          )
+        `).run();
+        const ins = sqlite.query(`
+          INSERT INTO ai_provider_presets (provider_id, provider, base_url, api_key, model, temperature, max_tokens, updated_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, unixepoch())
+          ON CONFLICT(provider_id) DO UPDATE SET
+            provider = excluded.provider,
+            base_url = excluded.base_url,
+            api_key = excluded.api_key,
+            model = excluded.model,
+            temperature = excluded.temperature,
+            max_tokens = excluded.max_tokens,
+            updated_at = unixepoch()
+        `);
+        for (const p of aiPresetRows) {
+          ins.run(p.provider_id, p.provider, p.base_url, p.api_key, p.model, p.temperature, p.max_tokens);
+        }
       }
       if (syncRow) {
         sqlite.query(`
@@ -1977,8 +2018,35 @@ app
   // ---------- AI ----------
   .get("/api/ai/settings", () => {
     const cfg = getAiConfig();
-    if (!cfg) return { configured: false };
-    return { configured: true, ...cfg, apiKey: `${cfg.apiKey.slice(0, 6)}…${cfg.apiKey.slice(-4)}` };
+    const presets = getAllAiProviderPresets();
+    const activeProviderId = cfg ? detectProviderId(cfg.baseUrl, cfg.provider) : null;
+
+    const savedProviders: Record<string, any> = {};
+    for (const [pid, p] of Object.entries(presets)) {
+      savedProviders[pid] = {
+        providerId: pid,
+        provider: p.provider,
+        baseUrl: p.baseUrl,
+        model: p.model,
+        temperature: p.temperature,
+        maxTokens: p.maxTokens,
+        hasKey: !!p.apiKey && !p.apiKey.includes("…") && !p.apiKey.includes("..."),
+        apiKeyMasked: p.apiKey
+          ? (p.apiKey.length > 10 ? `${p.apiKey.slice(0, 6)}…${p.apiKey.slice(-4)}` : "******")
+          : "",
+      };
+    }
+
+    if (!cfg) {
+      return { configured: false, activeProviderId: null, savedProviders };
+    }
+    return {
+      configured: true,
+      activeProviderId,
+      ...cfg,
+      apiKey: `${cfg.apiKey.slice(0, 6)}…${cfg.apiKey.slice(-4)}`,
+      savedProviders,
+    };
   })
 
   .put("/api/ai/settings", async ({ body }) => {
@@ -1986,46 +2054,85 @@ app
     if (!b?.baseUrl || !b?.model) {
       return new Response(JSON.stringify({ error: "baseUrl / model 都不能为空" }), { status: 400 });
     }
-    const old = getAiConfig();
+    const provider = b.provider === "anthropic" ? "anthropic" : "openai";
+    const providerId = String(b.providerId || detectProviderId(b.baseUrl, provider));
     const isLocal = /localhost|127\.0\.0\.1|11434/.test(String(b.baseUrl));
+
     let apiKey = String(b.apiKey ?? "").trim();
-    if (!apiKey || apiKey.includes("…") || apiKey.includes("...")) {
-      if (old?.apiKey) {
-        apiKey = old.apiKey;
-      } else if (isLocal) {
-        apiKey = "ollama";
+    const isMaskedOrEmpty = !apiKey || apiKey.includes("…") || apiKey.includes("...");
+
+    if (isMaskedOrEmpty) {
+      // 1. 优先查本平台 (providerId) 自身已持久化的 preset
+      const existingPreset = getAiProviderPreset(providerId);
+      if (existingPreset?.apiKey && !existingPreset.apiKey.includes("…") && !existingPreset.apiKey.includes("...")) {
+        apiKey = existingPreset.apiKey;
       } else {
-        return new Response(JSON.stringify({ error: "API Key 不能为空" }), { status: 400 });
+        // 2. 检查当前活跃配置是否正好是本平台
+        const activeCfg = getAiConfig();
+        if (activeCfg && detectProviderId(activeCfg.baseUrl, activeCfg.provider) === providerId) {
+          apiKey = activeCfg.apiKey;
+        } else if (isLocal || providerId === "ollama") {
+          apiKey = "ollama";
+        } else {
+          return new Response(
+            JSON.stringify({ error: `【${providerId}】尚未保存过 API Key，请输入该平台的密钥后再保存` }),
+            { status: 400 },
+          );
+        }
       }
     }
-    saveAiConfig({
-      provider: b.provider === "anthropic" ? "anthropic" : "openai",
+
+    const newCfg = {
+      provider: provider as "openai" | "anthropic",
       baseUrl: String(b.baseUrl),
       apiKey,
       model: String(b.model),
       temperature: Number(b.temperature ?? 0.7),
       maxTokens: Number(b.maxTokens ?? 64000),
+    };
+
+    saveAiConfig(newCfg);
+    saveAiProviderPreset({
+      providerId,
+      ...newCfg,
     });
-    return { ok: true };
+
+    return { ok: true, activeProviderId: providerId };
   })
 
   .post("/api/ai/test", async ({ body }) => {
     try {
       const b = body as any;
-      const old = getAiConfig();
+      const provider = (b?.provider === "anthropic" ? "anthropic" : "openai") as "openai" | "anthropic";
+      const providerId = String(b?.providerId || detectProviderId(b?.baseUrl, provider));
       const isLocal = /localhost|127\.0\.0\.1|11434/.test(String(b?.baseUrl));
+
       let apiKey = String(b?.apiKey ?? "").trim();
-      if (!apiKey || apiKey.includes("…") || apiKey.includes("...")) {
-        if (old?.apiKey) {
-          apiKey = old.apiKey;
-        } else if (isLocal) {
-          apiKey = "ollama";
+      const isMaskedOrEmpty = !apiKey || apiKey.includes("…") || apiKey.includes("...");
+
+      if (isMaskedOrEmpty) {
+        // 1. 优先查本平台 preset
+        const existingPreset = getAiProviderPreset(providerId);
+        if (existingPreset?.apiKey && !existingPreset.apiKey.includes("…") && !existingPreset.apiKey.includes("...")) {
+          apiKey = existingPreset.apiKey;
         } else {
-          return new Response(JSON.stringify({ error: "请先填写 API Key" }), { status: 400 });
+          // 2. 检查当前活跃配置是否正好是本平台
+          const activeCfg = getAiConfig();
+          if (activeCfg && detectProviderId(activeCfg.baseUrl, activeCfg.provider) === providerId) {
+            apiKey = activeCfg.apiKey;
+          } else if (isLocal || providerId === "ollama") {
+            apiKey = "ollama";
+          } else {
+            return new Response(
+              JSON.stringify({ error: `【${providerId}】尚未填写 API Key，请先输入密钥再测试` }),
+              { status: 400 },
+            );
+          }
         }
       }
+
       const testCfg = {
-        provider: (b?.provider === "anthropic" ? "anthropic" : "openai") as "openai" | "anthropic",
+        provider,
         baseUrl: String(b?.baseUrl || "https://api.openai.com/v1"),
         apiKey,
         model: String(b?.model || "gpt-4o-mini"),

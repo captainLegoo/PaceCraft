@@ -1,4 +1,4 @@
-import { db } from "../db/client.ts";
+import { db, sqlite } from "../db/client.ts";
 import { ageFromBirthday, buildSessions, hrZoneOptions, hrZones, sessionLaps } from "../analytics.ts";
 import { activities, activityDetails, aiReports, aiSessionReports, aiSettings, fitness, laps, recovery, trainingLoad, users } from "../db/schema.ts";
 import { and, asc, desc, eq, gte, inArray, lt, lte } from "drizzle-orm";
@@ -20,6 +20,152 @@ export type AiConfig = {
   temperature: number;
   maxTokens: number;
 };
+
+export type AiProviderPreset = {
+  providerId: string;
+  provider: "openai" | "anthropic";
+  baseUrl: string;
+  apiKey: string;
+  model: string;
+  temperature: number;
+  maxTokens: number;
+  updatedAt?: number;
+};
+
+export function detectProviderId(baseUrl: string, provider: string): string {
+  if (!baseUrl) return "custom";
+  const b = baseUrl.toLowerCase();
+  if (b.includes("deepseek.com")) return "deepseek";
+  if (b.includes("siliconflow.cn")) return "siliconflow";
+  if (b.includes("aliyuncs.com") || b.includes("dashscope")) return "qwen";
+  if (b.includes("bigmodel.cn")) return "zhipu";
+  if (b.includes("moonshot.cn")) return "kimi";
+  if (b.includes("volces.com") || b.includes("volcengine")) return "doubao";
+  if (b.includes("minimax.chat") || b.includes("minimaxi")) return "minimax";
+  if (b.includes("lingyiwanwu.com")) return "lingyi";
+  if (b.includes("baidubce.com") || b.includes("qianfan")) return "qianfan";
+  if (b.includes("hunyuan.cloud.tencent.com") || b.includes("tencent.com")) return "hunyuan";
+  if (provider === "anthropic" || b.includes("anthropic.com")) return "anthropic";
+  if (b.includes("generativelanguage.googleapis.com")) return "gemini";
+  if (b.includes("openrouter.ai")) return "openrouter";
+  if (b.includes("groq.com")) return "groq";
+  if (b.includes("api.x.ai")) return "xai";
+  if (b.includes("mistral.ai")) return "mistral";
+  if (b.includes("localhost:11434") || b.includes("127.0.0.1:11434") || b.includes(":11434")) return "ollama";
+  if (b.includes("openai.com")) return "openai";
+  return "custom";
+}
+
+let presetsTableInitialized = false;
+export function ensureAiPresetsTable() {
+  if (presetsTableInitialized) return;
+  try {
+    sqlite.query(`
+      CREATE TABLE IF NOT EXISTS ai_provider_presets (
+        provider_id TEXT PRIMARY KEY,
+        provider TEXT NOT NULL DEFAULT 'openai',
+        base_url TEXT NOT NULL,
+        api_key TEXT NOT NULL,
+        model TEXT NOT NULL,
+        temperature REAL NOT NULL DEFAULT 0.7,
+        max_tokens INTEGER NOT NULL DEFAULT 64000,
+        updated_at INTEGER NOT NULL DEFAULT (unixepoch())
+      )
+    `).run();
+    presetsTableInitialized = true;
+
+    // 若当前 ai_settings 有配置但 presets 表为空，自动将当前配置入库作为初始预设
+    const countRow = sqlite.query("SELECT COUNT(*) as cnt FROM ai_provider_presets").get() as { cnt: number };
+    if (countRow?.cnt === 0) {
+      const active = getAiConfig();
+      if (active && active.apiKey && !active.apiKey.includes("…")) {
+        const pid = detectProviderId(active.baseUrl, active.provider);
+        saveAiProviderPreset({
+          providerId: pid,
+          provider: active.provider,
+          baseUrl: active.baseUrl,
+          apiKey: active.apiKey,
+          model: active.model,
+          temperature: active.temperature,
+          maxTokens: active.maxTokens,
+        });
+      }
+    }
+  } catch (e) {
+    console.error("[AiPresets] 表初始化异常:", e);
+  }
+}
+
+export function getAiProviderPreset(providerId: string): AiProviderPreset | null {
+  ensureAiPresetsTable();
+  try {
+    const row = sqlite.query("SELECT * FROM ai_provider_presets WHERE provider_id = ? LIMIT 1").get(providerId) as any;
+    if (!row) return null;
+    return {
+      providerId: row.provider_id,
+      provider: row.provider,
+      baseUrl: row.base_url,
+      apiKey: row.api_key,
+      model: row.model,
+      temperature: row.temperature,
+      maxTokens: row.max_tokens,
+      updatedAt: row.updated_at,
+    };
+  } catch {
+    return null;
+  }
+}
+
+export function getAllAiProviderPresets(): Record<string, AiProviderPreset> {
+  ensureAiPresetsTable();
+  try {
+    const rows = sqlite.query("SELECT * FROM ai_provider_presets").all() as any[];
+    const result: Record<string, AiProviderPreset> = {};
+    for (const r of rows) {
+      result[r.provider_id] = {
+        providerId: r.provider_id,
+        provider: r.provider,
+        baseUrl: r.base_url,
+        apiKey: r.api_key,
+        model: r.model,
+        temperature: r.temperature,
+        maxTokens: r.max_tokens,
+        updatedAt: r.updated_at,
+      };
+    }
+    return result;
+  } catch {
+    return {};
+  }
+}
+
+export function saveAiProviderPreset(preset: AiProviderPreset) {
+  ensureAiPresetsTable();
+  try {
+    sqlite.query(`
+      INSERT INTO ai_provider_presets (provider_id, provider, base_url, api_key, model, temperature, max_tokens, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, unixepoch())
+      ON CONFLICT(provider_id) DO UPDATE SET
+        provider = excluded.provider,
+        base_url = excluded.base_url,
+        api_key = excluded.api_key,
+        model = excluded.model,
+        temperature = excluded.temperature,
+        max_tokens = excluded.max_tokens,
+        updated_at = unixepoch()
+    `).run(
+      preset.providerId,
+      preset.provider,
+      preset.baseUrl,
+      preset.apiKey,
+      preset.model,
+      preset.temperature ?? 0.7,
+      preset.maxTokens ?? 64000,
+    );
+  } catch (e) {
+    console.error("[AiPresets] 保存预设失败:", e);
+  }
+}
 
 export function getAiConfig(): AiConfig | null {
   const row = db.select().from(aiSettings).where(eq(aiSettings.id, 1)).get();

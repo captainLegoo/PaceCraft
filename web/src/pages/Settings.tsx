@@ -376,6 +376,8 @@ export default function Settings({
       return {};
     }
   });
+  // 记录各平台在服务端已保存的状态（是否已有 Key、脱敏 Key、模型等）
+  const [savedProviders, setSavedProviders] = useState<Record<string, any>>({});
   // 记录当前系统中真正已保存生效的平台 ID（用于高亮“当前生效中”）
   const [activeSavedProviderId, setActiveSavedProviderId] = useState<string | null>(null);
   const [showAdvanced, setShowAdvanced] = useState(false);
@@ -704,27 +706,22 @@ export default function Settings({
   useEffect(() => {
     api.status().then(setStatus).catch(() => {});
     api.aiSettings().then((s) => {
+      if (s.savedProviders) {
+        setSavedProviders(s.savedProviders);
+      }
       if (s.configured) {
-        setCfg((c: any) => ({ ...c, ...s }));
-        const pid = detectProviderId(s.baseUrl, s.provider);
+        const pid = s.activeProviderId || detectProviderId(s.baseUrl, s.provider);
         setSelectedProviderId(pid);
         setActiveSavedProviderId(pid);
-        // 初始化当前生效平台的记忆
-        setProviderDrafts((prev) => {
-          const next = {
-            ...prev,
-            [pid]: {
-              apiKey: s.apiKey || prev[pid]?.apiKey || "",
-              model: s.model || prev[pid]?.model || "",
-              baseUrl: s.baseUrl,
-              provider: s.provider,
-            },
-          };
-          try {
-            localStorage.setItem("pacecraft_ai_provider_drafts", JSON.stringify(next));
-          } catch {}
-          return next;
-        });
+        setCfg((c: any) => ({
+          ...c,
+          provider: s.provider,
+          baseUrl: s.baseUrl,
+          model: s.model,
+          temperature: s.temperature ?? 0.7,
+          maxTokens: s.maxTokens ?? 64000,
+          apiKey: "", // 保持为空，防止脱敏字符串污染
+        }));
       }
     }).catch(() => {});
     api.syncSports().then((s) => {
@@ -784,24 +781,20 @@ export default function Settings({
   const save = async () => {
     setSaving(true); setAiMsg(null);
     try {
-      await api.saveAiSettings(cfg);
+      const payload = {
+        ...cfg,
+        providerId: selectedProviderId,
+      };
+      await api.saveAiSettings(payload);
       setActiveSavedProviderId(selectedProviderId);
-      // 更新该平台的持久化草稿
-      setProviderDrafts((prev) => {
-        const next = {
-          ...prev,
-          [selectedProviderId]: {
-            apiKey: cfg.apiKey || "",
-            model: cfg.model || "",
-            baseUrl: cfg.baseUrl,
-            provider: cfg.provider,
-          },
-        };
-        try {
-          localStorage.setItem("pacecraft_ai_provider_drafts", JSON.stringify(next));
-        } catch {}
-        return next;
-      });
+
+      // 重新拉取最新 savedProviders 和生效状态
+      const s = await api.aiSettings();
+      if (s.savedProviders) {
+        setSavedProviders(s.savedProviders);
+      }
+      setCfg((c: any) => ({ ...c, apiKey: "" }));
+
       setAiMsg({ kind: "ok", text: `已保存并生效当前【${currentProvider?.name || selectedProviderId}】配置。` });
       onStatus();
       api.status().then(setStatus).catch(() => {});
@@ -813,7 +806,11 @@ export default function Settings({
   const testAi = async () => {
     setTesting(true); setAiMsg(null);
     try {
-      const r = await api.testAiSettings(cfg);
+      const payload = {
+        ...cfg,
+        providerId: selectedProviderId,
+      };
+      const r = await api.testAiSettings(payload);
       setAiMsg({ kind: "ok", text: `连接成功（耗时 ${r.latencyMs} ms）！模型回复：「${r.reply || "正常"}」` });
     } catch (e) {
       setAiMsg({ kind: "error", text: (e as Error).message });
@@ -937,14 +934,28 @@ export default function Settings({
     const found = PROVIDERS.find((p) => p.id === pid);
     if (!found) return;
 
-    // 3. 读取新平台的历史记忆（如果有的话；如果没有则展现干净空白）
-    const draft = updatedDrafts[pid];
+    // 3. 优先检查该平台在服务端是否已保存过
+    const saved = savedProviders[pid];
+    if (saved) {
+      setCfg((c: any) => ({
+        ...c,
+        provider: saved.provider || found.provider,
+        baseUrl: saved.baseUrl || found.baseUrl,
+        apiKey: updatedDrafts[pid]?.apiKey || "", // 优先留空以复用服务端已存的真实 key
+        model: saved.model || found.defaultModel,
+        temperature: saved.temperature ?? c.temperature ?? 0.7,
+        maxTokens: saved.maxTokens ?? c.maxTokens ?? 64000,
+      }));
+      return;
+    }
 
+    // 4. 其次检查本地草稿
+    const draft = updatedDrafts[pid];
     if (found.id === "custom") {
       setCfg((c: any) => ({
         ...c,
-        provider: draft?.provider || c.provider || "openai",
-        baseUrl: draft?.baseUrl !== undefined ? draft.baseUrl : (detectProviderId(c.baseUrl, c.provider) !== "custom" ? "" : c.baseUrl),
+        provider: draft?.provider || "openai",
+        baseUrl: draft?.baseUrl !== undefined ? draft.baseUrl : "",
         apiKey: draft?.apiKey ?? "",
         model: draft?.model ?? "",
       }));
@@ -956,14 +967,15 @@ export default function Settings({
       provider: draft?.provider || found.provider,
       baseUrl: draft?.baseUrl || found.baseUrl,
       apiKey: draft?.apiKey !== undefined ? draft.apiKey : (found.id === "ollama" ? "ollama" : ""),
-      model: draft?.model !== undefined ? draft.model : "",
+      model: draft?.model !== undefined ? draft.model : (found.defaultModel || ""),
     }));
   };
 
   const currentProviderId = selectedProviderId;
   const currentProvider = PROVIDERS.find((p) => p.id === currentProviderId) || PROVIDERS[PROVIDERS.length - 1];
   const isLocalEndpoint = /localhost|127\.0\.0\.1|11434/.test(cfg.baseUrl || "");
-  const canSubmit = !saving && !testing && (cfg.apiKey || status?.aiConfigured || isLocalEndpoint) && !!cfg.baseUrl && !!cfg.model;
+  const currentHasSavedKey = !!savedProviders[currentProviderId]?.hasKey;
+  const canSubmit = !saving && !testing && (cfg.apiKey || currentHasSavedKey || isLocalEndpoint) && !!cfg.baseUrl && !!cfg.model;
 
   return (
     <>
@@ -1029,6 +1041,7 @@ export default function Settings({
                 {PROVIDERS.map((p) => {
                   const isSelected = currentProviderId === p.id;
                   const isActiveSaved = activeSavedProviderId === p.id && status?.aiConfigured;
+                  const hasSavedPreset = !!savedProviders[p.id]?.hasKey;
                   const shortName = p.name.split(" (")[0];
                   const subText = p.name.includes(" (") ? p.name.slice(p.name.indexOf(" (") + 2, -1) : "";
                   return (
@@ -1041,8 +1054,18 @@ export default function Settings({
                         textAlign: "left",
                         padding: "7px 9px",
                         borderRadius: 7,
-                        border: isSelected ? "1.5px solid var(--accent)" : isActiveSaved ? "1px solid rgba(16,185,129,0.4)" : "1px solid var(--border)",
-                        background: isSelected ? "rgba(14, 165, 233, 0.12)" : isActiveSaved ? "rgba(16,185,129,0.06)" : "var(--surface-2)",
+                        border: isSelected
+                          ? "1.5px solid var(--accent)"
+                          : isActiveSaved
+                          ? "1px solid rgba(16,185,129,0.4)"
+                          : hasSavedPreset
+                          ? "1px solid rgba(59,130,246,0.3)"
+                          : "1px solid var(--border)",
+                        background: isSelected
+                          ? "rgba(14, 165, 233, 0.12)"
+                          : isActiveSaved
+                          ? "rgba(16,185,129,0.06)"
+                          : "var(--surface-2)",
                         display: "flex",
                         flexDirection: "column",
                         gap: 2,
@@ -1062,7 +1085,7 @@ export default function Settings({
                           {shortName}
                         </span>
                         <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-                          {isActiveSaved && (
+                          {isActiveSaved ? (
                             <span
                               style={{
                                 width: 6,
@@ -1075,7 +1098,19 @@ export default function Settings({
                               }}
                               title="当前生效中"
                             />
-                          )}
+                          ) : hasSavedPreset ? (
+                            <span
+                              style={{
+                                width: 5,
+                                height: 5,
+                                borderRadius: "50%",
+                                background: "rgba(59, 130, 246, 0.8)",
+                                display: "inline-block",
+                                flexShrink: 0,
+                              }}
+                              title="已配置（点击可切换生效）"
+                            />
+                          ) : null}
                           {isSelected && (
                             <span style={{ color: "var(--accent)", fontSize: 11, fontWeight: 700 }}>✓</span>
                           )}
@@ -1153,7 +1188,14 @@ export default function Settings({
 
             {/* 2. API Key */}
             <label className="field" style={{ marginBottom: 10 }}>
-              <span>API Key</span>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <span>API Key</span>
+                {currentHasSavedKey && (
+                  <span style={{ fontSize: 11, color: "var(--accent)", fontWeight: 500 }}>
+                    已保存密钥 ({savedProviders[currentProviderId]?.apiKeyMasked || "已保护"})
+                  </span>
+                )}
+              </div>
               <input
                 type="password"
                 value={cfg.apiKey}
@@ -1162,8 +1204,8 @@ export default function Settings({
                 placeholder={
                   currentProvider?.id === "ollama"
                     ? "本地 Ollama 无需鉴权（可留空或填 ollama）"
-                    : status?.aiConfigured
-                    ? "已保存（留空则保持不变）"
+                    : currentHasSavedKey
+                    ? "已安全保存（留空则继续使用已保存的密钥）"
                     : "请输入 API Key"
                 }
               />
