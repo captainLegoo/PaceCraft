@@ -1,5 +1,6 @@
 import { homedir } from "node:os";
 import { join } from "node:path";
+import { existsSync, readFileSync } from "node:fs";
 import { getProfileDbPath, getProfileDir, getProfileGarminTokenPath, getProfileTokenPath, ROOT_DATA_DIR } from "./profile-manager.ts";
 
 /**
@@ -41,12 +42,25 @@ export const TOKEN_PATH = {
 } as unknown as string;
 
 export const SERVER_PORT = Number(process.env.PORT ?? 43124);
+
 /**
- * 监听地址。默认监听 0.0.0.0 以支持通过系统设置动态开启局域网访问。
- * 未开启时由应用层中间件严格拦截非回环请求，保证隐私安全。
- * 如需在操作系统层面强制锁定回环，可通过 HOST=127.0.0.1 显式覆盖。
+ * 监听地址决策：默认严格绑定安全回环 127.0.0.1，不对外暴露网络端口。
+ * 仅在系统设置中开启了「允许局域网设备访问」或环境变量显式传入时才监听 0.0.0.0。
  */
-export const SERVER_HOST = process.env.HOST ?? "0.0.0.0";
+function resolveServerHost(): string {
+  if (process.env.HOST) return process.env.HOST;
+  if (process.env.LAN_ENABLED === "1") return "0.0.0.0";
+  try {
+    const settingsFile = join(ROOT_DATA_DIR, "lan_settings.json");
+    if (existsSync(settingsFile)) {
+      const data = JSON.parse(readFileSync(settingsFile, "utf8"));
+      if (data?.enabled) return "0.0.0.0";
+    }
+  } catch {}
+  return "127.0.0.1";
+}
+
+export const SERVER_HOST = resolveServerHost();
 export const WEB_ORIGIN = process.env.WEB_ORIGIN ?? "http://localhost:43125";
 
 /** token 剩余寿命低于这个秒数就提前刷新，避免请求打到一半过期 */

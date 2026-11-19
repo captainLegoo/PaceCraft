@@ -32,7 +32,16 @@ let lastBackendOpenTime = 0;
 let lastBackendOpenUrl = "";
 
 export function openExternalUrl(url: string) {
-  if (!url) return;
+  if (!url || typeof url !== "string") return;
+  // 安全校验：拒绝含控制字符、命令截断符号或换行符的畸形 URL
+  if (/[\r\n\0"'`]/.test(url)) return;
+  try {
+    const parsed = new URL(url);
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return;
+  } catch {
+    return;
+  }
+
   const now = Date.now();
   if (url === lastBackendOpenUrl && now - lastBackendOpenTime < 1200) {
     return;

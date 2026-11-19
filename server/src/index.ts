@@ -337,22 +337,74 @@ async function saveProfileHandler(body: unknown) {
   };
 }
 
+/** 严格校验跨域请求来源（Origin），阻断恶意第三方网站跨源调用本地 API */
+function isOriginAllowed(origin: string | null, request: Request): boolean {
+  if (!origin) return false;
+  try {
+    const originUrl = new URL(origin);
+    const originHost = originUrl.host.toLowerCase();
+
+    // 1. 同源检查（同 Host 访问直接放行）
+    const requestHost = request.headers.get("host")?.toLowerCase();
+    if (requestHost && originHost === requestHost) {
+      return true;
+    }
+
+    // 2. 本地开发前端源、默认端口及 Tauri 客户端自定义协议
+    const allowedExactOrigins = new Set([
+      "http://localhost:43124",
+      "http://127.0.0.1:43124",
+      "http://localhost:43125",
+      "http://127.0.0.1:43125",
+      "tauri://localhost",
+      "http://tauri.localhost",
+      "https://tauri.localhost",
+    ]);
+    if (WEB_ORIGIN) {
+      allowedExactOrigins.add(WEB_ORIGIN.replace(/\/+$/, "").toLowerCase());
+    }
+    const cleanOrigin = origin.replace(/\/+$/, "").toLowerCase();
+    if (allowedExactOrigins.has(cleanOrigin)) {
+      return true;
+    }
+
+    // 3. 局域网访问已开启时，允许私有局域网 IP 来源访问
+    if (isLanEnabled()) {
+      const hostname = originUrl.hostname.toLowerCase();
+      const isPrivateLanIp =
+        /^192\.168\.\d{1,3}\.\d{1,3}$/.test(hostname) ||
+        /^10\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(hostname) ||
+        /^172\.(1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3}$/.test(hostname);
+      if (isPrivateLanIp && (originUrl.port === String(SERVER_PORT) || originUrl.port === "43125")) {
+        return true;
+      }
+    }
+  } catch {
+    return false;
+  }
+  return false;
+}
+
 const app = new Elysia()
   .onError(({ code, error, path }) => {
     console.error(`[Elysia Error] ${code} on ${path}:`, error);
   })
   .onRequest(({ request, set }) => {
     const origin = request.headers.get("origin");
-    if (origin) {
+    const allowed = origin ? isOriginAllowed(origin, request) : false;
+    if (origin && allowed) {
       set.headers["Access-Control-Allow-Origin"] = origin;
       set.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS";
       set.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization";
     }
     if (request.method === "OPTIONS") {
+      if (!origin || !allowed) {
+        return new Response(null, { status: 403 });
+      }
       return new Response(null, {
         status: 204,
         headers: {
-          "Access-Control-Allow-Origin": origin ?? "*",
+          "Access-Control-Allow-Origin": origin,
           "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
           "Access-Control-Allow-Headers": "Content-Type, Authorization",
         },
@@ -373,7 +425,7 @@ const app = new Elysia()
             status: 403,
             headers: {
               "Content-Type": "application/json; charset=utf-8",
-              "Access-Control-Allow-Origin": "*",
+              ...(origin && allowed ? { "Access-Control-Allow-Origin": origin } : {}),
             },
           }
         );
@@ -689,9 +741,14 @@ const app = new Elysia()
   })
   .post("/api/open-external", ({ body }) => {
     const url = (body as any)?.url;
-    if (typeof url === "string" && (url.startsWith("http://") || url.startsWith("https://"))) {
-      openExternalUrl(url);
-      return { ok: true };
+    if (typeof url === "string" && (url.startsWith("http://") || url.startsWith("https://")) && !/[\r\n\0"'`]/.test(url)) {
+      try {
+        const parsed = new URL(url);
+        if (parsed.protocol === "http:" || parsed.protocol === "https:") {
+          openExternalUrl(url);
+          return { ok: true };
+        }
+      } catch {}
     }
     return new Response(JSON.stringify({ error: "Invalid URL" }), { status: 400 });
   })

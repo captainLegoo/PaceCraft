@@ -1,4 +1,4 @@
-import { join, dirname } from "node:path";
+import { join, dirname, resolve, basename } from "node:path";
 import { existsSync, mkdirSync, createWriteStream, statSync, unlinkSync, renameSync } from "node:fs";
 import { execFile } from "node:child_process";
 import { ROOT_DATA_DIR } from "./profile-manager.ts";
@@ -106,6 +106,41 @@ const PROXY_MIRRORS = [
   "https://ghproxy.net/",
   "https://mirror.ghproxy.com/",
 ];
+
+/** 校验下载 URL 是否为官方 GitHub Release 仓库或白名单加速镜像 */
+export function isValidUpdateUrl(rawUrl: string): boolean {
+  if (!rawUrl || typeof rawUrl !== "string") return false;
+  try {
+    const u = new URL(rawUrl);
+    if (u.protocol !== "https:") return false;
+    const path = u.pathname;
+    // 官方 GitHub releases 下载地址
+    if (u.hostname === "github.com" && path.startsWith(`/${GITHUB_REPO}/releases/download/`)) {
+      return true;
+    }
+    // 白名单加速镜像地址
+    if (
+      (u.hostname === "ghproxy.net" || u.hostname === "mirror.ghproxy.com") &&
+      path.includes(`/${GITHUB_REPO}/releases/download/`)
+    ) {
+      return true;
+    }
+    return false;
+  } catch {
+    return false;
+  }
+}
+
+/** 获取更新下载包存储目录 */
+export const getUpdatesDir = () => join(ROOT_DATA_DIR, "updates");
+
+/** 校验安装包文件名是否符合 PaceCraft 命名规范与文件类型，杜绝路径遍历 */
+export function isSafeInstallerFileName(fileName: string): boolean {
+  if (!fileName || typeof fileName !== "string") return false;
+  const base = basename(fileName).trim();
+  if (base !== fileName.trim()) return false; // 严禁包含路径分隔符
+  return /^PaceCraft[-_a-zA-Z0-9\.]+\.(exe|msi|dmg|app\.tar\.gz|AppImage|deb)$/i.test(base);
+}
 
 export function getTargetPlatform(override?: string): "windows" | "macos" | "linux" {
   if (override === "windows" || override === "macos" || override === "linux") return override;
@@ -415,6 +450,14 @@ export async function startInstallerDownload(options?: {
   let targetFileName = options?.fileName;
   let expectedSize = 0;
 
+  // 严格安全过滤：若前端传入了 url 或 fileName，必须经过白名单与路径穿越校验
+  if (targetUrl && !isValidUpdateUrl(targetUrl)) {
+    throw new Error("非法的下载来源，仅允许官方发布的更新资源");
+  }
+  if (targetFileName && !isSafeInstallerFileName(targetFileName)) {
+    throw new Error("非法的安装包文件名，拒绝存储");
+  }
+
   if (!targetUrl || !targetFileName) {
     const releaseInfo = await checkLatestRelease("0.0.0", undefined, true, options?.platform);
     if (!releaseInfo.platformAsset) {
@@ -425,7 +468,12 @@ export async function startInstallerDownload(options?: {
     expectedSize = releaseInfo.platformAsset.size || 0;
   }
 
-  const destinationPath = join(updatesDir, targetFileName);
+  const safeFileName = basename(targetFileName).trim();
+  const safeUpdatesDir = resolve(updatesDir);
+  const destinationPath = resolve(safeUpdatesDir, safeFileName);
+  if (!destinationPath.startsWith(safeUpdatesDir)) {
+    throw new Error("非法存储路径，已拒绝越界写入");
+  }
 
   // 检查是否本地已经完整下载过（大小匹配）
   if (existsSync(destinationPath)) {
@@ -599,9 +647,26 @@ export function cancelInstallerDownload(): boolean {
 }
 
 export function launchInstaller(filePath?: string): { ok: boolean; message?: string } {
-  const target = filePath || currentDownloadState.filePath;
-  if (!target || !existsSync(target)) {
+  const safeUpdatesDir = resolve(getUpdatesDir());
+  const rawTarget = filePath || currentDownloadState.filePath;
+  if (!rawTarget) {
+    return { ok: false, message: "未指定安装包路径，且当前无已完成下载的任务" };
+  }
+
+  const target = resolve(rawTarget);
+  if (!existsSync(target)) {
     return { ok: false, message: "安装包文件不存在，请重新下载" };
+  }
+
+  // 严格沙箱限制：执行文件必须且仅能位于 updatesDir 内部
+  if (!target.startsWith(safeUpdatesDir) || target === safeUpdatesDir) {
+    return { ok: false, message: "安全拦截：禁止执行更新目录之外的外部程序" };
+  }
+
+  // 文件名规范校验：必须为合法的 PaceCraft 安装包命名
+  const fileName = basename(target);
+  if (!isSafeInstallerFileName(fileName)) {
+    return { ok: false, message: "安全拦截：目标文件非合法的 PaceCraft 安装包" };
   }
 
   try {
@@ -634,9 +699,20 @@ export function launchInstaller(filePath?: string): { ok: boolean; message?: str
 }
 
 export function openContainingFolder(filePath?: string): { ok: boolean; message?: string } {
-  const target = filePath || currentDownloadState.filePath;
-  if (!target || !existsSync(target)) {
+  const safeUpdatesDir = resolve(getUpdatesDir());
+  const rawTarget = filePath || currentDownloadState.filePath;
+  if (!rawTarget) {
+    return { ok: false, message: "未指定文件路径" };
+  }
+
+  const target = resolve(rawTarget);
+  if (!existsSync(target)) {
     return { ok: false, message: "文件不存在" };
+  }
+
+  // 严格安全限制：禁止打开更新目录之外的路径
+  if (!target.startsWith(safeUpdatesDir) || target === safeUpdatesDir) {
+    return { ok: false, message: "安全拦截：禁止打开更新目录之外的路径" };
   }
 
   try {
