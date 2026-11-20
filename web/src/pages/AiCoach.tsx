@@ -2531,6 +2531,7 @@ function HeroStatCard({
     coachAdvice: string;
   };
 }) {
+  const { isZh } = useI18n();
   const [open, setOpen] = useState(false);
   const cardRef = useRef<HTMLDivElement>(null);
   const [isMobile, setIsMobile] = useState(() =>
