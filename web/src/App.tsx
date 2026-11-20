@@ -662,7 +662,23 @@ export default function App() {
             if (res.conflictsDetected) totalConflictsDetected += res.conflictsDetected;
             if (res.conflictsResolved) totalConflictsResolved += res.conflictsResolved;
           } else if (res.busy) {
-            syncError = res.message;
+            // 后台已有同步任务正在进行中（并发保护提示，不是出错，不要误报错误）
+            setSyncMsg({ text: res.message || "后台已有同步任务正在进行中，请稍候...", kind: "ok" });
+            let waitAttempts = 0;
+            while (waitAttempts < 60) {
+              await new Promise((r) => setTimeout(r, 1000));
+              try {
+                const p = await api.syncProgress();
+                if (p.active) {
+                  setSyncProgress(p);
+                } else {
+                  break;
+                }
+              } catch {
+                break;
+              }
+              waitAttempts++;
+            }
           } else {
             syncError = res.message || "高驰同步未正常完成";
           }

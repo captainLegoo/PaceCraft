@@ -441,6 +441,12 @@ export const api = {
   followStart: () => req<FollowState>("/api/sync/follow", { method: "POST" }),
   followStop: () => req<FollowState>("/api/sync/follow", { method: "DELETE" }),
 
+  /** 自动化工作流 */
+  workflowSteps: () => req<{ steps: any[]; config: any; running: boolean }>("/api/workflow/steps"),
+  workflowLast: () => req<any>("/api/workflow/last"),
+  runWorkflow: (body?: { labelIds?: string[]; only?: string[] }) =>
+    req<any>("/api/workflow/run", { method: "POST", body: JSON.stringify(body ?? {}) }),
+
   /** 同步哪些运动类型 —— 编码表由服务端下发，避免前后端各维护一份 */
   syncSports: () => req<SyncSportsPayload>("/api/sync/sports"),
   saveSyncSports: (codes: number[]) =>

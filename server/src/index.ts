@@ -843,6 +843,18 @@ const app = new Elysia()
         percent: 100,
         message: `同步完成：${res.activities} 次活动、${res.details} 条详情`,
       });
+      try {
+        const fresh = db
+          .select({ labelId: activities.labelId })
+          .from(activities)
+          .orderBy(desc(activities.dateLabel), desc(activities.startTs))
+          .limit(10)
+          .all()
+          .map((x) => x.labelId);
+        await runWorkflow({ labelIds: fresh });
+      } catch (wfErr) {
+        console.error("workflow after /api/sync failed:", wfErr);
+      }
       return res;
     } catch (e) {
       const errMsg = `同步失败：${(e as Error).message}`;
@@ -981,7 +993,7 @@ const app = new Elysia()
           message: "正在计算疲劳指数与备赛预测模型...",
         });
         try {
-          // 把本次新增的活动 id 传下去，让各 step 只处理增量
+          // 把本次新增的活动 id 传下去，让各 step 只处理增量；若无新增则默认取最近 10 次活动
           const newCount = after - before;
           const fresh = newCount > 0
             ? db
@@ -991,7 +1003,13 @@ const app = new Elysia()
                 .all()
                 .slice(-newCount)
                 .map((x) => x.labelId)
-            : [];
+            : db
+                .select({ labelId: activities.labelId })
+                .from(activities)
+                .orderBy(desc(activities.dateLabel), desc(activities.startTs))
+                .limit(10)
+                .all()
+                .map((x) => x.labelId);
           workflow = await runWorkflow({ labelIds: fresh });
         } catch (e) {
           // 工作流失败不该让同步失败 —— 数据已经进来了
@@ -1078,7 +1096,16 @@ const app = new Elysia()
     }
     const b = (body ?? {}) as any;
     const only: string[] | undefined = Array.isArray(b.only) ? b.only : undefined;
-    const labelIds: string[] = Array.isArray(b.labelIds) ? b.labelIds : [];
+    let labelIds: string[] = Array.isArray(b.labelIds) ? b.labelIds : [];
+    if (labelIds.length === 0) {
+      labelIds = db
+        .select({ labelId: activities.labelId })
+        .from(activities)
+        .orderBy(desc(activities.dateLabel), desc(activities.startTs))
+        .limit(10)
+        .all()
+        .map((x) => x.labelId);
+    }
     return await runWorkflow({ labelIds, only });
   })
 
