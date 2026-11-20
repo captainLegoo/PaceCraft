@@ -19,11 +19,11 @@ import ProfileSwitcher from "./components/ProfileSwitcher";
 import { DEFAULT_APP_VERSION } from "./version";
 import UpdateModal, { isTauriEnv } from "./components/UpdateModal";
 import { check } from "@tauri-apps/plugin-updater";
-import { formatElapsed } from "./utils/format";
+import { formatElapsed, formatSyncMessage } from "./utils/format";
 import { useClipboard } from "./utils/clipboard";
 import { useI18n, LanguageToggle } from "./i18n";
 
-export { formatElapsed };
+export { formatElapsed, formatSyncMessage };
 
 type Route = {
   page:
@@ -912,10 +912,10 @@ export default function App() {
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 11.5, marginBottom: 4 }}>
                 <span
                   style={{ fontWeight: 600, color: "var(--text)", display: "inline-flex", alignItems: "center", gap: 5, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
-                  title={syncProgress.startedAt ? `${syncProgress.message}（${t("sync.elapsed")} ${formatElapsed(syncProgress.startedAt)}）` : syncProgress.message}
+                  title={syncProgress.startedAt ? `${formatSyncMessage(syncProgress.message, isZh)}${isZh ? `（${t("sync.elapsed")} ${formatElapsed(syncProgress.startedAt, true)}）` : ` (${t("sync.elapsed")} ${formatElapsed(syncProgress.startedAt, false)})`}` : formatSyncMessage(syncProgress.message, isZh)}
                 >
                   <span className="spin" style={{ width: 10, height: 10, borderColor: "var(--accent)" }} />
-                  {syncProgress.message}
+                  {formatSyncMessage(syncProgress.message, isZh)}
                 </span>
                 <span style={{ color: "var(--accent)", fontWeight: 700, flexShrink: 0, marginLeft: 4 }}>
                   {syncProgress.percent}%
@@ -1143,8 +1143,8 @@ export default function App() {
                   {getSyncBrandTitle(syncProgress, t)} · {syncProgress.percent}%
                 </div>
                 <div style={{ fontSize: 12, color: "var(--text-dim)", marginTop: 2, wordBreak: "break-all" }}>
-                  {syncProgress.message}
-                  {syncProgress.startedAt && `（${t("sync.elapsed")} ${formatElapsed(syncProgress.startedAt)}）`}
+                  {formatSyncMessage(syncProgress.message, isZh)}
+                  {syncProgress.startedAt && (isZh ? `（${t("sync.elapsed")} ${formatElapsed(syncProgress.startedAt, true)}）` : ` (${t("sync.elapsed")} ${formatElapsed(syncProgress.startedAt, false)})`)}
                 </div>
               </div>
             </div>

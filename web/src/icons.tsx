@@ -3,9 +3,9 @@
  * 所以换主题时不需要任何额外处理。
  */
 
-type P = { size?: number; className?: string };
+type P = { size?: number; className?: string; style?: React.CSSProperties };
 
-const base = (size: number) => ({
+const base = (size: number, style?: React.CSSProperties) => ({
   width: size,
   height: size,
   viewBox: "0 0 24 24",
@@ -14,6 +14,7 @@ const base = (size: number) => ({
   strokeWidth: 1.6,
   strokeLinecap: "round" as const,
   strokeLinejoin: "round" as const,
+  style,
 });
 
 /** 跑步的人 —— 品牌主图形 */
@@ -188,9 +189,9 @@ export function IconGear({ size = 18, className }: P) {
 }
 
 /** 刷新页面 —— 浏览器风格的单箭头重载图标 ↻ */
-export function IconRefresh({ size = 18, className }: P) {
+export function IconRefresh({ size = 18, className, style }: P) {
   return (
-    <svg {...base(size)} className={className} aria-hidden>
+    <svg {...base(size, style)} className={className} aria-hidden>
       <path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8" />
       <path d="M21 3v5h-5" />
     </svg>

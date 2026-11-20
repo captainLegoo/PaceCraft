@@ -179,7 +179,7 @@ export default function AiCoach({
   onOpenActivity: (labelId: string) => void;
   onOpenConnect?: () => void;
 }) {
-  const { isZh } = useI18n();
+  const { t, isZh } = useI18n();
   const [profile, setProfile] = useState<CoachProfile | null>(null);
   const [baseline, setBaseline] = useState<CoachBaseline | null>(null);
   const [plan, setPlan] = useState<CoachPlan | null>(null);
@@ -543,7 +543,7 @@ export default function AiCoach({
     return (
       <div className="card" style={{ padding: "40px 20px", textAlign: "center", color: "var(--text-dim)" }}>
         <IconRefresh size={28} className="animate-spin" style={{ margin: "0 auto 12px", opacity: 0.7 }} />
-        <div>正在调取您的生理体能基准与 AI 课表…</div>
+        <div>{isZh ? "正在调取您的生理体能基准与 AI 课表…" : "Loading physiological baseline and AI training plan…"}</div>
       </div>
     );
   }

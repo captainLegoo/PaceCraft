@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from "react";
 import { api, type GarminMultiAuthStatus, type GarminSyncProgress, type SyncProgress, type SyncSportsPayload } from "../api";
-import { formatElapsed } from "../utils/format";
+import { formatElapsed, formatSyncMessage } from "../utils/format";
 import { useClipboard } from "../utils/clipboard";
 import { IconCalendar, IconDatabase, IconGear, IconHeart, IconSync } from "../icons";
 import WorkflowPanel from "./WorkflowPanel";
@@ -1497,13 +1497,13 @@ export default function Settings({
                     onChange={(e) => setHr({ ...hr, birthday: e.target.value })}
                   />
                   <div className="hint">
-                    {computeAge(hr.birthday) !== null ? (
-                      <>
-                        {t("settings.birthdayAgeTanaka", { age: computeAge(hr.birthday), hr: Math.round(208 - 0.7 * computeAge(hr.birthday)!) })}
-                      </>
-                    ) : (
-                      t("settings.birthdayHint")
-                    )}
+                    {(() => {
+                      const age = computeAge(hr.birthday);
+                      if (age !== null) {
+                        return <>{t("settings.birthdayAgeTanaka", { age, hr: Math.round(208 - 0.7 * age) })}</>;
+                      }
+                      return t("settings.birthdayHint");
+                    })()}
                   </div>
                 </label>
 
@@ -2437,8 +2437,8 @@ export default function Settings({
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 12, marginBottom: 6 }}>
                   <span style={{ fontWeight: 500, color: "var(--text)", display: "inline-flex", alignItems: "center", gap: 6 }}>
                     <span className="spin" style={{ width: 12, height: 12, borderColor: "var(--accent)" }} />
-                    {syncProgress.message}
-                    {syncProgress.startedAt && <span style={{ color: "var(--text-dim)", marginLeft: 4 }}>（已用时 {formatElapsed(syncProgress.startedAt)}）</span>}
+                    {formatSyncMessage(syncProgress.message, isZh)}
+                    {syncProgress.startedAt && <span style={{ color: "var(--text-dim)", marginLeft: 4 }}>{isZh ? `（已用时 ${formatElapsed(syncProgress.startedAt, true)}）` : ` (${t("sync.elapsed")} ${formatElapsed(syncProgress.startedAt, false)})`}</span>}
                   </span>
                   <span style={{ color: "var(--accent)", fontWeight: 600 }}>{syncProgress.percent}%</span>
                 </div>

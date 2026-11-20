@@ -77,6 +77,90 @@ export function formatElapsed(startedAt: number | null | undefined, isZh = true)
 }
 
 /**
+ * 将后台推送的同步进度中文文本转译为英文
+ */
+export function formatSyncMessage(msg: string | null | undefined, isZh = true): string {
+  if (!msg) return "";
+  if (isZh) return msg;
+
+  let m = msg.match(/正在拉取训练详情与逐圈数据\s*\(([^)]+)\)\.\.\./);
+  if (m) {
+    return `Fetching workout details & lap splits (${m[1]})...`;
+  }
+  if (msg.includes("已有训练详情与逐圈数据全部最新，跳过拉取")) {
+    return "Workout details & lap splits are up to date, skipping download";
+  }
+
+  m = msg.match(/正在扫描历史训练列表[（(]共\s*(\d+)\s*个时间窗口[)）]\.\.\./);
+  if (m) {
+    return `Scanning workout history (${m[1]} time windows)...`;
+  }
+  m = msg.match(/正在扫描训练记录\s*\(([^)]+)\s*时间段\)\s*·\s*已发现\s*(\d+)\s*条\.\.\./);
+  if (m) {
+    return `Scanning workouts (${m[1]} periods) · Found ${m[2]} records...`;
+  }
+
+  if (msg.includes("正在同步每日健康与睡眠数据") || msg.includes("正在同步健康与体征数据")) {
+    return "Syncing daily recovery, sleep & HRV biometrics...";
+  }
+  m = msg.match(/正在拉取夜间睡眠分期与日间体征\s*\(([^)]+)\)\.\.\./);
+  if (m) {
+    return `Fetching sleep stages & biometrics (${m[1]})...`;
+  }
+
+  if (msg.includes("正在同步训练负荷与 ACWR 指标")) {
+    return "Syncing training load & ACWR metrics...";
+  }
+  if (msg.includes("正在同步体能状态与恢复快照")) {
+    return "Syncing stamina & recovery snapshot...";
+  }
+
+  m = msg.match(/正在拉取活动 FIT 文件与精确轨迹\s*\(([^)]+)\)\.\.\./);
+  if (m) {
+    return `Fetching activity FIT files & GPS tracks (${m[1]})...`;
+  }
+
+  if (msg.includes("训练与生理数据同步完成，正在执行自动化分析工作流") || msg.includes("正在执行自动化分析工作流")) {
+    return "Data sync complete. Running automated analysis workflows...";
+  }
+  if (msg.includes("正在计算疲劳指数与备赛预测模型")) {
+    return "Computing fatigue index & race prediction models...";
+  }
+
+  if (msg.includes("正在连接高驰服务")) {
+    return "Connecting to COROS service...";
+  }
+  if (msg.includes("正在连接 Garmin")) {
+    return msg.replace("正在连接 Garmin", "Connecting to Garmin").replace("检查最新训练...", "checking latest workouts...");
+  }
+  m = msg.match(/Garmin\s*\(([^)]+)\):\s*已扫描到\s*(\d+)\s*条记录\.\.\./);
+  if (m) {
+    return `Garmin (${m[1]}): Scanned ${m[2]} records...`;
+  }
+  if (msg.includes("历史分圈与 .FIT 已全部最新，跳过下载")) {
+    return msg.replace("历史分圈与 .FIT 已全部最新，跳过下载", "Splits & .FIT files up to date, skipping");
+  }
+  m = msg.match(/Garmin\s*\(([^)]+)\):\s*高速并发下载并解析分圈\s*\(([^)]+)\):\s*(.*)/);
+  if (m) {
+    return `Garmin (${m[1]}): Downloading & parsing splits (${m[2]}): ${m[3]}`;
+  }
+  if (msg.includes("正在同步 Garmin 睡眠、夜间 HRV 与身体电量指标")) {
+    return "Syncing Garmin sleep, overnight HRV & Body Battery...";
+  }
+  m = msg.match(/高驰云端数据拉取完毕，共\s*(\d+)\s*次训练/);
+  if (m) {
+    return `COROS sync complete: ${m[1]} activities fetched`;
+  }
+  m = msg.match(/同步完成[：:]\s*(\d+)\s*次活动[、,]\s*(\d+)\s*条详情/);
+  if (m) {
+    return `Sync complete: ${m[1]} activities, ${m[2]} details`;
+  }
+  if (msg === "空闲") return "Idle";
+
+  return msg;
+}
+
+/**
  * 格式化跑步距离（米或公里 -> 保留小数位的字符串）
  */
 export function formatDistance(
