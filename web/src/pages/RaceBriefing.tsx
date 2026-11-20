@@ -299,13 +299,71 @@ function TrainingStateCard({ training: t }: { training: Briefing["training"] }) 
   );
 }
 
+const PHASE_LABEL_EN: Record<string, string> = {
+  "起步段": "Start Phase",
+  "上半场稳定": "Early Cruise",
+  "转折点": "Crucial Transition",
+  "冲刺段": "Final Push",
+};
+
+const PHASE_INTENT_EN: Record<string, string> = {
+  "刻意压住，心率别过 158。这一段是给后半程存钱的。": "Hold back deliberately, keep HR under 158. Banking energy for the second half.",
+  "进入有氧动力区上沿，找到能说话但不吃力的节奏（上限 163）。": "Upper aerobic zone; settle into a conversational cruising rhythm (cap 163).",
+  "全场关键。前面存的账在这里开始兑现，可以接近节奏跑强度（上限 168）。": "Critical phase. Cash in banked energy, push towards tempo effort (cap 168).",
+  "剩余多少给多少。这里不再控心率，配速由疲劳程度决定。": "Give everything left. Uncap heart rate, pace dictated purely by remaining fatigue tolerance.",
+};
+
+const CITY_EN_MAP: Record<string, string> = {
+  "常州市": "Changzhou",
+  "深圳市": "Shenzhen",
+  "香港特别行政区": "Hong Kong SAR",
+  "香港": "Hong Kong",
+  "兰州市": "Lanzhou",
+  "合肥市": "Hefei",
+  "北京市": "Beijing",
+  "上海市": "Shanghai",
+  "广州市": "Guangzhou",
+  "成都市": "Chengdu",
+  "武汉市": "Wuhan",
+  "杭州市": "Hangzhou",
+  "厦门市": "Xiamen",
+  "无锡市": "Wuxi",
+  "苏州市": "Suzhou",
+  "南京市": "Nanjing",
+};
+
+function formatPacingStrategy(summary: string | undefined, isZh: boolean): string {
+  if (!summary) return "";
+  if (isZh) return summary;
+  return summary
+    .replace(/目标\s*([^，,]+)[，,]\s*平均配速\s*([^（(]+)（含地形补偿\s*([^）)]+)）[。.]/g, "Target $1, avg pace $2 (incl. terrain adjustment $3). ")
+    .replace(/策略是「([^」]+)」/g, "Pacing strategy: \"$1\"")
+    .replace(/前\s*3\s*公里故意慢，之后逐步加速/g, "start conservatively for first 3km and build progressively")
+    .replace(/——起步\s*([^，,]+)[，,]\s*冲刺段收到\s*([^。.]+)[。.]?/g, " — start at $1, finish at $2.");
+}
+
+function formatHrCapNote(note: string | undefined, isZh: boolean): string {
+  if (!note) return "";
+  if (isZh) return note;
+  return note
+    .replace(/取自\s*(\d+)\s*场强度可比的比赛实测心率上四分位\s*\((\d+bpm)\)\s*\+\s*后程漂移余量\s*(\d+bpm)[，,]\s*上限不超过最大心率\s*(\d+%)/g,
+      "Derived from upper quartile of $1 comparable races ($2) + $3 late drift buffer, capped at $4 max HR")
+    .replace(/取自最大心率储备/g, "Derived from heart rate reserve");
+}
+
+function formatCityLabel(label: string | undefined, isZh: boolean): string {
+  if (!label) return "—";
+  if (isZh) return label;
+  return CITY_EN_MAP[label] || label.replace(/市$/, "");
+}
+
 function PacingCard({ b }: { b: Briefing }) {
   const { isZh } = useI18n();
   const p = b.pacing;
   if (!p) return null;
   return (
     <>
-      <p className="card-sub" style={{ marginTop: 0, marginBottom: 10 }}>{p.strategySummary}</p>
+      <p className="card-sub" style={{ marginTop: 0, marginBottom: 10 }}>{formatPacingStrategy(p.strategySummary, isZh)}</p>
       <div className="table-scroll-wrap">
         <div className="table-scroll briefing-table-scroll">
           <table>
@@ -321,7 +379,7 @@ function PacingCard({ b }: { b: Briefing }) {
             <tbody>
               {p.segments.map((s, i) => (
                 <tr key={i}>
-                  <td style={{ fontWeight: 600 }}>{s.label}</td>
+                  <td style={{ fontWeight: 600 }}>{isZh ? s.label : (PHASE_LABEL_EN[s.label] || s.label)}</td>
                   <td className="num">{s.fromKm}–{s.toKm} km</td>
                   <td className="num" style={{ color: "var(--accent)", fontWeight: 600 }}>
                     {fPace(s.targetPaceSec)}<span style={{ color: "var(--text-faint)" }}> /km</span>
@@ -330,7 +388,7 @@ function PacingCard({ b }: { b: Briefing }) {
                     {s.targetHr ? `≤ ${s.targetHr} bpm` : (isZh ? "不限" : "No cap")}
                   </td>
                   <td className="cell-text" style={{ textAlign: "left", fontSize: 12, color: "var(--text-dim)" }}>
-                    {s.intent}
+                    {isZh ? s.intent : (PHASE_INTENT_EN[s.intent] || s.intent)}
                   </td>
                 </tr>
               ))}
@@ -340,7 +398,7 @@ function PacingCard({ b }: { b: Briefing }) {
       </div>
       <div className="hint" style={{ marginTop: 8 }}>
         {isZh ? "心率上限设定依据：" : "HR cap basis: "}
-        {p.hrCapSource === "anchors" ? (isZh ? "历史实测比赛心率" : "Historical race HR") : (isZh ? "最大心率储备比例" : "Max HR reserve %")} —— {p.hrCapNote}
+        {p.hrCapSource === "anchors" ? (isZh ? "历史实测比赛心率" : "Historical race HR") : (isZh ? "最大心率储备比例" : "Max HR reserve %")} —— {formatHrCapNote(p.hrCapNote, isZh)}
       </div>
       {p.warnings.length > 0 && (
         <div style={{ marginTop: 10 }}>
@@ -406,7 +464,7 @@ function AnchorTable({ anchors, onChanged }: { anchors: RaceAnchor[]; onChanged?
               {anchors.map((a, i) => (
                 <tr key={a.labelId || i} style={{ opacity: a.excluded ? 0.55 : 1 }}>
                   <td>{a.date}</td>
-                  <td style={{ textAlign: "left" }}>{a.label}</td>
+                  <td style={{ textAlign: "left" }}>{formatCityLabel(a.label, isZh)}</td>
                   <td className="num">{fDur(a.seconds)}</td>
                   <td className="num" style={{ color: "var(--accent)", fontWeight: 600 }}>{fDur(a.seaLevelSec)}</td>
                   <td className="num">{a.climbRate} m/km</td>

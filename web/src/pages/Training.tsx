@@ -8,6 +8,7 @@ const CLASSIFICATION_EN_MAP: Record<string, string> = {
   "中等距离跑": "Medium Distance",
   "长距离跑": "Long Run",
   "间歇训练": "Intervals",
+  "间歇跑": "Intervals",
   "多次短距离": "Multiple Reps",
   "组合训练": "Mixed Workout",
   "轻松跑": "Easy Run",
@@ -18,12 +19,24 @@ const CLASSIFICATION_EN_MAP: Record<string, string> = {
   "冲刺跑": "Strides / Sprints",
   "越野跑": "Trail Run",
   "未分类跑": "Unclassified Run",
+  "单次训练": "Single Session",
+  "单次记录": "Single Run",
+  "常规训练": "Regular Run",
 };
 
 export function formatClassification(c: string | undefined | null, isZh = true) {
   if (!c) return "—";
   if (isZh) return c;
-  return CLASSIFICATION_EN_MAP[c] || c;
+  if (CLASSIFICATION_EN_MAP[c]) return CLASSIFICATION_EN_MAP[c];
+  if (c.includes("单次")) return "Single Session";
+  if (c.includes("间歇")) return "Intervals";
+  if (c.includes("恢复")) return "Recovery Run";
+  if (c.includes("长距离")) return "Long Run";
+  if (c.includes("中等距离")) return "Medium Distance";
+  if (c.includes("节奏")) return "Tempo Run";
+  if (c.includes("阈值")) return "Threshold Run";
+  if (c.includes("马拉松")) return "Marathon Pace";
+  return c;
 }
 
 export default function Training({

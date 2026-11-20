@@ -268,8 +268,20 @@ export default function SessionView({
       "热身/放松": "Warmup / Cooldown",
       "多次短距离": "Multiple Short Runs",
       "组合训练": "Combo Training",
+      "单次训练": "Single Session",
+      "单次记录": "Single Run",
+      "常规训练": "Regular Run",
     };
     return map[c] || c;
+  };
+
+  const formatClassificationReason = (r: string) => {
+    if (isZh) return r;
+    return r
+      .replace("单次", "Single")
+      .replace("累积", "Total")
+      .replace("共", "Total")
+      .replace("条记录", "records");
   };
 
   return (
@@ -302,7 +314,7 @@ export default function SessionView({
             <span className={`pill ${s.kind === "multi" ? "accent" : ""}`}>
               {s.kind === "multi" ? (isZh ? `${s.activityCount} 条记录合并` : `${s.activityCount} activities merged`) : t("session.singleActivity")}
             </span>
-            {"  "}{t("session.categorizedAs")} <strong style={{ color: "var(--accent)" }}>{getClassificationName(s.classification)}</strong> · {s.classificationReason}
+            {"  "}{t("session.categorizedAs")} <strong style={{ color: "var(--accent)" }}>{getClassificationName(s.classification)}</strong> · {formatClassificationReason(s.classificationReason)}
           </div>
         </div>
         <button className="btn" style={{ flexShrink: 0 }} onClick={onBack} title={isZh ? "返回上一级（快捷键：Esc 或鼠标后退键）" : "Back (Esc)"}>

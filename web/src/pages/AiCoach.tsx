@@ -128,6 +128,32 @@ export function translateStrengthRoutine(routine: StrengthRoutine, isZh: boolean
   };
 }
 
+export function formatFocusDesc(desc: string, type?: string, isZh?: boolean): string {
+  if (isZh) return desc;
+  if (type === "endurance_dominant" || desc.includes("VO2max") || desc.includes("速度无氧")) {
+    return "Schedule prioritized with VO2max cruise intervals (e.g. 1000m×6 reps) and lactate threshold (T) runs; 4-6 sets of 80-100m strides after easy runs to activate fast-twitch fibers; progressive acceleration to marathon goal pace in final 3-4km of long runs to break out of low-speed comfort zone.";
+  }
+  if (type === "speed_dominant" || desc.includes("Zone 2") || desc.includes("毛细血管")) {
+    return "Schedule significantly weighted toward Zone 2 pure aerobic base (E) and 22-26km weekend long runs (LSD), with strict HR cap; modest reduction in high-intensity anaerobic intervals to develop capillary beds and cardiac stroke volume.";
+  }
+  return "Strictly follow 80/20 polarized distribution (80% low-intensity aerobic + 20% high-intensity quality), progressing smoothly via 3:1 step-loading supercompensation, gradually converging toward marathon-specific pace as race day nears.";
+}
+
+export function formatCoachSummary(summary: string | undefined, isZh?: boolean): string {
+  if (!summary) return "";
+  if (isZh) return summary;
+  if (summary.includes("作为你的教练") || summary.includes("耐力型") || summary.includes("扎实的有氧耐力基础")) {
+    return "As your coach, I commend your solid aerobic endurance foundation. You are currently an endurance-dominant runner who performs well over long distances but needs higher neuromuscular recruitment. This bi-weekly schedule focuses on activating fast-twitch muscle fibers and raising your speed ceiling via intervals and tempo runs. Achieving your goal is a long-term macrocycle; the key priority now is to steadily elevate VO2max and lactate threshold while maintaining endurance, avoiding excessive pacing that could lead to injury.";
+  }
+  if (summary.includes("速度型") || summary.includes("短程爆发力")) {
+    return "As your coach, your speed and anaerobic capacity are impressive. Our current focus is expanding your aerobic tank and mitochondrial density via steady Zone 2 base runs and structured long runs, preventing late-race cardiac drift and muscle fatigue.";
+  }
+  if (summary.includes("基于近 8 周真实运动负荷") || summary.includes("极化与 Canova")) {
+    return "Based on past 8-week training load (Banister impulse-response model) · 80/20 polarized distribution & Canova specific pace convergence · Bi-weekly rolling adaptive closed-loop.";
+  }
+  return summary;
+}
+
 export function getStrengthRoutineForWorkout(
   workoutType: string,
   dayIndex: number,
@@ -1110,12 +1136,12 @@ export default function AiCoach({
                   )}
                   {baseline.phenotype?.prescription?.focusDesc && (
                     <span style={{ fontSize: 11, color: "var(--text-dim)" }}>
-                      · {baseline.phenotype.prescription.focusDesc}
+                      · {formatFocusDesc(baseline.phenotype.prescription.focusDesc, baseline.phenotype.type, isZh)}
                     </span>
                   )}
                 </div>
                 <p style={{ margin: 0, fontSize: 12, color: "var(--text-dim)", lineHeight: 1.55 }}>
-                  {(baseline as any).aiSummary}
+                  {formatCoachSummary((baseline as any).aiSummary, isZh)}
                 </p>
               </div>
             </div>

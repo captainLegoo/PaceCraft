@@ -32,6 +32,89 @@ const getStatusMap = (isZh: boolean) => ({
   unknown: { icon: "·", label: isZh ? "未知" : "Unknown", cls: "" },
 } as const);
 
+function formatChecklistLabel(c: Item, isZh: boolean): string {
+  if (isZh) return c.label;
+  if (c.key === "longRun") return "Longest Long Run";
+  if (c.key === "weeklyKm") {
+    const m = c.label.match(/\d+/);
+    return m ? `Past ${m[0]} Weeks Avg Mileage` : "Avg Weekly Mileage";
+  }
+  if (c.key === "quality") return "Weekly Quality Sessions";
+  if (c.key === "consistency") return "Training Frequency";
+  if (c.key === "volatility") return "Volume Volatility & Injury Risk";
+  if (c.key === "race") return "Race Day Readiness";
+  return c.label;
+}
+
+function formatChecklistValue(c: Item, isZh: boolean): string {
+  if (isZh) return c.value;
+  let val = c.value;
+  val = val.replace(/km\/周（峰值\s*([^）]+)）/, "km/wk (Peak $1)");
+  val = val.replace(/([\d.]+) 次\/周（近 (\d+) 周共 (\d+) 次）/, "$1 sessions/wk ($3 in past $2 wks)");
+  val = val.replace(/(\d+) 周共 (\d+) 场/, "$2 runs in $1 weeks");
+  val = val.replace(/还有 (\d+) 天（减量期）/, "$1 days to race (Taper)");
+  val = val.replace(/还有 (\d+) 天（关键期）/, "$1 days to race (Peak Build)");
+  val = val.replace(/还有 (\d+) 天（基础期）/, "$1 days to race (Base)");
+  val = val.replace(/还有 (\d+) 天（早期筹备）/, "$1 days to race (Early Phase)");
+  val = val.replace(/已结束/, "Completed");
+  return val;
+}
+
+function formatChecklistDetail(c: Item, isZh: boolean): string {
+  if (isZh) return c.detail;
+  if (c.key === "longRun") {
+    if (c.status === "ok") return "Completed 30km+ long run; crucial single-session endurance test passed.";
+    if (c.status === "warn") {
+      const m = c.detail.match(/最长\s*([\d.]+)km/);
+      return `Current longest is ${m ? m[1] : ""}km. Recommended to complete at least one 30km+ run before race day.`;
+    }
+    const m = c.detail.match(/最长只有\s*([\d.]+)km/);
+    return `Current longest is only ${m ? m[1] : ""}km. Significant aerobic gap remains for full marathon endurance.`;
+  }
+  if (c.key === "weeklyKm") {
+    if (c.status === "ok") return "Weekly mileage is within a healthy and solid range for marathon runners.";
+    if (c.status === "warn") return "Weekly mileage is somewhat low; marathon pace stability typically requires deeper aerobic volume.";
+    return "Weekly mileage is noticeably insufficient; high risk for running a full marathon on this baseline.";
+  }
+  if (c.key === "quality") {
+    let base = c.status === "ok"
+      ? "Quality workout frequency is well balanced: stimulates threshold without excessive fatigue accumulation."
+      : c.status === "warn"
+      ? "Quality workouts are slightly lacking; threshold and running economy adaptations may be limited."
+      : "Virtually no quality workouts; high risk of late-race pacing collapse.";
+    if (c.detail.includes("判定标准")) {
+      base += " (Threshold criteria: lap avg HR ≥ regression threshold line for ≥10 cumulative min).";
+    }
+    return base;
+  }
+  if (c.key === "consistency") {
+    return c.status === "ok"
+      ? "Consistent training frequency; aerobic base continues to accumulate steadily."
+      : "Training frequency is low; be cautious of stagnation in aerobic adaptations.";
+  }
+  if (c.key === "volatility") {
+    if (c.status === "bad") {
+      return "Weekly mileage spiked by over 20%, an established indicator for elevated injury risk.";
+    }
+    if (c.status === "warn") {
+      return "Weekly mileage volatility is elevated. Consider introducing scheduled recovery weeks.";
+    }
+    return "Weekly mileage builds progressively with stable week-over-week consistency.";
+  }
+  if (c.key === "race") {
+    if (c.detail.includes("减量期")) {
+      return "Entering final 7 days: should be in taper mode, volume reduced to 40-50% while preserving short race-pace sharpness.";
+    }
+    if (c.detail.includes("3 周") || c.detail.includes("关键期")) {
+      return "Within 3 weeks to race day: peak training window. Aim for 30km+ long runs every 10 days.";
+    }
+    if (c.detail.includes("两个月")) {
+      return "Over 2 months until race day: focus primarily on steady aerobic base building.";
+    }
+  }
+  return c.detail;
+}
+
 export default function RacePrep({ aiConfigured, dataVersion = 0 }: { aiConfigured: boolean; dataVersion?: number }) {
   const { isZh } = useI18n();
   const [weeks, setWeeks] = useState(8);
@@ -171,10 +254,10 @@ export default function RacePrep({ aiConfigured, dataVersion = 0 }: { aiConfigur
                 <span className={`check-mark ${st.cls}`}>{st.icon}</span>
                 <div className="check-body">
                   <div className="check-head">
-                    <span className="check-label">{c.label}</span>
-                    <span className="check-value">{c.value}</span>
+                    <span className="check-label">{formatChecklistLabel(c, isZh)}</span>
+                    <span className="check-value">{formatChecklistValue(c, isZh)}</span>
                   </div>
-                  <div className="check-detail">{c.detail}</div>
+                  <div className="check-detail">{formatChecklistDetail(c, isZh)}</div>
                 </div>
               </div>
             );

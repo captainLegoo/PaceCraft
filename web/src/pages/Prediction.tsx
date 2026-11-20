@@ -63,6 +63,75 @@ const getTierDesc = (isZh: boolean): Record<string, { label: string; color: stri
   C: { label: isZh ? "C 级" : "Tier C", color: "var(--text-faint)", desc: isZh ? "短距离锚点：训练中的短距离几乎不是全力，系统性偏保守" : "Short-distance: Workouts rarely full-out, conservatively weighted" },
 });
 
+const FATIGUE_LABEL_EN: Record<string, string> = {
+  "状态充沛": "Fresh",
+  "正常": "Optimal",
+  "轻度疲劳": "Mild Fatigue",
+  "中度疲劳": "Fatigued",
+  "高度疲劳": "Overload",
+  "疲劳很低": "Very Low Fatigue",
+  "疲劳较低": "Low Fatigue",
+  "疲劳适中": "Moderate Fatigue",
+  "疲劳较高": "High Fatigue",
+  "极度疲劳": "Severe Fatigue",
+};
+
+const FATIGUE_COMP_LABEL_EN: Record<string, string> = {
+  "负荷累积": "Acute Load",
+  "恢复不足": "Insufficient Recovery",
+  "累积压力": "Accumulated Stress",
+};
+
+function formatFatigueText(text: string | undefined, isZh: boolean): string {
+  if (!text) return "";
+  if (isZh) return text;
+  return text
+    .replace(/负荷与恢复处于平衡状态。?/g, "Training load and recovery are well balanced.")
+    .replace(/近期训练刺激处于平稳恢复区间。?/g, "Recent training stimulus is within steady recovery zone.")
+    .replace(/活动\s*(\d+)\s*天\s*\/\s*休息\s*(\d+)\s*天[，,]\s*静息心率\s*(\d+)\s*天\s*\((\d+)\s*个取值\)[，,]\s*覆盖充分。?/g,
+      "$1 active days / $2 rest days, resting HR $3 days ($4 readings), adequate coverage.")
+    .replace(/累积负荷\s*(\d+)\s*对\s*(\d+)\s*天活动日基线\s*(\d+)\s*\(([^)]+)\)[，,]\s*当日负荷\s*(\d+)/g,
+      "Cumulative load $1 vs $2d active baseline $3 ($4), today's load $5")
+    .replace(/近\s*(\d+)\s*天静息心率中位\s*(\d+bpm)[，,]\s*基线\s*(\d+bpm)\s*\(([^)]+)\)/g,
+      "Past $1d resting HR median $2, baseline $3 ($4)")
+    .replace(/最近没有连续高负荷\s*\(阈值\s*(\d+)\)/g,
+      "No consecutive high-load days recently (threshold $1)");
+}
+
+const DIST_NAME_EN: Record<string, string> = {
+  "5 公里": "5 km",
+  "10 公里": "10 km",
+  "15 公里": "15 km",
+  "半程马拉松": "Half Marathon",
+  "全程马拉松": "Marathon",
+};
+
+const ZONE_NAME_EN: Record<string, string> = {
+  "轻松跑": "Easy (E)",
+  "马拉松配速": "Marathon Pace (M)",
+  "半马配速": "Half Marathon (HMP)",
+  "阈值配速": "Threshold (T)",
+  "间歇配速": "Intervals (I)",
+};
+
+const ZONE_PURPOSE_EN: Record<string, string> = {
+  "恢复性跑量，能正常说话": "Recovery mileage, conversational rhythm",
+  "比赛日目标强度": "Race day target cruising effort",
+  "MP 跑训练，比 MP 快 5~10 秒": "Threshold tempo, 5-10s faster than MP",
+  "乳酸阈值，约 30 分钟比赛强度": "Lactate threshold, ~30-60 min race effort",
+  "5K 比赛强度，仅短间歇": "5K race effort, short VO2max intervals",
+};
+
+function formatCalibMethod(text: string | undefined, isZh: boolean): string {
+  if (!text) return "";
+  if (isZh) return text;
+  return text
+    .replace(/有氧区间稳健回归\s*\(配速\s*([^,]+)[,，]\s*n=(\d+)[,，]\s*R²=([^)]+)\)/g,
+      "Robust aerobic regression (Pace $1, n=$2, R²=$3)")
+    .replace(/同强度层内\s*(\d+)\s*组配对[，,]\s*中位\s*k=([^\s(]+)\s*\(四分位宽\s*([^)]+)\)[，,]\s*偏理论\s*([^\s]+)\s*([^\s]+)/g,
+      "$1 paired sets at equal intensity, median k=$2 (IQR $3), $5 vs theoretical $4");
+}
+
 export default function Prediction() {
   const { isZh } = useI18n();
   const TIER_DESC = getTierDesc(isZh);
@@ -125,7 +194,7 @@ export default function Prediction() {
           <h3 className="card-title">
             {isZh ? "疲劳指数" : "Fatigue Index"}
             <span className={`pill ${d.fatigue.tone}`} style={{ marginLeft: 10 }}>
-              {d.fatigue.label}
+              {isZh ? d.fatigue.label : (FATIGUE_LABEL_EN[d.fatigue.label] || d.fatigue.label)}
             </span>
             <span className="pill" style={{ marginLeft: 6 }}>
               {isZh ? `可信度 ${d.fatigue.reliability}` : `Reliability: ${d.fatigue.reliability === "高" ? "High" : d.fatigue.reliability === "中" ? "Med" : "Low"}`}
@@ -167,7 +236,7 @@ export default function Prediction() {
                 <span className="num" style={{ fontSize: 28, fontWeight: 700, color: `var(--${d.fatigue.tone})` }}>
                   {d.fatigue.score}<span style={{ fontSize: 13, opacity: .55 }}>/100</span>
                 </span>
-                <span className="hint">{d.fatigue.reliabilityNote}</span>
+                <span className="hint">{formatFatigueText(d.fatigue.reliabilityNote, isZh)}</span>
               </div>
             </div>
 
@@ -188,12 +257,12 @@ export default function Prediction() {
                 ))}
               </div>
               <div className="hint" style={{ marginTop: 6 }}>
-                {d.fatigue.level}/10 · {d.fatigue.levelLabel}
+                {d.fatigue.level}/10 · {isZh ? d.fatigue.levelLabel : (FATIGUE_LABEL_EN[d.fatigue.levelLabel] || d.fatigue.levelLabel)}
               </div>
             </div>
           </div>
 
-          <div className="hint" style={{ marginTop: 12, marginBottom: 4 }}>{d.fatigue.summary}</div>
+          <div className="hint" style={{ marginTop: 12, marginBottom: 4 }}>{formatFatigueText(d.fatigue.summary, isZh)}</div>
 
           {/* 分量拆解 */}
           <div className="grid g3" style={{ marginTop: 12 }}>
@@ -204,7 +273,7 @@ export default function Prediction() {
               }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 6 }}>
                   <strong style={{ fontSize: 13 }}>
-                    {c.label}
+                    {isZh ? c.label : (FATIGUE_COMP_LABEL_EN[c.label] || c.label)}
                     {!c.active && <span className="hint" style={{ marginLeft: 6, fontWeight: 400 }}>{isZh ? "· 未计入" : "· Inactive"}</span>}
                   </strong>
                   <span className="hint">{isZh ? "权重 " : "Weight "}{(c.weight * 100).toFixed(0)}%</span>
@@ -215,7 +284,7 @@ export default function Prediction() {
                     background: c.active ? "var(--warn)" : "var(--border)",
                   }} />
                 </div>
-                <div className="hint">{c.note}</div>
+                <div className="hint">{formatFatigueText(c.note, isZh)}</div>
               </div>
             ))}
           </div>
@@ -350,7 +419,7 @@ export default function Prediction() {
               <tr key={t.terrain}>
                 <td>
                   <span className="pill" style={{ color: t.terrain === "flat" ? "var(--z2)" : "var(--warn)", borderColor: "var(--border-strong)" }}>
-                    {t.label}
+                    {isZh ? t.label : (t.terrain === "flat" ? "Flat" : "Rolling")}
                   </span>
                 </td>
                 <td className="num">{t.count}</td>
@@ -396,7 +465,7 @@ export default function Prediction() {
                     onClick={() => setOpenModels(isOpen ? null : String(p.distanceKm))}
                     title={isOpen ? (isZh ? "点击收起模型明细" : "Click to collapse details") : (isZh ? "点击展开模型明细" : "Click to expand details")}
                   >
-                    <td>{p.name}</td>
+                    <td>{isZh ? p.name : (DIST_NAME_EN[p.name] || p.name)}</td>
                     <td className="num" style={{ color: "var(--accent)", fontWeight: 600 }}>{fmtT(p.seconds)}</td>
                     <td className="num">{fmtP(p.paceSec)}</td>
                     <td className="num" style={{ color: "var(--text-faint)" }}>{fmtT(p.low)} ~ {fmtT(p.high)}</td>
@@ -498,10 +567,10 @@ export default function Prediction() {
             <tbody>
               {d.zones.map((z) => (
                 <tr key={z.name}>
-                  <td><span className="pill" style={{ color: z.color, borderColor: "var(--border-strong)" }}>{z.name}</span></td>
+                  <td><span className="pill" style={{ color: z.color, borderColor: "var(--border-strong)" }}>{isZh ? z.name : (ZONE_NAME_EN[z.name] || z.name)}</span></td>
                   <td className="num" style={{ color: z.color, fontWeight: 600 }}>{fmtP(z.paceSec)}/km</td>
                   <td className="num" style={{ color: "var(--hr)" }}>{z.hr ? `${z.hr.toFixed(0)} bpm` : "—"}</td>
-                  <td style={{ textAlign: "left", color: "var(--text-dim)", fontSize: 12 }}>{z.purpose}</td>
+                  <td style={{ textAlign: "left", color: "var(--text-dim)", fontSize: 12 }}>{isZh ? z.purpose : (ZONE_PURPOSE_EN[z.purpose] || z.purpose)}</td>
                 </tr>
               ))}
             </tbody>
@@ -514,11 +583,11 @@ export default function Prediction() {
             <tbody>
               <tr>
                 <td style={{ textAlign: "left", color: "var(--text-dim)" }}>{isZh ? "阈值配速" : "Threshold Pace"}</td>
-                <td className="num" style={{ textAlign: "left", whiteSpace: "normal" }}>{d.threshold.method}</td>
+                <td className="num" style={{ textAlign: "left", whiteSpace: "normal" }}>{formatCalibMethod(d.threshold.method, isZh)}</td>
               </tr>
               <tr>
                 <td style={{ textAlign: "left", color: "var(--text-dim)" }}>{isZh ? "个人 k 值" : "Individual k-Exponent"}</td>
-                <td className="num" style={{ textAlign: "left", whiteSpace: "normal" }}>{d.exponent.note}</td>
+                <td className="num" style={{ textAlign: "left", whiteSpace: "normal" }}>{formatCalibMethod(d.exponent.note, isZh)}</td>
               </tr>
               <tr>
                 <td style={{ textAlign: "left", color: "var(--text-dim)" }}>{isZh ? "为什么不用短距离" : "Why discount short efforts?"}</td>
