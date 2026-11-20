@@ -17,5 +17,9 @@
   "firstHalf": "First Half (First 50% Time)",
   "secondHalf": "Second Half (Second 50% Time)",
   "secondHalfSensations": "Second-half Sensations",
-  "diagnosis": "Diagnosis"
+  "diagnosis": "Diagnosis",
+  "singleActivity": "Single Activity",
+  "categorizedAs": "Categorized as",
+  "avgHr": "Avg Heart Rate",
+  "trainingLoadTotal": "Total Training Load"
 }

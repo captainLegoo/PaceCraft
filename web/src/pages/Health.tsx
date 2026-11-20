@@ -86,7 +86,7 @@ export default function Health() {
         date: s.date,
         brand: "coros",
         score: s.score,
-        detail: "入睡佩戴正常",
+        detail: isZh ? "入睡佩戴正常" : "Normal sleep tracking",
       });
     }
   }

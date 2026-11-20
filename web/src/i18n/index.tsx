@@ -115,6 +115,8 @@ export function useI18n(): I18nContextValue {
   return ctx;
 }
 
+import { IconGlobe } from "../icons";
+
 /** 紧凑的快捷语言切换按钮（可在暗/明模式与各端自适应） */
 export function LanguageToggle() {
   const { toggleLocale, isZh } = useI18n();
@@ -126,10 +128,10 @@ export function LanguageToggle() {
       title={isZh ? "Switch to English" : "切换为简体中文"}
       aria-label={isZh ? "Switch to English" : "切换为简体中文"}
     >
-      <span className="ctrl-icon" aria-hidden style={{ fontSize: 13 }}>
-        🌐
+      <span className="ctrl-icon" aria-hidden>
+        <IconGlobe size={14} />
       </span>
-      <span>{isZh ? "EN" : "中文"}</span>
+      <span>{isZh ? "English" : "中文"}</span>
     </button>
   );
 }

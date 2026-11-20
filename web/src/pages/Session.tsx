@@ -30,7 +30,7 @@ export default function SessionView({
       <div style={{ padding: 20 }}>
         <div className="banner error">{err || (d as any)?.error}</div>
         <button className="btn" onClick={onBack} style={{ marginTop: 12 }}>
-          <IconBack size={15} />返回
+          <IconBack size={15} />{t("common.back")}
         </button>
       </div>
     );
@@ -62,7 +62,7 @@ export default function SessionView({
 
   const getBrandName = (act?: typeof actA) => {
     if (!act) return "";
-    const brand = act.source === "garmin" ? "佳明" : "高驰";
+    const brand = act.source === "garmin" ? (isZh ? "佳明" : "Garmin") : (isZh ? "高驰" : "COROS");
     if (actA && actB && actA.source === actB.source) {
       return `${brand} (${act.distanceKm}km)`;
     }
@@ -100,7 +100,7 @@ export default function SessionView({
   laps.forEach((l, i) => {
     const prev = laps[i - 1];
     if (prev && prev.labelId !== l.labelId) {
-      chartLabels.push(`组间休息 ${fmtDur(l.elapsedSec - prev.elapsedSec)}`);
+      chartLabels.push(isZh ? `组间休息 ${fmtDur(l.elapsedSec - prev.elapsedSec)}` : `Rest ${fmtDur(l.elapsedSec - prev.elapsedSec)}`);
       chartX.push((prev.elapsedSec + l.elapsedSec) / 2);
       paceSeries.push(null);
       hrSeries.push(null);
@@ -158,7 +158,7 @@ export default function SessionView({
   // 对比曲线序列构建
   const maxLapCount = Math.max(laps.length, comparisonLaps.length);
   const compareLapIndexes = Array.from({ length: maxLapCount }, (_, i) => i + 1);
-  const compareChartLabels = compareLapIndexes.map((idx) => `第 ${idx} 圈`);
+  const compareChartLabels = compareLapIndexes.map((idx) => (isZh ? `第 ${idx} 圈` : `Lap ${idx}`));
 
   const compHrA = compareLapIndexes.map((idx) => {
     const l = laps.find((item) => item.lapIndex === idx);
@@ -483,7 +483,7 @@ export default function SessionView({
 
             <div className="card stat-card">
               <div className="stat">
-                <span className="label"><IconTrend size={15} />累计爬升对比</span>
+                <span className="label"><IconTrend size={15} />{isZh ? "累计爬升对比" : "Elevation Gain Comparison"}</span>
                 <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginTop: 4 }}>
                   <span style={{ fontSize: 18, fontWeight: 700, color: colorA }}>{compStats?.primary?.elevGain ?? "—"}<span style={{ fontSize: 12, fontWeight: 400 }}>m</span></span>
                   <span style={{ color: "var(--text-faint)", fontSize: 12 }}>vs</span>
@@ -492,7 +492,7 @@ export default function SessionView({
                 <div style={{ marginTop: 6 }}>
                   {compStats?.delta?.elevGainDiff != null ? (
                     <span className="pill" style={{ fontSize: 11, padding: "1px 6px" }}>
-                      差异: {compStats.delta.elevGainDiff > 0 ? `+${compStats.delta.elevGainDiff}` : compStats.delta.elevGainDiff} m
+                      {t("common.diff")}: {compStats.delta.elevGainDiff > 0 ? `+${compStats.delta.elevGainDiff}` : compStats.delta.elevGainDiff} m
                     </span>
                   ) : "—"}
                 </div>
@@ -504,9 +504,11 @@ export default function SessionView({
           <div className="card" style={{ marginBottom: 14 }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12, flexWrap: "wrap", gap: 10 }}>
               <div>
-                <h3 className="card-title">分圈同屏曲线重叠对比</h3>
+                <h3 className="card-title">{isZh ? "分圈同屏曲线重叠对比" : "Synchronized Laps Comparison"}</h3>
                 <p className="card-sub">
-                  两块手表按各分圈同轴对齐，一眼研判光电心率响应延迟、起伏与配速一致性
+                  {isZh
+                    ? "两块手表按各分圈同轴对齐，一眼研判光电心率响应延迟、起伏与配速一致性"
+                    : "Aligned across identical laps to evaluate optical HR lag, pace fidelity, and cadence accuracy"}
                 </p>
               </div>
               <div style={{ display: "inline-flex", background: "var(--border)", padding: 2, borderRadius: 6, gap: 2 }}>
@@ -515,21 +517,21 @@ export default function SessionView({
                   onClick={() => setCompareMetric("hr")}
                   style={{ borderRadius: 4 }}
                 >
-                  ❤️ 心率重叠
+                  ❤️ {isZh ? "心率重叠" : "Heart Rate"}
                 </button>
                 <button
                   className={`btn xs ${compareMetric === "pace" ? "primary" : "ghost"}`}
                   onClick={() => setCompareMetric("pace")}
                   style={{ borderRadius: 4 }}
                 >
-                  ⚡ 配速重叠
+                  ⚡ {isZh ? "配速重叠" : "Pace"}
                 </button>
                 <button
                   className={`btn xs ${compareMetric === "cadence" ? "primary" : "ghost"}`}
                   onClick={() => setCompareMetric("cadence")}
                   style={{ borderRadius: 4 }}
                 >
-                  👟 步频重叠
+                  👟 {isZh ? "步频重叠" : "Cadence"}
                 </button>
               </div>
             </div>
@@ -538,8 +540,8 @@ export default function SessionView({
               <LineChart
                 labels={compareChartLabels}
                 series={[
-                  { key: "hrA", label: `${brandA} 心率 (bpm)`, color: colorA, values: compHrA },
-                  { key: "hrB", label: `${brandB} 心率 (bpm)`, color: colorB, values: compHrB },
+                  { key: "hrA", label: `${brandA} ${isZh ? "心率 (bpm)" : "HR (bpm)"}`, color: colorA, values: compHrA },
+                  { key: "hrB", label: `${brandB} ${isZh ? "心率 (bpm)" : "HR (bpm)"}`, color: colorB, values: compHrB },
                 ]}
                 yFmt={(n) => `${Math.round(n)} bpm`}
                 height={240}
@@ -551,8 +553,8 @@ export default function SessionView({
               <LineChart
                 labels={compareChartLabels}
                 series={[
-                  { key: "paceA", label: `${brandA} 配速`, color: colorA, values: compPaceA },
-                  { key: "paceB", label: `${brandB} 配速`, color: colorB, values: compPaceB },
+                  { key: "paceA", label: `${brandA} ${isZh ? "配速" : "Pace"}`, color: colorA, values: compPaceA },
+                  { key: "paceB", label: `${brandB} ${isZh ? "配速" : "Pace"}`, color: colorB, values: compPaceB },
                 ]}
                 yFmt={fmtPace}
                 yInvert={true}
@@ -565,8 +567,8 @@ export default function SessionView({
               <LineChart
                 labels={compareChartLabels}
                 series={[
-                  { key: "cadA", label: `${brandA} 步频 (spm)`, color: colorA, values: compCadA },
-                  { key: "cadB", label: `${brandB} 步频 (spm)`, color: colorB, values: compCadB },
+                  { key: "cadA", label: `${brandA} ${isZh ? "步频 (spm)" : "Cadence (spm)"}`, color: colorA, values: compCadA },
+                  { key: "cadB", label: `${brandB} ${isZh ? "步频 (spm)" : "Cadence (spm)"}`, color: colorB, values: compCadB },
                 ]}
                 yFmt={(n) => `${Math.round(n)} spm`}
                 height={240}
@@ -575,9 +577,9 @@ export default function SessionView({
             )}
 
             <div style={{ fontSize: 12, color: "var(--text-dim)", marginTop: 10, lineHeight: 1.6, padding: "8px 12px", background: "var(--bg-subtle, rgba(255,255,255,0.03))", borderRadius: 6 }}>
-              💡 <strong>跑者验表观察指引：</strong>
-              <br />• <strong>光电心率稳定性</strong>：如果前 1~2 公里两表心率曲线有较大偏差随后重合，多为冷启动阶段体温或佩戴松紧度差异；若中后程剧烈变速时某表响应滞后 5~15 秒，是由于不同算法滤波平滑窗口长度不同。
-              <br />• <strong>GPS 与距离测算</strong>：高楼林立或树荫遮蔽路段可能导致瞬时轨迹抖动，一般全场距离差异在 ±1% 以内均属两家 GPS 滤波芯片正常公差范围。
+              💡 <strong>{isZh ? "跑者验表观察指引：" : "Watch Comparison Guidelines:"}</strong>
+              <br />• <strong>{isZh ? "光电心率稳定性" : "Optical HR Stability"}</strong>: {isZh ? "如果前 1~2 公里两表心率曲线有较大偏差随后重合，多为冷启动阶段体温或佩戴松紧度差异；若中后程剧烈变速时某表响应滞后 5~15 秒，是由于不同算法滤波平滑窗口长度不同。" : "Discrepancies in initial 1-2 km typically stem from cold start or strap tension. Response lags during surges reflect differing smoothing filter windows."}
+              <br />• <strong>{isZh ? "GPS 与距离测算" : "GPS & Distance Measurement"}</strong>: {isZh ? "高楼林立或树荫遮蔽路段可能导致瞬时轨迹抖动，一般全场距离差异在 ±1% 以内均属两家 GPS 滤波芯片正常公差范围。" : "Urban canyons or canopy cover can cause minor jitter. Distance variance within ±1% is standard sensor tolerance."}
             </div>
           </div>
 
@@ -667,23 +669,47 @@ export default function SessionView({
         <div>
           {multi && (
             <div className="banner info">
-              这场训练被手表记录成 <strong>{s.activityCount} 条</strong>，已合并为一次整体分析。
-              同一天里间隔超过 4 小时的记录会被判定为<strong>另一场</strong>独立训练，所以早晚各跑一次不会被混在一起。
+              {isZh ? (
+                <>
+                  这场训练被手表记录成 <strong>{s.activityCount} 条</strong>，已合并为一次整体分析。
+                  同一天里间隔超过 4 小时的记录会被判定为<strong>另一场</strong>独立训练，所以早晚各跑一次不会被混在一起。
+                </>
+              ) : (
+                <>
+                  This session consists of <strong>{s.activityCount} activities</strong> recorded on your watch and merged into one unified analysis.
+                  Activities separated by over 4 hours on the same day are recognized as <strong>distinct sessions</strong>.
+                </>
+              )}
             </div>
           )}
 
           {hasConflict && actA && actB && (
             <div className="banner info" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 12, marginBottom: 14 }}>
               <div style={{ minWidth: 240, flex: "1 1 260px" }}>
-                <div style={{ fontWeight: 600 }}>⌚ 智能识别：检测到同一场训练的双表记录</div>
+                <div style={{ fontWeight: 600 }}>
+                  {isZh ? "⌚ 智能识别：检测到同一场训练的双表记录" : "⌚ Dual-Watch Detected: Concurrent recordings of the same workout"}
+                </div>
                 {isKeepBoth ? (
                   <div style={{ fontSize: 12, marginTop: 3, color: "var(--text-dim)" }}>
-                    当前设定为：<strong>保留两只手表独立计算跑量</strong>（{brandA} {actA.distanceKm} km · {brandB} {actB.distanceKm} km）。
+                    {isZh ? (
+                      <>当前设定为：<strong>保留两只手表独立计算跑量</strong>（{brandA} {actA.distanceKm} km · {brandB} {actB.distanceKm} km）。</>
+                    ) : (
+                      <>Currently set to: <strong>Keep both watches independently</strong> ({brandA} {actA.distanceKm} km · {brandB} {actB.distanceKm} km).</>
+                    )}
                   </div>
                 ) : (
                   <div style={{ fontSize: 12, marginTop: 3, color: "var(--text-dim)" }}>
-                    已选定<strong>{brandA}（{actA.distanceKm} km）</strong>作为主力有效成绩计入周跑量与训练负荷；
-                    <strong>{brandB}（{actB.distanceKm} km）</strong>归档为对比样本，不重复累加。
+                    {isZh ? (
+                      <>
+                        已选定<strong>{brandA}（{actA.distanceKm} km）</strong>作为主力有效成绩计入周跑量与训练负荷；
+                        <strong>{brandB}（{actB.distanceKm} km）</strong>归档为对比样本，不重复累加。
+                      </>
+                    ) : (
+                      <>
+                        Selected <strong>{brandA} ({actA.distanceKm} km)</strong> as primary workout;
+                        <strong>{brandB} ({actB.distanceKm} km)</strong> archived for comparison without double-counting mileage.
+                      </>
+                    )}
                   </div>
                 )}
               </div>
@@ -693,7 +719,7 @@ export default function SessionView({
                   onClick={() => setViewTab("compare")}
                   style={{ display: "inline-flex", alignItems: "center", gap: 4 }}
                 >
-                  ⚖️ 查看双表同屏对比
+                  ⚖️ {isZh ? "查看双表同屏对比" : "Compare Both Watches"}
                 </button>
                 {!isKeepBoth ? (
                   <>
@@ -701,13 +727,13 @@ export default function SessionView({
                       className="btn sm"
                       onClick={() => handleResolve(actB.labelId, actA.labelId, "set_primary")}
                     >
-                      设 {brandB} 为主力
+                      {isZh ? `设 ${brandB} 为主力` : `Set ${brandB} as Primary`}
                     </button>
                     <button
                       className="btn sm"
                       onClick={() => handleResolve(actA.labelId, actB.labelId, "keep_both")}
                     >
-                      保留两者（独立训练）
+                      {isZh ? "保留两者（独立训练）" : "Keep Both (Independent)"}
                     </button>
                   </>
                 ) : (
@@ -716,13 +742,13 @@ export default function SessionView({
                       className="btn sm"
                       onClick={() => handleResolve(actA.labelId, actB.labelId, "set_primary")}
                     >
-                      设 {brandA} 为主力
+                      {isZh ? `设 ${brandA} 为主力` : `Set ${brandA} as Primary`}
                     </button>
                     <button
                       className="btn sm"
                       onClick={() => handleResolve(actB.labelId, actA.labelId, "set_primary")}
                     >
-                      设 {brandB} 为主力
+                      {isZh ? `设 ${brandB} 为主力` : `Set ${brandB} as Primary`}
                     </button>
                   </>
                 )}
@@ -941,15 +967,15 @@ export default function SessionView({
             </div>
 
             {reports.length === 0 ? (
-              <div className="empty">还没有分析记录</div>
+              <div className="empty">{isZh ? "还没有分析记录" : "No analysis records yet"}</div>
             ) : (
               reports.map((r) => (
                 <div key={r.id} style={{ borderTop: "1px solid var(--border)", paddingTop: 14, marginTop: 14 }}>
                   <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 10, flexWrap: "wrap", minWidth: 0, maxWidth: "100%" }}>
                     <span className="pill accent">{r.model}</span>
-                    <span className="hint">{new Date(r.createdAt * 1000).toLocaleString("zh-CN")}</span>
-                    <span className="pill">{r.activityCount} 条记录</span>
-                    {r.focus && <span className="pill pill-focus">关注：{r.focus}</span>}
+                    <span className="hint">{new Date(r.createdAt * 1000).toLocaleString(isZh ? "zh-CN" : "en-US")}</span>
+                    <span className="pill">{isZh ? `${r.activityCount} 条记录` : `${r.activityCount} activities`}</span>
+                    {r.focus && <span className="pill pill-focus">{isZh ? `关注：${r.focus}` : `Focus: ${r.focus}`}</span>}
                   </div>
                   <Markdown text={r.report} />
                   <AiDisclaimerNotice />

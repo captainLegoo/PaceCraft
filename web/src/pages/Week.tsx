@@ -3,6 +3,7 @@ import { api, type LoadPoint, type Session, type Weekly, type WeekReport } from 
 import { AiDisclaimerNotice, BarChart, Markdown, fmtDate, fmtDur, fmtPace, paceColor } from "../charts";
 import { IconBack, IconCalendar, IconLoad, IconRoute, IconRun } from "../icons";
 import { useI18n } from "../i18n";
+import { formatClassification } from "./Training";
 
 /**
  * 周汇总视图。
@@ -132,7 +133,7 @@ export default function Week({
       [fmtDur(s.totals.durationSec), isZh ? "时长" : "Duration"],
       [fmtPace(s.totals.durationSec / s.totals.distanceKm) + " /km", isZh ? "配速" : "Pace"],
       [`${s.totals.avgHr ?? "—"} bpm`, isZh ? "平均心率" : "Avg HR"],
-      [s.classification, isZh ? "类型" : "Type"],
+      [formatClassification(s.classification, isZh), isZh ? "类型" : "Type"],
     ] as [string, string][],
   }));
 
@@ -251,7 +252,7 @@ export default function Week({
                       <td className="num">{daySessions.reduce((n, s) => n + (s.totals.trainingLoad || 0), 0) || "—"}</td>
                       <td style={{ textAlign: "left" }}>
                         <span className={`pill ${daySessions[0].classification === "间歇训练" ? "accent" : ""}`}>
-                          {daySessions.map((s) => s.classification).join(" + ")}
+                          {daySessions.map((s) => formatClassification(s.classification, isZh)).join(" + ")}
                         </span>
                       </td>
                     </tr>
@@ -290,7 +291,7 @@ export default function Week({
                     <tr key={s.key} className="clickable" onClick={() => onOpenSession(s.key)}>
                       <td>{s.date.slice(5)}</td>
                       <td style={{ textAlign: "left" }}>
-                        <span className={`pill ${s.kind === "multi" ? "accent" : ""}`}>{s.classification}</span>
+                        <span className={`pill ${s.kind === "multi" ? "accent" : ""}`}>{formatClassification(s.classification, isZh)}</span>
                       </td>
                       <td className="num">{s.activityCount}</td>
                       <td className="num">{s.totals.distanceKm}</td>

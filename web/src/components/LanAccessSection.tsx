@@ -142,7 +142,11 @@ export default function LanAccessSection() {
       </div>
 
       <p className="card-sub" style={{ margin: "6px 0 10px" }}>
-        跑步回来往沙发上一躺，手机扫码即可直接查看大屏看板与 AI 复盘。支持<strong>「添加到主屏幕」</strong>免上架全屏使用，数据 100% 仅保存在电脑本地。
+        {isZh ? (
+          <>跑步回来往沙发上一躺，手机扫码即可直接查看大屏看板与 AI 复盘。支持<strong>「添加到主屏幕」</strong>免上架全屏使用，数据 100% 仅保存在电脑本地。</>
+        ) : (
+          <>Relax after your run and scan with your phone to view dashboard charts and AI analysis. Supports <strong>"Add to Home Screen"</strong> for full-screen PWA experience; data stays 100% on your local computer.</>
+        )}
       </p>
 
       {error && (
@@ -200,14 +204,14 @@ export default function LanAccessSection() {
             >
               <QrCode text={activeUrl} size={118} border={2} />
               <div style={{ fontSize: 10.5, color: "#4b5563", fontWeight: 600 }}>
-                手机自带相机扫码
+                {isZh ? "手机自带相机扫码" : "Scan with camera"}
               </div>
             </div>
 
             {/* 访问地址与操作 */}
             <div style={{ flex: 1, minWidth: 180, display: "flex", flexDirection: "column", gap: 6 }}>
               <div style={{ fontSize: 12, color: "var(--text-dim)", fontWeight: 500 }}>
-                手机浏览器访问网址：
+                {isZh ? "手机浏览器访问网址：" : "Mobile Browser URL:"}
               </div>
               <div
                 style={{
@@ -240,13 +244,13 @@ export default function LanAccessSection() {
                     padding: "4px 10px",
                   }}
                 >
-                  {copied ? "✓ 已复制到剪贴板" : "📋 复制网址"}
+                  {copied ? (isZh ? "✓ 已复制到剪贴板" : "✓ Copied to clipboard") : (isZh ? "📋 复制网址" : "📋 Copy URL")}
                 </button>
 
                 {/* 多网卡切换 */}
                 {status.allIps && status.allIps.length > 1 && (
                   <div style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 11.5 }}>
-                    <span style={{ color: "var(--text-dim)" }}>网卡:</span>
+                    <span style={{ color: "var(--text-dim)" }}>{isZh ? "网卡:" : "NIC:"}</span>
                     <select
                       value={activeIp}
                       onChange={(e) => setSelectedIp(e.target.value)}
@@ -270,7 +274,7 @@ export default function LanAccessSection() {
               </div>
 
               <div style={{ fontSize: 11, color: "var(--text-dim)", lineHeight: 1.4 }}>
-                手机与电脑连同一个 Wi-Fi 即可秒开。
+                {isZh ? "手机与电脑连同一个 Wi-Fi 即可秒开。" : "Connect your phone and computer to the same Wi-Fi to access."}
               </div>
             </div>
           </div>
@@ -299,23 +303,23 @@ export default function LanAccessSection() {
                   gap: 6,
                 }}
               >
-                <span>🚀</span> 开启全屏 App 体验（添加到主屏幕）
+                <span>🚀</span> {isZh ? "开启全屏 App 体验（添加到主屏幕）" : "Full-screen App Experience (Add to Home Screen)"}
               </div>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginTop: 4 }}>
                 <div style={{ fontSize: 11.5, color: "var(--text-dim)", lineHeight: 1.5 }}>
                   <strong style={{ color: "var(--text)" }}>🍎 iPhone (Safari):</strong>
                   <ol style={{ margin: "2px 0 0 14px", padding: 0 }}>
-                    <li>Safari 打开上述网址</li>
-                    <li>底部「分享」图标</li>
-                    <li>选择<strong>「添加到主屏幕」</strong></li>
+                    <li>{isZh ? "Safari 打开上述网址" : "Open URL in Safari"}</li>
+                    <li>{isZh ? "底部「分享」图标" : "Tap 'Share' icon at bottom"}</li>
+                    <li>{isZh ? <>选择<strong>「添加到主屏幕」</strong></> : <>Choose <strong>\"Add to Home Screen\"</strong></>}</li>
                   </ol>
                 </div>
                 <div style={{ fontSize: 11.5, color: "var(--text-dim)", lineHeight: 1.5 }}>
                   <strong style={{ color: "var(--text)" }}>🤖 Android (Chrome):</strong>
                   <ol style={{ margin: "2px 0 0 14px", padding: 0 }}>
-                    <li>浏览器打开上述网址</li>
-                    <li>右上角菜单「⋮」</li>
-                    <li>选择<strong>「添加到主屏幕」</strong></li>
+                    <li>{isZh ? "浏览器打开上述网址" : "Open URL in Chrome"}</li>
+                    <li>{isZh ? "右上角菜单「⋮」" : "Tap menu '⋮' in top right"}</li>
+                    <li>{isZh ? <>选择<strong>「添加到主屏幕」</strong></> : <>Choose <strong>\"Add to Home Screen\"</strong></>}</li>
                   </ol>
                 </div>
               </div>
@@ -330,7 +334,7 @@ export default function LanAccessSection() {
                 paddingTop: 5,
               }}
             >
-              ★ 添加到主屏幕后自动隐藏浏览器顶部地址栏与底栏，享受 100% 沉浸全屏原生 App 手感与安全区避让。
+              {isZh ? "★ 添加到主屏幕后自动隐藏浏览器顶部地址栏与底栏，享受 100% 沉浸全屏原生 App 手感与安全区避让。" : "★ Adding to Home Screen hides the browser address bar for an immersive native app feel."}
             </div>
           </div>
         </div>
@@ -351,8 +355,8 @@ export default function LanAccessSection() {
           color: "var(--text-faint)",
         }}
       >
-        <span>🔒 隐私优先：数据仅保存在你电脑本地 SQLite，不经由任何第三方公网服务器。</span>
-        <span>💻 手机连入时请保持电脑开机。</span>
+        <span>{isZh ? "🔒 隐私优先：数据仅保存在你电脑本地 SQLite，不经由任何第三方公网服务器。" : "🔒 Privacy First: All data stays in your local SQLite database without third-party servers."}</span>
+        <span>{isZh ? "💻 手机连入时请保持电脑开机。" : "💻 Please keep your computer powered on while accessing from mobile."}</span>
       </div>
     </div>
   );

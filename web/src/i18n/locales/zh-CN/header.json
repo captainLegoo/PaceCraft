@@ -1,0 +1,19 @@
+{
+  "themeLight": "切到白天模式",
+  "themeDark": "切到黑夜模式",
+  "langSwitch": "切换语言",
+  "newVersion": "新版本",
+  "newVersionDesc": "发现新版本可用，点击查看更新详情",
+  "profile": "跑友档案",
+  "syncNow": "立即同步",
+  "syncing": "同步中…",
+  "syncProgress": "同步中",
+  "syncAllDevices": "全部已连设备",
+  "syncCorosOnly": "仅同步高驰 (COROS)",
+  "syncGarminCnOnly": "仅同步佳明 (中国区)",
+  "syncGarminGlobalOnly": "仅同步佳明 (国际区)",
+  "refreshPage": "刷新页面",
+  "refreshPageTooltip": "刷新页面（快捷键 Cmd+R / Ctrl+R）",
+  "connectWatchTooltip": "当前尚未连接手表设备，点击立即连接",
+  "connectWatchBtn": "连接运动手表"
+}

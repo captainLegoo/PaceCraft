@@ -1,0 +1,20 @@
+{
+  "modalTitle": "Connect Sports Watch / Sources",
+  "modalDesc": "Seamless multi-brand coexistence. Whether you run with Garmin today or COROS tomorrow, all data is 100% stored strictly on your local computer.",
+  "corosTab": "COROS",
+  "garminTab": "Garmin",
+  "corosDesc": "Authorize via the official COROS Open Platform. Supports one-click import of historical activities, laps, and physiological load.",
+  "garminDesc": "Official Garmin Personal API covering Global and China regions. Enter your API key to connect.",
+  "connectCorosBtn": "🔗 Authorize via COROS Web",
+  "connectGarminBtn": "Connect Garmin Device",
+  "connecting": "Launching browser authorization...",
+  "connected": "Connected",
+  "notConnected": "Not connected",
+  "reauth": "Re-authorize",
+  "disconnect": "Disconnect",
+  "disconnectConfirm": "Disconnect?",
+  "garminRegionCn": "Garmin China",
+  "garminRegionGlobal": "Garmin Global",
+  "garminApiKeyPlaceholder": "Enter your Garmin API Key / Token",
+  "garminGetApiKeyHint": "Obtain your personal API token from the Garmin Developer Portal"
+}

@@ -3,6 +3,22 @@ import type { RaceDetail, RouteSegment } from "../api";
 import { formatDuration as fmtDur, formatPace as fmtP } from "../utils/format";
 import { useI18n } from "../i18n";
 
+function formatVerdict(v: string, isZh: boolean): string {
+  if (isZh) return v;
+  if (v.includes("极平缓")) return "Flat course with minimal elevation change; maintain standard flat-course pacing.";
+  if (v.includes("轻微起伏")) return "Slight undulations with limited impact on pacing; avoid surging too early.";
+  if (v.includes("实质爬升")) return "Substantial elevation changes; split pacing by grade to avoid early burnout.";
+  if (v.includes("爬升密集")) return "Dense climbs with trail-level difficulty; course-specific adaptation required.";
+  return v;
+}
+
+function formatCaveat(c: string, isZh: boolean): string {
+  if (isZh) return c;
+  if (c.includes("DEM")) return "Estimated from 30m DEM elevation data; misses micro-undulations, error margin up to ±50%. Reliable GPX track recommended for higher accuracy.";
+  if (c.includes("GPS/GPX") || c.includes("实测")) return "Elevation derived from GPS/GPX track (smoothed with 28m window + 0.5m threshold filter). Error margin primarily reflects device GPS accuracy (±5-10m).";
+  return c;
+}
+
 /**
  * 爬升剖面图。
  *
@@ -14,6 +30,7 @@ import { useI18n } from "../i18n";
  * 这条赛道就是连续的缓坡，而实际上 DEM 看不见路面微起伏。
  */
 function ElevationChart({ d }: { d: RaceDetail }) {
+  const { isZh } = useI18n();
   const p = d.profile;
   const isGpx = p?.source === "gpx" && !!p.profile?.length;
   /** dem=实测，city=降级估算。标注必须与底部的 caveat 一致 */
@@ -71,7 +88,9 @@ function ElevationChart({ d }: { d: RaceDetail }) {
   }
   const scaleNote =
     seriesKm < totalKm * 0.9
-      ? `（X 轴已按路书推算的 ${seriesKm.toFixed(0)}km 缩放显示，刻度标签换算为官方赛段距离）`
+      ? (isZh
+        ? `（X 轴已按路书推算的 ${seriesKm.toFixed(0)}km 缩放显示，刻度标签换算为官方赛段距离）`
+        : ` (X axis scaled to calculated ${seriesKm.toFixed(0)}km, converted to official race distance)`)
       : "";
 
   return (
@@ -97,23 +116,29 @@ function ElevationChart({ d }: { d: RaceDetail }) {
       </svg>
       <div className="hint" style={{ marginTop: 6 }}>
         {isGpx
-          ? "曲线来自 GPX 实测轨迹，可信度高。"
+          ? (isZh ? "曲线来自 GPX 实测轨迹，可信度高。" : "Profile derived from GPX GPS track, highly reliable.")
           : isEstimated
-            ? `曲线由${d.race.city ?? "该城市"}基准海拔加路名地形词推断，**非实测**。${scaleNote}`
-            : `曲线来自 30m DEM 路点插值 —— 分辨率粗，看不到路面微起伏，仅供整体趋势参考。${scaleNote}`}
+            ? (isZh ? `曲线由${d.race.city ?? "该城市"}基准海拔加路名地形词推断，**非实测**。${scaleNote}` : `Inferred from ${d.race.city ?? "city"} baseline elevation, estimated.${scaleNote}`)
+            : (isZh ? `曲线来自 30m DEM 路点插值 —— 分辨率粗，看不到路面微起伏，仅供整体趋势参考。${scaleNote}` : `Interpolated from 30m DEM elevation. Overall trend reference.${scaleNote}`)}
       </div>
     </div>
   );
 }
 
-function Segments({ segs }: { segs: RouteSegment[] }) {
+function Segments({ segs, isZh }: { segs: RouteSegment[]; isZh: boolean }) {
   const notable = segs.filter((s) => Math.abs(s.netChange) >= 5);
   if (notable.length === 0) return null;
   return (
     <div style={{ maxHeight: 260, overflowY: "auto", marginTop: 10 }}>
       <table>
         <thead>
-          <tr><th>路段</th><th>距离</th><th>高程</th><th>变化</th><th>坡度</th></tr>
+          <tr>
+            <th>{isZh ? "路段" : "Segment"}</th>
+            <th>{isZh ? "距离" : "Distance"}</th>
+            <th>{isZh ? "高程" : "Elevation"}</th>
+            <th>{isZh ? "变化" : "Change"}</th>
+            <th>{isZh ? "坡度" : "Grade"}</th>
+          </tr>
         </thead>
         <tbody>
           {notable.map((s, i) => (
@@ -186,7 +211,7 @@ export default function RouteProfileCard({ d }: { d: RaceDetail }) {
       </div>
 
       <div className="banner info" style={{ padding: "8px 11px" }}>
-        {p.verdict}
+        {formatVerdict(p.verdict, isZh)}
         {d.plan && (
           <div style={{ marginTop: 6, color: "var(--text-dim)" }}>
             {isZh ? "目标" : "Target"} <strong>{d.plan.targetLabel}</strong> → {isZh ? "全程配速" : "Target pace"}{" "}
@@ -202,14 +227,14 @@ export default function RouteProfileCard({ d }: { d: RaceDetail }) {
       {p.segments && p.segments.length > 0 && (
         <>
           <h4 style={{ margin: "16px 0 4px", fontSize: 13, color: "var(--text-dim)" }}>
-            明显起伏路段（±5m 以上）
+            {isZh ? "明显起伏路段（±5m 以上）" : "Notable Elevation Changes (≥ ±5m)"}
           </h4>
-          <Segments segs={p.segments} />
+          <Segments segs={p.segments} isZh={isZh} />
         </>
       )}
 
       <div className="hint" style={{ marginTop: 10 }}>
-        {p.caveat}
+        {formatCaveat(p.caveat, isZh)}
       </div>
     </div>
   );

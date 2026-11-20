@@ -94,6 +94,40 @@ export const RUNNER_STRENGTH_ROUTINES: Record<string, StrengthRoutine> = {
   },
 };
 
+export function translateStrengthRoutine(routine: StrengthRoutine, isZh: boolean): StrengthRoutine {
+  if (isZh) return routine;
+  const enNames: Record<string, { name: string; targetRuns: string; focus: string }> = {
+    core_stability: {
+      name: "Pelvic Anti-Rotation & Core Stability",
+      targetRuns: "Post Easy / Recovery Run",
+      focus: "Strengthen transverse abdominis and pelvic alignment to prevent posture collapse in late miles.",
+    },
+    kinetic_chain: {
+      name: "Lower Chain & Tendon Eccentric Strength",
+      targetRuns: "Post Marathon Pace (M) / Threshold (T)",
+      focus: "Enhance tendon elasticity and single-leg stability to prevent plantar fasciitis and ITBS.",
+    },
+    ankle_plyo: {
+      name: "Ankle Stiffness & Neuromuscular Plyometrics",
+      targetRuns: "Post Intervals (I) / Fartlek",
+      focus: "Increase ankle stiffness and running economy, minimizing ground contact time.",
+    },
+    fascia_recovery: {
+      name: "Deep Myofascial Release & Mobility",
+      targetRuns: "Post Weekend Long Run (LSD)",
+      focus: "Gentle recovery for IT band, calves, and hip flexors after long endurance efforts.",
+    },
+  };
+  const tr = enNames[routine.id];
+  if (!tr) return routine;
+  return {
+    ...routine,
+    name: tr.name,
+    targetRuns: tr.targetRuns,
+    focus: tr.focus,
+  };
+}
+
 export function getStrengthRoutineForWorkout(
   workoutType: string,
   dayIndex: number,
@@ -182,23 +216,23 @@ export default function AiCoach({
     }
     if (dist === "10k") {
       return [
-        { label: "32分", sec: 1920 },
-        { label: "35分", sec: 2100 },
-        { label: "38分", sec: 2280 },
-        { label: "40分", sec: 2400 },
-        { label: "45分", sec: 2700 },
-        { label: "50分", sec: 3000 },
-        { label: "1小时", sec: 3600 },
+        { label: isZh ? "32分" : "32m", sec: 1920 },
+        { label: isZh ? "35分" : "35m", sec: 2100 },
+        { label: isZh ? "38分" : "38m", sec: 2280 },
+        { label: isZh ? "40分" : "40m", sec: 2400 },
+        { label: isZh ? "45分" : "45m", sec: 2700 },
+        { label: isZh ? "50分" : "50m", sec: 3000 },
+        { label: isZh ? "1小时" : "1 hour", sec: 3600 },
       ];
     }
     if (dist === "5k") {
       return [
-        { label: "15分", sec: 900 },
-        { label: "16分半", sec: 990 },
-        { label: "18分", sec: 1080 },
-        { label: "20分", sec: 1200 },
-        { label: "22分", sec: 1320 },
-        { label: "25分", sec: 1500 },
+        { label: isZh ? "15分" : "15m", sec: 900 },
+        { label: isZh ? "16分半" : "16m 30s", sec: 990 },
+        { label: isZh ? "18分" : "18m", sec: 1080 },
+        { label: isZh ? "20分" : "20m", sec: 1200 },
+        { label: isZh ? "22分" : "22m", sec: 1320 },
+        { label: isZh ? "25分" : "25m", sec: 1500 },
       ];
     }
     // marathon
@@ -207,7 +241,7 @@ export default function AiCoach({
       { label: "2:40:00", sec: 9600 },
       { label: "2:45:00", sec: 9900 },
       { label: "2:50:00", sec: 10200 },
-      { label: "破3 (2:59:59)", sec: 10799 },
+      { label: isZh ? "破3 (2:59:59)" : "Sub-3 (2:59:59)", sec: 10799 },
       { label: "3:10:00", sec: 11400 },
       { label: "3:15:00", sec: 11700 },
       { label: "3:20:00", sec: 12000 },
@@ -261,37 +295,45 @@ export default function AiCoach({
     const gapPct = (gapSec / targetSec) * 100;
     const currentPredStr = fmtDur(predSec);
     const gapMinutes = Math.abs(Math.round(gapSec / 60));
-    const gapStr = gapSec > 0 ? `当前预测慢 ${gapMinutes} 分钟` : `已领先 ${gapMinutes} 分钟`;
+    const gapStr = gapSec > 0
+      ? (isZh ? `当前预测慢 ${gapMinutes} 分钟` : `Predicted ${gapMinutes} min slower`)
+      : (isZh ? `已领先 ${gapMinutes} 分钟` : `Ahead by ${gapMinutes} min`);
 
     if (gapPct <= 3.0) {
       return {
-        badge: "🟢 实力高度契合 · 冲刺收敛期",
+        badge: isZh ? "🟢 实力高度契合 · 冲刺收敛期" : "🟢 Highly Realistic · Pace Convergence",
         color: "#16a34a",
         bg: "rgba(22, 163, 74, 0.08)",
         border: "rgba(22, 163, 74, 0.25)",
         currentPredStr,
         gapStr,
-        advice: "当前等效能力与目标差距在 3% 以内，课表将着重围绕目标比赛配速进行专项巡航收敛与乳酸清除耐受强化！",
+        advice: isZh
+          ? "当前等效能力与目标差距在 3% 以内，课表将着重围绕目标比赛配速进行专项巡航收敛与乳酸清除耐受强化！"
+          : "Predicted capability matches goal within 3%. The plan focuses on race-pace cruising economy and threshold clearance.",
       };
     } else if (gapPct <= 8.5) {
       return {
-        badge: "🟡 挑战突破 · 系统进阶期",
+        badge: isZh ? "🟡 挑战突破 · 系统进阶期" : "🟡 Challenging Target · Progressive Overload",
         color: "#d97706",
         bg: "rgba(217, 119, 6, 0.08)",
         border: "rgba(217, 119, 6, 0.25)",
         currentPredStr,
         gapStr,
-        advice: `当前预测与目标差距约 ${gapMinutes} 分钟。属于单周期的科学挑战范围，AI 将通过 80/20 极化、间歇提摄氧量与门槛拓展拐点，稳步缩小差距！`,
+        advice: isZh
+          ? `当前预测与目标差距约 ${gapMinutes} 分钟。属于单周期的科学挑战范围，AI 将通过 80/20 极化、间歇提摄氧量与门槛拓展拐点，稳步缩小差距！`
+          : `Predicted capability is within ${gapMinutes} min of your goal. The plan applies 80/20 polarization and threshold expansion to steadily narrow the gap.`,
       };
     } else {
       return {
-        badge: "🟣 跨周期长期愿景 · 分阶段筑基",
+        badge: isZh ? "🟣 跨周期长期愿景 · 分阶段筑基" : "🟣 Visionary Goal · Multi-Stage Base Building",
         color: "#7c3aed",
         bg: "rgba(124, 58, 237, 0.08)",
         border: "rgba(124, 58, 237, 0.25)",
         currentPredStr,
         gapStr,
-        advice: `当前预测（${currentPredStr}）与目标差距达 ${gapMinutes} 分钟。跨级生理提升需要多周期扎实积累，绝不能拔苗助长用目标配速直接训练（极易导致疲劳骨折或严重伤病）！本阶段课表确立为“第 1 阶段奠基与专项突破”，以当前能力稳步超补偿，确保安全防伤！`,
+        advice: isZh
+          ? `当前预测（${currentPredStr}）与目标差距达 ${gapMinutes} 分钟。跨级生理提升需要多周期扎实积累，绝不能拔苗助长用目标配速直接训练（极易导致疲劳骨折或严重伤病）！本阶段课表确立为“第 1 阶段奠基与专项突破”，以当前能力稳步超补偿，确保安全防伤！`
+          : `There is a ${gapMinutes} min gap between current prediction (${currentPredStr}) and goal. The plan establishes a safe foundational phase based on your actual fitness to prevent injury.`,
       };
     }
   }, [formData.targetTimeSec, formData.targetDistance, baseline]);
@@ -1047,9 +1089,23 @@ export default function AiCoach({
                         borderColor: baseline.phenotype.badgeColor,
                         background: baseline.phenotype.badgeBg,
                       }}
-                      title={baseline.phenotype.characteristics}
+                      title={
+                        isZh
+                          ? baseline.phenotype.characteristics
+                          : baseline.phenotype.type === "endurance_dominant"
+                          ? "Solid aerobic base and endurance stamina, but lacks high-velocity neuromuscular recruitment"
+                          : baseline.phenotype.type === "speed_dominant"
+                          ? "High explosive speed and anaerobic capacity, but endurance drops over long distances"
+                          : "Balanced speed and endurance development"
+                      }
                     >
-                      {baseline.phenotype.badge}
+                      {isZh
+                        ? baseline.phenotype.badge
+                        : baseline.phenotype.type === "endurance_dominant"
+                        ? "🛡️ Endurance-Dominant · Speed Activation Needed"
+                        : baseline.phenotype.type === "speed_dominant"
+                        ? "⚡ Speed-Dominant · Aerobic Base Needed"
+                        : "⚖️ Balanced Phenotype · Well-Rounded"}
                     </span>
                   )}
                   {baseline.phenotype?.prescription?.focusDesc && (
@@ -1771,14 +1827,14 @@ export default function AiCoach({
                           gap: 2,
                         }}
                       >
-                        <span>{WEEKDAYS[d]}</span>
-                        {isLongRun && <span style={{ fontSize: 9, opacity: 0.9 }}>长跑</span>}
+                        <span>{isZh ? WEEKDAYS[d] : ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][d]}</span>
+                        {isLongRun && <span style={{ fontSize: 9, opacity: 0.9 }}>{isZh ? "长跑" : "Long"}</span>}
                       </button>
                     );
                   })}
                 </div>
                 <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 8, flexWrap: "wrap" }}>
-                  <span style={{ fontSize: 12, color: "var(--text-dim)" }}>长距离指定于：</span>
+                  <span style={{ fontSize: 12, color: "var(--text-dim)" }}>{isZh ? "长距离指定于：" : "Designate Long Run on:"}</span>
                   <select
                     value={formData.longRunDay ?? 0}
                     onChange={(e) => {
@@ -1805,7 +1861,7 @@ export default function AiCoach({
                   >
                     {[1, 2, 3, 4, 5, 6, 0].map((d) => (
                       <option key={d} value={d}>
-                        {WEEKDAYS[d]}
+                        {isZh ? WEEKDAYS[d] : ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][d]}
                       </option>
                     ))}
                   </select>
@@ -1815,7 +1871,7 @@ export default function AiCoach({
               {/* 气候环境模式 */}
               <div>
                 <label style={{ fontSize: 12, color: "var(--text-dim)", display: "block", marginBottom: 6 }}>
-                  所处地区气候环境
+                  {isZh ? "所处地区气候环境" : "Climate & Environment"}
                 </label>
                 <select
                   value={formData.climateType || "auto"}
@@ -1830,10 +1886,10 @@ export default function AiCoach({
                     color: "var(--text)",
                   }}
                 >
-                  <option value="auto">自动感知（根据手表温度传感器历史）</option>
-                  <option value="humid_hot">湿热地区（如广东/东南亚，触发露点配速放宽与Zone2封顶）</option>
-                  <option value="cold_snow">寒冷降雪地区（如加拿大/东北，取消户外极限冲刺，提供室内备选）</option>
-                  <option value="temperate">四季温带（标准平原配速）</option>
+                  <option value="auto">{isZh ? "自动感知（根据手表温度传感器历史）" : "Auto detect (from watch sensor history)"}</option>
+                  <option value="humid_hot">{isZh ? "湿热地区（如广东/东南亚，触发露点配速放宽与Zone2封顶）" : "Hot & Humid (dew point pace adjustment, Zone 2 ceiling)"}</option>
+                  <option value="cold_snow">{isZh ? "寒冷降雪地区（如加拿大/东北，取消户外极限冲刺，提供室内备选）" : "Cold & Snowy (no outdoor sprints, treadmill options)"}</option>
+                  <option value="temperate">{isZh ? "四季温带（标准平原配速）" : "Temperate Plain (standard pacing)"}</option>
                 </select>
               </div>
             </div>
@@ -1849,10 +1905,10 @@ export default function AiCoach({
               }}
             >
               <button className="btn" disabled={generating} onClick={() => setShowSettingsModal(false)}>
-                取消
+                {t("common.cancel")}
               </button>
               <span
-                title={!hasAthleteData ? "当前档案暂无跑步记录，无法生成课表" : undefined}
+                title={!hasAthleteData ? (isZh ? "当前档案暂无跑步记录，无法生成课表" : "No running activities in profile yet; cannot generate training plan") : undefined}
                 style={{ display: "inline-flex", cursor: !hasAthleteData ? "not-allowed" : undefined }}
               >
                 <button
@@ -1861,7 +1917,9 @@ export default function AiCoach({
                   onClick={handleSaveSettings}
                   style={{ display: "inline-flex", alignItems: "center", gap: 6 }}
                 >
-                  {plan ? "保存偏好并让 AI 重新生成课表" : "确认偏好，开始生成双周课表 🚀"}
+                  {plan
+                    ? (isZh ? "保存偏好并让 AI 重新生成课表" : "Save Preferences & Re-generate Plan")
+                    : (isZh ? "确认偏好，开始生成双周课表 🚀" : "Confirm Preferences & Generate Plan 🚀")}
                 </button>
               </span>
             </div>
@@ -1905,20 +1963,22 @@ export default function AiCoach({
             }}
           >
             <div style={{ fontSize: 15, fontWeight: 700, color: "var(--text)", marginBottom: 6 }}>
-              出差 / 旅行临时环境模式
+              {isZh ? "出差 / 旅行临时环境模式" : "Travel & Temporary Environment"}
             </div>
             <p style={{ margin: "0 0 14px", fontSize: 12, color: "var(--text-dim)", lineHeight: 1.5 }}>
-              出差至不同温湿度的城市时，AI 将自动调整近几日的补水建议与室外安全防线。
+              {isZh
+                ? "出差至不同温湿度的城市时，AI 将自动调整近几日的补水建议与室外安全防线。"
+                : "When traveling to different climates, AI adjusts hydration advice and outdoor safety pacing."}
             </p>
 
             <div style={{ display: "flex", flexDirection: "column", gap: 12, marginBottom: 18 }}>
               <div>
                 <label style={{ fontSize: 11, color: "var(--text-dim)", display: "block", marginBottom: 4 }}>
-                  出差城市
+                  {isZh ? "出差城市" : "Destination City"}
                 </label>
                 <input
                   type="text"
-                  placeholder="例如: 哈尔滨、曼谷、新加坡"
+                  placeholder={isZh ? "例如: 哈尔滨、曼谷、新加坡" : "e.g. Denver, Singapore, Tokyo"}
                   value={travelCity}
                   onChange={(e) => setTravelCity(e.target.value)}
                   style={{
@@ -1935,7 +1995,7 @@ export default function AiCoach({
 
               <div>
                 <label style={{ fontSize: 11, color: "var(--text-dim)", display: "block", marginBottom: 4 }}>
-                  出差截止日期
+                  {isZh ? "出差截止日期" : "Travel End Date"}
                 </label>
                 <input
                   type="date"
@@ -1964,14 +2024,14 @@ export default function AiCoach({
                   await loadData();
                 }}
               >
-                清除出差
+                {isZh ? "清除出差" : "Clear Travel Mode"}
               </button>
               <div style={{ display: "flex", gap: 8 }}>
                 <button className="btn" onClick={() => setShowTravelModal(false)}>
-                  取消
+                  {t("common.cancel")}
                 </button>
                 <button className="btn primary" onClick={handleSaveTravel}>
-                  启用
+                  {isZh ? "启用" : "Enable"}
                 </button>
               </div>
             </div>
@@ -2029,7 +2089,7 @@ export default function AiCoach({
               }}
             >
               <div style={{ fontSize: 16, fontWeight: 800, color: "var(--text)" }}>
-                🗓️ 快捷调整后续训练日安排
+                🗓️ {isZh ? "快捷调整后续训练日安排" : "Quickly Adjust Training Schedule"}
               </div>
               <button
                 className="btn sm"
@@ -2053,16 +2113,18 @@ export default function AiCoach({
                   lineHeight: 1.5,
                 }}
               >
-                <strong>💡 历史数据与周次智能保护机制：</strong>
+                <strong>💡 {isZh ? "历史数据与周次智能保护机制：" : "Smart History Protection:"}</strong>
                 <div style={{ fontSize: 11.5, color: "var(--text-dim)", marginTop: 2 }}>
-                  本次调整仅对后续待办课表自适应重排。您第 1 ~ {currentWeek} 周所有已完成的历史打卡记录（包含高驰、佳明、手动 FIT/GPX 上传等已同步数据）与周度复盘结论<strong>绝对受物理锁定保护</strong>，训练周次平滑连续，不会重置或被冲掉。
+                  {isZh
+                    ? `本次调整仅对后续待办课表自适应重排。您第 1 ~ ${currentWeek} 周所有已完成的历史打卡记录（包含高驰、佳明、手动 FIT/GPX 上传等已同步数据）与周度复盘结论绝对受物理锁定保护，训练周次平滑连续，不会重置或被冲掉。`
+                    : `Changes apply only to future pending workouts. Completed activities and weekly reviews for Weeks 1 to ${currentWeek} remain strictly locked and preserved.`}
                 </div>
               </div>
 
               {/* 每周训练日选择 */}
               <div>
                 <label style={{ fontSize: 12, color: "var(--text-dim)", display: "block", marginBottom: 6 }}>
-                  每周训练日选择 (已选 {preferredDays.length} 天)
+                  {isZh ? `每周训练日选择 (已选 ${preferredDays.length} 天)` : `Weekly Training Days (${preferredDays.length} days selected)`}
                 </label>
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 6 }}>
                   {[1, 2, 3, 4, 5, 6, 0].map((d) => {
@@ -2088,14 +2150,14 @@ export default function AiCoach({
                           gap: 2,
                         }}
                       >
-                        <span>{WEEKDAYS[d]}</span>
-                        {isLongRun && <span style={{ fontSize: 9, opacity: 0.9 }}>长跑</span>}
+                        <span>{isZh ? WEEKDAYS[d] : ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][d]}</span>
+                        {isLongRun && <span style={{ fontSize: 9, opacity: 0.9 }}>{isZh ? "长跑" : "Long"}</span>}
                       </button>
                     );
                   })}
                 </div>
                 <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 10, flexWrap: "wrap" }}>
-                  <span style={{ fontSize: 12, color: "var(--text-dim)" }}>长距离指定于：</span>
+                  <span style={{ fontSize: 12, color: "var(--text-dim)" }}>{isZh ? "长距离指定于：" : "Designate Long Run on:"}</span>
                   <select
                     value={formData.longRunDay ?? 0}
                     onChange={(e) => {
@@ -2122,7 +2184,7 @@ export default function AiCoach({
                   >
                     {[1, 2, 3, 4, 5, 6, 0].map((d) => (
                       <option key={d} value={d}>
-                        {WEEKDAYS[d]}
+                        {isZh ? WEEKDAYS[d] : ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][d]}
                       </option>
                     ))}
                   </select>
@@ -2142,7 +2204,7 @@ export default function AiCoach({
               }}
             >
               <button className="btn" onClick={() => setShowAdjustDaysModal(false)}>
-                取消
+                {t("common.cancel")}
               </button>
               <button
                 className="btn primary"
@@ -2152,7 +2214,7 @@ export default function AiCoach({
                   await handleSaveSettings();
                 }}
               >
-                确认调整并更新后续课表 🚀
+                {isZh ? "确认调整并更新后续课表 🚀" : "Confirm & Update Schedule 🚀"}
               </button>
             </div>
           </div>
@@ -2208,11 +2270,13 @@ export default function AiCoach({
             >
               <div>
                 <div style={{ fontSize: 16, fontWeight: 800, color: "var(--text)", display: "flex", alignItems: "center", gap: 8 }}>
-                  <span>🏋️ 跑者专项：跑后核心与抗阻力量课表</span>
-                  <span className="pill primary" style={{ fontSize: 11, padding: "1px 6px" }}>全周期默认纳入</span>
+                  <span>🏋️ {isZh ? "跑者专项：跑后核心与抗阻力量课表" : "Runner Strength & Core Routines"}</span>
+                  <span className="pill primary" style={{ fontSize: 11, padding: "1px 6px" }}>{isZh ? "全周期默认纳入" : "Included by Default"}</span>
                 </div>
                 <div style={{ fontSize: 12, color: "var(--text-dim)", marginTop: 4 }}>
-                  基于 Daniels & Canova 运动生理学 · 强化动力链肌腱刚度 · 预防跑步伤病 · 稳固后程跑姿
+                  {isZh
+                    ? "基于 Daniels & Canova 运动生理学 · 强化动力链肌腱刚度 · 预防跑步伤病 · 稳固后程跑姿"
+                    : "Daniels & Canova Physiology · Tendon Stiffness · Injury Prevention · Form Stability"}
                 </div>
               </div>
               <button
@@ -2238,15 +2302,16 @@ export default function AiCoach({
                   lineHeight: 1.5,
                 }}
               >
-                <strong>💡 为什么长跑必须练跑后专项力量？</strong>
+                <strong>💡 {isZh ? "为什么长跑必须练跑后专项力量？" : "Why Runners Must Train Post-Run Strength?"}</strong>
                 <div style={{ fontSize: 11.5, color: "var(--text-dim)", marginTop: 2 }}>
-                  严肃长跑的力量训练目标<strong>不是练大肌肉块</strong>，而是锻造深层骨盆抗旋转稳定性与小腿-跟腱的弹性刚度（Tendon Stiffness）。
-                  研究表明：每周在跑后进行 2~3 次针对性核心与抗阻训练，可将 30km 后的跑姿塌陷率降低 40%，并有效预防跟腱炎、足底筋膜炎及髂胫束综合征 (ITBS)。
+                  {isZh
+                    ? "严肃长跑的力量训练目标不是练大肌肉块，而是锻造深层骨盆抗旋转稳定性与小腿-跟腱的弹性刚度（Tendon Stiffness）。研究表明：每周在跑后进行 2~3 次针对性核心与抗阻训练，可将 30km 后的跑姿塌陷率降低 40%，并有效预防跟腱炎、足底筋膜炎及髂胫束综合征 (ITBS)。"
+                    : "Endurance strength aims not for hypertrophy, but for pelvic rotational stability and tendon stiffness. 2-3 sessions weekly reduces form breakdown after 30km by 40% and helps prevent Achilles tendonitis, plantar fasciitis, and ITBS."}
                 </div>
               </div>
 
               {/* 4 大核心力量方案卡片 */}
-              {Object.values(RUNNER_STRENGTH_ROUTINES).map((routine, rIdx) => (
+              {Object.values(RUNNER_STRENGTH_ROUTINES).map((r) => translateStrengthRoutine(r, isZh)).map((routine, rIdx) => (
                 <div
                   key={routine.id}
                   style={{
@@ -2258,18 +2323,18 @@ export default function AiCoach({
                 >
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", flexWrap: "wrap", gap: 6, marginBottom: 6 }}>
                     <div style={{ fontSize: 14, fontWeight: 700, color: "var(--text)", display: "flex", alignItems: "center", gap: 6 }}>
-                      <span>方案 {String.fromCharCode(65 + rIdx)}：{routine.name}</span>
+                      <span>{isZh ? `方案 ${String.fromCharCode(65 + rIdx)}：${routine.name}` : `Routine ${String.fromCharCode(65 + rIdx)}: ${routine.name}`}</span>
                       <span className="pill" style={{ fontSize: 10, padding: "1px 6px", background: "var(--surface)" }}>
-                        约 {routine.durationMin} 分钟
+                        {isZh ? `约 ${routine.durationMin} 分钟` : `~${routine.durationMin} min`}
                       </span>
                     </div>
                     <span style={{ fontSize: 11, color: "var(--accent)", fontWeight: 600 }}>
-                      📌 适用：{routine.targetRuns}
+                      📌 {isZh ? `适用：${routine.targetRuns}` : `Applies: ${routine.targetRuns}`}
                     </span>
                   </div>
 
                   <div style={{ fontSize: 11.5, color: "var(--text-dim)", marginBottom: 10 }}>
-                    🎯 <strong>训练靶向：</strong>{routine.focus}
+                    🎯 <strong>{isZh ? "训练靶向：" : "Target: "}</strong>{routine.focus}
                   </div>
 
                   <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 8 }}>
@@ -2310,7 +2375,7 @@ export default function AiCoach({
               }}
             >
               <button className="btn primary" onClick={() => setShowStrengthLibraryModal(false)}>
-                知道了
+                {isZh ? "知道了" : "Got It"}
               </button>
             </div>
           </div>
@@ -2364,7 +2429,7 @@ export default function AiCoach({
               }}
             >
               <div style={{ fontSize: 16, fontWeight: 800, color: "var(--text)" }}>
-                🏁 结束并归档训练课表
+                🏁 {isZh ? "结束并归档训练课表" : "Finish & Archive Training Plan"}
               </div>
               <button
                 className="btn sm"
@@ -2379,7 +2444,9 @@ export default function AiCoach({
             {/* 弹窗主体内容 */}
             <div style={{ padding: "20px", display: "flex", flexDirection: "column", gap: 14 }}>
               <div style={{ fontSize: 14, color: "var(--text)", lineHeight: 1.6 }}>
-                确定要提前结束或完赛归档当前周期的训练计划吗？
+                {isZh
+                  ? "确定要提前结束或完赛归档当前周期的训练计划吗？"
+                  : "Are you sure you want to conclude and archive the current training plan?"}
               </div>
               <div
                 style={{
@@ -2392,8 +2459,8 @@ export default function AiCoach({
                   lineHeight: 1.7,
                 }}
               >
-                <div>• <strong>当前计划将标记为已归档</strong>，历史打卡明细与周复盘报告将完好保存。</div>
-                <div>• <strong>随时重新开启</strong>：结束后您可以根据最新的身体状态与比赛计划，随时一键开启全新的训练周期。</div>
+                <div>• <strong>{isZh ? "当前计划将标记为已归档" : "Plan marked as archived"}</strong>{isZh ? "，历史打卡明细与周复盘报告将完好保存。" : "; all workouts and weekly reviews remain fully intact."}</div>
+                <div>• <strong>{isZh ? "随时重新开启" : "Reopen anytime"}</strong>{isZh ? "：结束后您可以根据最新的身体状态与比赛计划，随时一键开启全新的训练周期。" : ": You can generate a brand new training cycle whenever you are ready."}</div>
               </div>
             </div>
 
@@ -2413,7 +2480,7 @@ export default function AiCoach({
                 disabled={generating}
                 onClick={() => setShowEndPlanModal(false)}
               >
-                取消
+                {t("common.cancel")}
               </button>
               <button
                 className="btn"
@@ -2426,7 +2493,7 @@ export default function AiCoach({
                   fontWeight: 600,
                 }}
               >
-                {generating ? "正在归档..." : "确认结束并归档"}
+                {generating ? (isZh ? "正在归档..." : "Archiving...") : (isZh ? "确认结束并归档" : "Confirm Archive")}
               </button>
             </div>
           </div>
@@ -2527,7 +2594,7 @@ function HeroStatCard({
               type="button"
               className="coach-sheet-close-btn"
               onClick={() => setOpen(false)}
-              title="关闭"
+              title={isZh ? "关闭" : "Close"}
             >
               ✕
             </button>
@@ -2543,7 +2610,7 @@ function HeroStatCard({
       {/* 科学参考区间对照表 */}
       <div style={{ marginBottom: 12 }}>
         <div style={{ fontSize: isMobile ? 11.5 : 10.5, fontWeight: 700, color: "var(--text)", marginBottom: 6 }}>
-          📊 科学参考区间对照：
+          📊 {isZh ? "科学参考区间对照：" : "Reference Ranges:"}
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
           {detail.ranges.map((r, rIdx) => (
@@ -2583,7 +2650,7 @@ function HeroStatCard({
           lineHeight: 1.45,
         }}
       >
-        <strong>💡 教练解读：</strong>{detail.coachAdvice}
+        <strong>💡 {isZh ? "教练解读：" : "Coach's Take: "}</strong>{detail.coachAdvice}
       </div>
     </>
   );
@@ -2913,16 +2980,16 @@ function WorkoutCard({
     typeLabel = isZh ? "节奏跑" : "Tempo";
   } else if (wType === "long" || titleLow.includes("长距离") || titleLow.includes("lsd")) {
     typeColor = "#10b981";
-    typeLabel = "长距离耐力 (LSD)";
+    typeLabel = isZh ? "长距离耐力 (LSD)" : "Long Slow Distance (LSD)";
   } else if (wType === "recovery" || titleLow.includes("排酸") || titleLow.includes("恢复")) {
     typeColor = "#0284c7";
-    typeLabel = "排酸恢复跑";
+    typeLabel = isZh ? "排酸恢复跑" : "Recovery Run";
   } else if (wType === "rest" || titleLow.includes("休")) {
     typeColor = "var(--text-faint)";
-    typeLabel = "休息恢复";
+    typeLabel = isZh ? "休息恢复" : "Rest & Recovery";
   } else {
     typeColor = "var(--accent)";
-    typeLabel = "低心率轻松跑 (E)";
+    typeLabel = isZh ? "低心率轻松跑 (E)" : "Easy Aerobic (E)";
   }
 
   // 解析课表内部结构 (热身 / 主课 / 冷身里程拆解)
@@ -2961,9 +3028,10 @@ function WorkoutCard({
   }
 
   const [showRoutine, setShowRoutine] = useState(false);
-  const routine =
+  const rawRoutine =
     (struct as any)?.strengthRoutine ||
     (!isRest ? getStrengthRoutineForWorkout(wType, workout.dayOfWeek, isRest) : null);
+  const routine = rawRoutine ? translateStrengthRoutine(rawRoutine, isZh) : null;
 
   const cleanedDesc = (workout.description || "")
     .replace(/【(?:心率|配速)主导[^】]*】\s*/g, "")
@@ -3008,7 +3076,7 @@ function WorkoutCard({
               whiteSpace: "nowrap",
             }}
           >
-            {WEEKDAYS[workout.dayOfWeek]} <span style={{ fontSize: 11, opacity: 0.65, fontWeight: 500 }}>{workout.date.slice(5)}</span>
+            {isZh ? WEEKDAYS[workout.dayOfWeek] : ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][workout.dayOfWeek]} <span style={{ fontSize: 11, opacity: 0.65, fontWeight: 500 }}>{workout.date.slice(5)}</span>
           </span>
           <span
             className="pill"
@@ -3029,11 +3097,11 @@ function WorkoutCard({
             }}
           >
             {isRace
-              ? "🎯 比赛日"
+              ? (isZh ? "🎯 比赛日" : "🎯 Race Day")
               : isToday && workout.status === "pending"
-              ? "今日待练"
+              ? (isZh ? "今日待练" : "Today")
               : workout.status === "completed"
-              ? (workout.complianceScore ? `已完成 ${workout.complianceScore}%` : "已完成")
+              ? (workout.complianceScore ? (isZh ? `已完成 ${workout.complianceScore}%` : `Done ${workout.complianceScore}%`) : (isZh ? "已完成" : "Done"))
               : badgeText}
           </span>
         </div>
@@ -3075,13 +3143,13 @@ function WorkoutCard({
               marginBottom: 6,
               fontFamily: "var(--font-mono, monospace)",
             }}
-            title={`全天总跑量 ${workout.distanceKm}km = 慢跑热身 ${struct!.warmupKm}km + 专项核心主课 ${struct!.mainKm}km + 慢跑冷身 ${struct!.cooldownKm}km`}
+            title={isZh ? `全天总跑量 ${workout.distanceKm}km = 慢跑热身 ${struct!.warmupKm}km + 专项核心主课 ${struct!.mainKm}km + 慢跑冷身 ${struct!.cooldownKm}km` : `Total ${workout.distanceKm}km = Warmup ${struct!.warmupKm}km + Main ${struct!.mainKm}km + Cooldown ${struct!.cooldownKm}km`}
           >
-            <span>热身 {struct!.warmupKm}k</span>
+            <span>{isZh ? "热身" : "Warmup"} {struct!.warmupKm}k</span>
             <span style={{ margin: "0 3px", opacity: 0.4 }}>·</span>
-            <span style={{ color: "var(--accent)", fontWeight: 700 }}>主课 {struct!.mainKm}k</span>
+            <span style={{ color: "var(--accent)", fontWeight: 700 }}>{isZh ? "主课" : "Main"} {struct!.mainKm}k</span>
             <span style={{ margin: "0 3px", opacity: 0.4 }}>·</span>
-            <span>冷身 {struct!.cooldownKm}k</span>
+            <span>{isZh ? "冷身" : "Cooldown"} {struct!.cooldownKm}k</span>
           </div>
         )}
 
@@ -3099,7 +3167,7 @@ function WorkoutCard({
             {/* 核心指标行 */}
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
               <span style={{ fontSize: 10, fontWeight: 700, color: focusMetric === "pace" ? "#2563eb" : "#dc2626" }}>
-                {focusMetric === "pace" ? "⚡ 目标配速" : "❤️ 目标心率"}
+                {focusMetric === "pace" ? (isZh ? "⚡ 目标配速" : "⚡ Target Pace") : (isZh ? "❤️ 目标心率" : "❤️ Target HR")}
               </span>
               <strong
                 style={{
@@ -3117,14 +3185,14 @@ function WorkoutCard({
             {/* 次要参考行 */}
             {focusMetric === "pace" && workout.targetHrMin ? (
               <div style={{ display: "flex", justifyContent: "space-between", fontSize: 9.5, color: "var(--text-dim)", marginTop: 2, opacity: 0.85 }}>
-                <span>心率参考</span>
+                <span>{isZh ? "心率参考" : "HR Ref"}</span>
                 <span style={{ fontFamily: "var(--font-mono, monospace)" }}>
                   {workout.targetHrMin}~{workout.targetHrMax} bpm
                 </span>
               </div>
             ) : focusMetric === "hr" && workout.targetPaceMinSec ? (
               <div style={{ display: "flex", justifyContent: "space-between", fontSize: 9.5, color: "var(--text-dim)", marginTop: 2, opacity: 0.85 }}>
-                <span>参考配速</span>
+                <span>{isZh ? "参考配速" : "Pace Ref"}</span>
                 <span style={{ fontFamily: "var(--font-mono, monospace)" }}>
                   ~{fmtPace(workout.targetPaceMinSec)}/km
                 </span>
@@ -3168,7 +3236,7 @@ function WorkoutCard({
                   fontWeight: 500,
                 }}
               >
-                {expandedDesc ? "收起 ▴" : "展开 ▾"}
+                {expandedDesc ? (isZh ? "收起 ▴" : "Collapse ▴") : (isZh ? "展开 ▾" : "Expand ▾")}
               </span>
             )}
           </div>
@@ -3215,7 +3283,7 @@ function WorkoutCard({
                 </span>
               </div>
               <span style={{ fontSize: 10, color: "var(--accent)", fontWeight: 600 }}>
-                {showRoutine ? "收起" : "展开动作 ▾"}
+                {showRoutine ? (isZh ? "收起" : "Collapse") : (isZh ? "展开动作 ▾" : "View Exercises ▾")}
               </span>
             </div>
 
@@ -3264,7 +3332,7 @@ function WorkoutCard({
                 textDecoration: "underline",
               }}
             >
-              {showAlt ? "收起备选" : "🏃 恶劣天气跑步机备选"}
+              {showAlt ? (isZh ? "收起备选" : "Hide Alternative") : (isZh ? "🏃 恶劣天气跑步机备选" : "🏃 Treadmill Alternative")}
             </span>
             {showAlt && (
               <div
@@ -3317,7 +3385,7 @@ function WorkoutCard({
               }}
             >
               <div>
-                <span style={{ color: "var(--text-faint)", fontSize: 10 }}>实测完成 </span>
+                <span style={{ color: "var(--text-faint)", fontSize: 10 }}>{isZh ? "实测完成 " : "Actual "}</span>
                 <strong style={{ color: "var(--good)" }} className="num">{workout.actualDistanceKm} km</strong>
               </div>
               <button
@@ -3325,7 +3393,7 @@ function WorkoutCard({
                 onClick={() => onOpenActivity(matchedList[0].labelId)}
                 style={{ fontSize: 10.5, padding: "2px 6px" }}
               >
-                详情 →
+                {isZh ? "详情 →" : "Details →"}
               </button>
             </div>
           );
@@ -3344,9 +3412,9 @@ function WorkoutCard({
           >
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
               <div>
-                <span style={{ color: "var(--text-faint)", fontSize: 10 }}>实测完成 </span>
+                <span style={{ color: "var(--text-faint)", fontSize: 10 }}>{isZh ? "实测完成 " : "Actual "}</span>
                 <strong style={{ color: "var(--good)" }} className="num">{workout.actualDistanceKm} km</strong>
-                <span style={{ fontSize: 10, color: "var(--text-dim)", marginLeft: 4 }}>({matchedList.length}段)</span>
+                <span style={{ fontSize: 10, color: "var(--text-dim)", marginLeft: 4 }}>({matchedList.length}{isZh ? "段" : " splits"})</span>
               </div>
             </div>
             <div style={{ display: "flex", flexWrap: "wrap", gap: 3 }}>
@@ -3356,7 +3424,7 @@ function WorkoutCard({
                   className="btn sm"
                   onClick={() => onOpenActivity(m.labelId)}
                   style={{ fontSize: 10, padding: "1px 5px", background: "var(--surface-2)" }}
-                  title={`第 ${idx + 1} 段: ${m.distanceKm} km ${m.avgPaceSec ? "· " + fmtPace(m.avgPaceSec) + "/km" : ""}`}
+                  title={isZh ? `第 ${idx + 1} 段: ${m.distanceKm} km ${m.avgPaceSec ? "· " + fmtPace(m.avgPaceSec) + "/km" : ""}` : `Lap ${idx + 1}: ${m.distanceKm} km ${m.avgPaceSec ? "· " + fmtPace(m.avgPaceSec) + "/km" : ""}`}
                 >
                   #{idx + 1} {m.distanceKm}k →
                 </button>

@@ -25,12 +25,12 @@ type Report = {
   prediction: { seconds: number; paceSec: number } | null;
 };
 
-const STATUS = {
-  ok: { icon: "✓", label: "达标", cls: "good" },
-  warn: { icon: "!", label: "注意", cls: "warn" },
-  bad: { icon: "✕", label: "不足", cls: "bad" },
-  unknown: { icon: "·", label: "未知", cls: "" },
-} as const;
+const getStatusMap = (isZh: boolean) => ({
+  ok: { icon: "✓", label: isZh ? "达标" : "Pass", cls: "good" },
+  warn: { icon: "!", label: isZh ? "注意" : "Attention", cls: "warn" },
+  bad: { icon: "✕", label: isZh ? "不足" : "Needs Work", cls: "bad" },
+  unknown: { icon: "·", label: isZh ? "未知" : "Unknown", cls: "" },
+} as const);
 
 export default function RacePrep({ aiConfigured, dataVersion = 0 }: { aiConfigured: boolean; dataVersion?: number }) {
   const { isZh } = useI18n();
@@ -141,14 +141,14 @@ export default function RacePrep({ aiConfigured, dataVersion = 0 }: { aiConfigur
         </div>
         <div className="card stat-card">
           <div className="stat">
-            <span className="label"><IconTrophy size={15} />当前全马预测</span>
+            <span className="label"><IconTrophy size={15} />{isZh ? "当前全马预测" : "Predicted Marathon"}</span>
             <span className="value num" style={{ color: "var(--accent)" }}>
               {d.prediction ? fmtT(d.prediction.seconds) : "—"}
             </span>
             <span className="hint">
-              {d.prediction ? fmtP(d.prediction.paceSec) + "/km" : "数据不足"}
+              {d.prediction ? fmtP(d.prediction.paceSec) + "/km" : isZh ? "数据不足" : "Insufficient data"}
             </span>
-            <span className="hint">自建模型 · 5 模型加权中位数</span>
+            <span className="hint">{isZh ? "自建模型 · 5 模型加权中位数" : "Multi-model weighted median"}</span>
           </div>
         </div>
       </div>
@@ -156,14 +156,15 @@ export default function RacePrep({ aiConfigured, dataVersion = 0 }: { aiConfigur
       {/* 体检清单 */}
       <div className="card" style={{ marginBottom: 14 }}>
         <h3 className="card-title">
-          备赛体检
-          {bad > 0 && <span className="pill bad">{bad} 项不足</span>}
-          {bad === 0 && warn > 0 && <span className="pill warn">{warn} 项注意</span>}
-          {bad === 0 && warn === 0 && <span className="pill good">全部达标</span>}
+          {isZh ? "备赛体检" : "Prep Readiness Checklist"}
+          {bad > 0 && <span className="pill bad">{isZh ? `${bad} 项不足` : `${bad} Needs Work`}</span>}
+          {bad === 0 && warn > 0 && <span className="pill warn">{isZh ? `${warn} 项注意` : `${warn} Attention`}</span>}
+          {bad === 0 && warn === 0 && <span className="pill good">{isZh ? "全部达标" : "All Metrics Passed"}</span>}
         </h3>
-        <p className="card-sub">判定标准是马拉松备赛的通行经验值，不是官方标准，仅供参考</p>
+        <p className="card-sub">{isZh ? "判定标准是马拉松备赛的通行经验值，不是官方标准，仅供参考" : "Readiness criteria based on empirical marathon training guidelines for reference only."}</p>
         <div className="checklist">
           {d.checklist.map((c) => {
+            const STATUS = getStatusMap(isZh);
             const st = STATUS[c.status];
             return (
               <div className="check-item" key={c.key}>
@@ -183,20 +184,27 @@ export default function RacePrep({ aiConfigured, dataVersion = 0 }: { aiConfigur
 
       {/* 周跑量柱状图 */}
       <div className="card" style={{ marginBottom: 14 }}>
-        <h3 className="card-title">逐周训练量与最长单跑</h3>
-        <p className="card-sub">柱子是周跑量，线是最长单次跑量。两者都要稳步爬升，而不是忽高忽低。</p>
-        <WeeklyChart weekly={d.weekly} />
+        <h3 className="card-title">{isZh ? "逐周训练量与最长单跑" : "Weekly Mileage & Longest Run"}</h3>
+        <p className="card-sub">{isZh ? "柱子是周跑量，线是最长单次跑量。两者都要稳步爬升，而不是忽高忽低。" : "Bars represent weekly mileage, line indicates the longest single run. Both should build steadily."}</p>
+        <WeeklyChart weekly={d.weekly} isZh={isZh} />
       </div>
 
       {/* 逐周表格 */}
       <div className="card" style={{ marginBottom: 14 }}>
-        <h3 className="card-title">逐周明细</h3>
+        <h3 className="card-title">{isZh ? "逐周明细" : "Weekly Breakdown"}</h3>
         <div style={{ maxHeight: 340, overflowY: "auto" }}>
           <table>
             <thead>
               <tr>
-                <th>周起始</th><th>跑量</th><th>场次</th><th>最长单跑</th><th>强度课</th>
-                <th>均配速</th><th>短期/长期</th><th>负荷比</th><th>周环比</th>
+                <th>{isZh ? "周起始" : "Week"}</th>
+                <th>{isZh ? "跑量" : "Mileage"}</th>
+                <th>{isZh ? "场次" : "Runs"}</th>
+                <th>{isZh ? "最长单跑" : "Longest Run"}</th>
+                <th>{isZh ? "强度课" : "Quality"}</th>
+                <th>{isZh ? "均配速" : "Avg Pace"}</th>
+                <th>{isZh ? "短期/长期" : "Acute/Chronic"}</th>
+                <th>{isZh ? "负荷比" : "ACWR"}</th>
+                <th>{isZh ? "周环比" : "WoW"}</th>
               </tr>
             </thead>
             <tbody>
@@ -227,33 +235,38 @@ export default function RacePrep({ aiConfigured, dataVersion = 0 }: { aiConfigur
 
       {/* AI 分析 */}
       <div className="card">
-        <h3 className="card-title">AI 备赛分析</h3>
+        <h3 className="card-title">{isZh ? "AI 备赛分析" : "AI Prep Review"}</h3>
         <p className="card-sub">
-          把最近 {d.weeks} 周的训练量、最长单跑、强度课、负荷波动和当前预测一起交给模型，
-          让它回答「现在能不能跑出目标成绩、最大短板是什么、这周怎么练」。
+          {isZh
+            ? `把最近 ${d.weeks} 周的训练量、最长单跑、强度课、负荷波动和当前预测一起交给模型，让它回答「现在能不能跑出目标成绩、最大短板是什么、这周怎么练」。`
+            : `Synthesizes past ${d.weeks} weeks of training load, longest runs, quality workouts and load variations to evaluate race target feasibility.`}
         </p>
 
-        {!aiConfigured && <div className="banner info">还没有配置 AI 模型，请到「设置」页填写模型地址、API Key 和模型名。</div>}
+        {!aiConfigured && (
+          <div className="banner info">
+            {isZh ? "还没有配置 AI 模型，请到「设置」页填写模型地址、API Key 和模型名。" : "AI Coach model not configured yet. Go to Settings to configure."}
+          </div>
+        )}
         {aiErr && <div className="banner error">{aiErr}</div>}
 
         <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
           <input
-            placeholder="关注点（可选），例如：想在 12 周后的比赛跑进 3 小时，目前差距在哪？"
+            placeholder={isZh ? "关注点（可选），例如：想在 12 周后的比赛跑进 3 小时，目前差距在哪？" : "Focus area (optional), e.g. targeting sub-3 in 12 weeks, what are my biggest gaps?"}
             value={focus} onChange={(e) => setFocus(e.target.value)}
             onKeyDown={(e) => { if (e.key === "Enter" && aiConfigured && !busy) runAnalyze(); }}
           />
           <button className="btn primary" disabled={!aiConfigured || busy} onClick={runAnalyze}>
-            {busy ? <><span className="spin" /> 分析中…</> : report ? "重新分析" : "AI 备赛分析"}
+            {busy ? <><span className="spin" /> {isZh ? "分析中…" : "Analyzing..."}</> : report ? (isZh ? "重新分析" : "Re-analyze") : (isZh ? "AI 备赛分析" : "AI Prep Review")}
           </button>
         </div>
 
         {report ? (
           <>
-            <div className="hint" style={{ marginBottom: 10 }}>{report.model} · {new Date(report.at).toLocaleString("zh-CN")}</div>
+            <div className="hint" style={{ marginBottom: 10 }}>{report.model} · {new Date(report.at).toLocaleString(isZh ? "zh-CN" : "en-US")}</div>
             <div className="report" dangerouslySetInnerHTML={{ __html: mdToHtml(report.text) }} />
           </>
         ) : (
-          <div className="empty-run"><IconFlag size={40} /><span>还没有分析记录</span></div>
+          <div className="empty-run"><IconFlag size={40} /><span>{isZh ? "还没有分析记录" : "No analysis records yet"}</span></div>
         )}
       </div>
     </>
@@ -321,7 +334,7 @@ function mdToHtml(text: string): string {
   return out.join("");
 }
 
-function WeeklyChart({ weekly }: { weekly: Weekly[] }) {
+function WeeklyChart({ weekly, isZh }: { weekly: Weekly[]; isZh: boolean }) {
   const [hover, setHover] = useState<number | null>(null);
   // 必须用实测像素宽度：早先用 preserveAspectRatio="none" 拉伸 viewBox，
   // 圆点会被横向拉成横线。
@@ -377,16 +390,16 @@ function WeeklyChart({ weekly }: { weekly: Weekly[] }) {
             {w.weekStart.slice(5)}
             {hover === i && (
               <em>
-                {w.distanceKm}km · 最长 {w.longestRunKm}km · {w.sessions}场
-                {w.volumeChangePct != null && ` · 环比${w.volumeChangePct > 0 ? "+" : ""}${w.volumeChangePct}%`}
+                {w.distanceKm}km · {isZh ? `最长 ${w.longestRunKm}km` : `Longest ${w.longestRunKm}km`} · {isZh ? `${w.sessions}场` : `${w.sessions} runs`}
+                {w.volumeChangePct != null && (isZh ? ` · 环比${w.volumeChangePct > 0 ? "+" : ""}${w.volumeChangePct}%` : ` · WoW ${w.volumeChangePct > 0 ? "+" : ""}${w.volumeChangePct}%`)}
               </em>
             )}
           </span>
         ))}
       </div>
       <div className="legend">
-        <div className="legend-item"><span className="legend-swatch" style={{ background: "var(--chart-accent)" }} />周跑量</div>
-        <div className="legend-item"><span className="legend-swatch" style={{ background: "var(--chart-hr)", borderRadius: "50%" }} />最长单跑</div>
+        <div className="legend-item"><span className="legend-swatch" style={{ background: "var(--chart-accent)" }} />{isZh ? "周跑量" : "Weekly Mileage"}</div>
+        <div className="legend-item"><span className="legend-swatch" style={{ background: "var(--chart-hr)", borderRadius: "50%" }} />{isZh ? "最长单跑" : "Longest Run"}</div>
       </div>
     </div>
   );

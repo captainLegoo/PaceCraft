@@ -14,62 +14,61 @@ import { useI18n } from "../i18n";
  * 写入时也保持原值不四舍五入 —— 官方距离就该是官方距离。
  * 其它项目的距离（越野、 trail、半程以外的自测）走「其他」手填。
  */
-const DIST_PRESETS = [
-  { key: "5", label: "5 公里", km: "5" },
-  { key: "10", label: "10 公里", km: "10" },
-  { key: "half", label: "半程马拉松 21.0975", km: "21.0975" },
-  { key: "full", label: "全程马拉松 42.195", km: "42.195" },
-] as const;
+const getDistPresets = (isZh: boolean = true) => [
+  { key: "5", label: isZh ? "5 公里" : "5 km", km: "5" },
+  { key: "10", label: isZh ? "10 公里" : "10 km", km: "10" },
+  { key: "half", label: isZh ? "半程马拉松 21.0975" : "Half Marathon 21.0975", km: "21.0975" },
+  { key: "full", label: isZh ? "全程马拉松 42.195" : "Full Marathon 42.195", km: "42.195" },
+];
 
 /** 目标成绩快捷预设（数字选择，避免中英文冒号混淆） */
-const QUICK_GOALS: Record<string, Array<{ label: string; h: number; m: number; s: number }>> = {
-  full: [
-    { label: "破3", h: 2, m: 59, s: 59 },
-    { label: "3:15", h: 3, m: 15, s: 0 },
-    { label: "3:30", h: 3, m: 30, s: 0 },
-    { label: "3:45", h: 3, m: 45, s: 0 },
-    { label: "破4", h: 3, m: 59, s: 59 },
-    { label: "4:15", h: 4, m: 15, s: 0 },
-    { label: "4:30", h: 4, m: 30, s: 0 },
-    { label: "5:00", h: 5, m: 0, s: 0 },
-    { label: "5:30", h: 5, m: 30, s: 0 },
-    { label: "6:00(关门)", h: 6, m: 0, s: 0 },
-  ],
-  half: [
-    { label: "破130", h: 1, m: 29, s: 59 },
-    { label: "1:35", h: 1, m: 35, s: 0 },
-    { label: "1:40", h: 1, m: 40, s: 0 },
-    { label: "1:45", h: 1, m: 45, s: 0 },
-    { label: "1:50", h: 1, m: 50, s: 0 },
-    { label: "破2", h: 1, m: 59, s: 59 },
-    { label: "2:15", h: 2, m: 15, s: 0 },
-    { label: "2:30", h: 2, m: 30, s: 0 },
-    { label: "3:00(关门)", h: 3, m: 0, s: 0 },
-  ],
-  "10": [
-    { label: "破40", h: 0, m: 39, s: 59 },
-    { label: "45分", h: 0, m: 45, s: 0 },
-    { label: "50分", h: 0, m: 50, s: 0 },
-    { label: "55分", h: 0, m: 55, s: 0 },
-    { label: "破1", h: 0, m: 59, s: 59 },
-  ],
-  "5": [
-    { label: "破20", h: 0, m: 19, s: 59 },
-    { label: "22分", h: 0, m: 22, s: 0 },
-    { label: "25分", h: 0, m: 25, s: 0 },
-    { label: "28分", h: 0, m: 28, s: 0 },
-    { label: "30分", h: 0, m: 30, s: 0 },
-  ],
-};
-
-const getQuickGoals = (presetKey: string, kmStr: string) => {
-  if (QUICK_GOALS[presetKey]) return QUICK_GOALS[presetKey];
+const getQuickGoals = (presetKey: string, kmStr: string, isZh: boolean = true) => {
+  const goals: Record<string, Array<{ label: string; h: number; m: number; s: number }>> = {
+    full: [
+      { label: isZh ? "破3" : "Sub-3", h: 2, m: 59, s: 59 },
+      { label: "3:15", h: 3, m: 15, s: 0 },
+      { label: "3:30", h: 3, m: 30, s: 0 },
+      { label: "3:45", h: 3, m: 45, s: 0 },
+      { label: isZh ? "破4" : "Sub-4", h: 3, m: 59, s: 59 },
+      { label: "4:15", h: 4, m: 15, s: 0 },
+      { label: "4:30", h: 4, m: 30, s: 0 },
+      { label: "5:00", h: 5, m: 0, s: 0 },
+      { label: "5:30", h: 5, m: 30, s: 0 },
+      { label: isZh ? "6:00(关门)" : "6:00 (Cutoff)", h: 6, m: 0, s: 0 },
+    ],
+    half: [
+      { label: isZh ? "破130" : "Sub-1:30", h: 1, m: 29, s: 59 },
+      { label: "1:35", h: 1, m: 35, s: 0 },
+      { label: "1:40", h: 1, m: 40, s: 0 },
+      { label: "1:45", h: 1, m: 45, s: 0 },
+      { label: "1:50", h: 1, m: 50, s: 0 },
+      { label: isZh ? "破2" : "Sub-2", h: 1, m: 59, s: 59 },
+      { label: "2:15", h: 2, m: 15, s: 0 },
+      { label: "2:30", h: 2, m: 30, s: 0 },
+      { label: isZh ? "3:00(关门)" : "3:00 (Cutoff)", h: 3, m: 0, s: 0 },
+    ],
+    "10": [
+      { label: isZh ? "破40" : "Sub-40m", h: 0, m: 39, s: 59 },
+      { label: isZh ? "45分" : "45m", h: 0, m: 45, s: 0 },
+      { label: isZh ? "50分" : "50m", h: 0, m: 50, s: 0 },
+      { label: isZh ? "55分" : "55m", h: 0, m: 55, s: 0 },
+      { label: isZh ? "破1" : "Sub-1h", h: 0, m: 59, s: 59 },
+    ],
+    "5": [
+      { label: isZh ? "破20" : "Sub-20m", h: 0, m: 19, s: 59 },
+      { label: isZh ? "22分" : "22m", h: 0, m: 22, s: 0 },
+      { label: isZh ? "25分" : "25m", h: 0, m: 25, s: 0 },
+      { label: isZh ? "28分" : "28m", h: 0, m: 28, s: 0 },
+      { label: isZh ? "30分" : "30m", h: 0, m: 30, s: 0 },
+    ],
+  };
+  if (goals[presetKey]) return goals[presetKey];
   const km = parseFloat(kmStr);
   if (!isNaN(km)) {
-    if (km >= 35) return QUICK_GOALS.full;
-    if (km >= 18) return QUICK_GOALS.half;
-    if (km >= 8) return QUICK_GOALS["10"];
-    if (km >= 4) return QUICK_GOALS["5"];
+    if (km >= 35) return goals.full;
+    if (km >= 18) return goals.half;
+    if (km >= 8) return goals["10"];
+    if (km >= 4) return goals["5"];
   }
   return [];
 };
@@ -147,7 +146,7 @@ const parseDur = (t: string, km: number): number | null => {
 /** 距离数值 → 预设 key；匹配不上就算「其他」 */
 const presetKeyFor = (km: number | null | undefined): string => {
   if (km == null) return "other";
-  const hit = DIST_PRESETS.find((p) => Math.abs(Number(p.km) - Number(km)) < 0.001);
+  const hit = getDistPresets(true).find((p) => Math.abs(Number(p.km) - Number(km)) < 0.001);
   return hit ? hit.key : "other";
 };
 
@@ -350,7 +349,7 @@ export default function RaceSetup({
       const kmNum = Number(dist);
       if (goalSec !== null && !isNaN(kmNum) && kmNum > 0) {
         if (goalSec < kmNum * 100 || goalSec > kmNum * 900) {
-          setErr("目标成绩计算出的配速超出常规范围（1:40/km ~ 15:00/km），请核对时、分、秒");
+          setErr(isZh ? "目标成绩计算出的配速超出常规范围（1:40/km ~ 15:00/km），请核对时、分、秒" : "Calculated pace from goal time is out of realistic range (1:40/km ~ 15:00/km). Please verify hours, minutes, and seconds.");
           setBusy(false);
           return;
         }
@@ -361,8 +360,10 @@ export default function RaceSetup({
       const sameDay = allRaces.find((r) => r.date === date && r.id !== targetId);
       if (sameDay && !options?.allowReplaceSameDay) {
         setPendingConfirm({
-          title: "同一比赛日冲突提示",
-          message: `${date} 已经登记过「${sameDay.name}」。\n\n同一天只能参加一场。\n确定要用当前设置覆盖并替换它吗？`,
+          title: isZh ? "同一比赛日冲突提示" : "Race Day Conflict",
+          message: isZh
+            ? `${date} 已经登记过「${sameDay.name}」。\n\n同一天只能参加一场。\n确定要用当前设置覆盖并替换它吗？`
+            : `${date} already has registered race \"${sameDay.name}\".\n\nOnly one race per day is allowed.\nAre you sure you want to replace it?`,
           onConfirm: () => {
             setPendingConfirm(null);
             void save({ allowReplaceSameDay: true, allowClearRoute: options?.allowClearRoute });
@@ -390,8 +391,10 @@ export default function RaceSetup({
         gpxText.trim().length === 0;
       if (clearingRoute && !options?.allowClearRoute) {
         setPendingConfirm({
-          title: "现有赛道路线清除提示",
-          message: "这场比赛已经有一份轨迹文件。\n\n选「先不填路线」会把它清掉，之后只能重新导入才能恢复。\n确定要清掉现有路线轨迹吗？",
+          title: isZh ? "现有赛道路线清除提示" : "Clear Course Track",
+          message: isZh
+            ? "这场比赛已经有一份轨迹文件。\n\n选「先不填路线」会把它清掉，之后只能重新导入才能恢复。\n确定要清掉现有路线轨迹吗？"
+            : "This race already has an uploaded course track.\n\nSelecting \"Skip for now\" will remove it.\nAre you sure you want to clear the existing course track?",
           onConfirm: () => {
             setPendingConfirm(null);
             void save({ allowReplaceSameDay: true, allowClearRoute: true });
@@ -406,9 +409,13 @@ export default function RaceSetup({
         formMode === "edit" && !!detail && detail.race.routeSource === "gpx" && gpxText.trim().length === 0;
       if (routeMode === "file" && gpxText.trim().length === 0 && !keepingExistingRoute) {
         setErr(
-          "你选了「导入轨迹文件」，但还没有选文件。\n" +
-            "点框选一个 .gpx（或 .kml）文件拖入，或者把内容直接粘进下方的文本框。\n" +
-            "如果只是想先登记这场比赛、把路线留到之后补，把「路线来源」改成「先不填路线」就行。",
+          isZh
+            ? "你选了「导入轨迹文件」，但还没有选文件。\n" +
+              "点框选一个 .gpx（或 .kml）文件拖入，或者把内容直接粘进下方的文本框。\n" +
+              "如果只是想先登记这场比赛、把路线留到之后补，把「路线来源」改成「先不填路线」就行。"
+            : "You selected \"Import GPX/KML file\", but haven't selected a file yet.\n" +
+              "Click or drag a .gpx (or .kml) file above, or paste raw XML below.\n" +
+              "If you want to register the race first and add the course later, choose \"Skip for now\"."
         );
         setBusy(false);
         return;
@@ -544,7 +551,8 @@ export default function RaceSetup({
   };
 
   function renderForm() {
-    const quickGoals = getQuickGoals(distPreset, dist);
+    const distPresets = getDistPresets(isZh);
+    const quickGoals = getQuickGoals(distPreset, dist, isZh);
     const currentGoalSec =
       goalH !== "" || goalM !== ""
         ? Number(goalH || 0) * 3600 + Number(goalM || 0) * 60 + Number(goalS || 0)
@@ -552,20 +560,20 @@ export default function RaceSetup({
     const kmNum = parseFloat(dist);
     const pacePreview =
       currentGoalSec && !isNaN(kmNum) && kmNum > 0
-        ? `≈ 配速 ${fmtPace(currentGoalSec / kmNum)}/km`
+        ? (isZh ? `≈ 配速 ${fmtPace(currentGoalSec / kmNum)}/km` : `≈ Pace ${fmtPace(currentGoalSec / kmNum)}/km`)
         : null;
 
     return (
       <div style={{ marginTop: 14, padding: 14, border: "1px solid var(--border)", borderRadius: 8 }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
           <strong style={{ fontSize: 14 }}>
-            {formMode === "create" ? "添加新赛事" : `修改赛事信息（${detail?.race.name ?? ""}）`}
+            {formMode === "create" ? (isZh ? "添加新赛事" : "Add Target Race") : (isZh ? `修改赛事信息（${detail?.race.name ?? ""}）` : `Edit Race (${detail?.race.name ?? ""})`)}
           </strong>
           <button
             type="button"
             onClick={() => setOpen(false)}
             style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text-faint)", fontSize: 16 }}
-            aria-label="关闭"
+            aria-label={isZh ? "关闭" : "Close"}
           >
             ✕
           </button>
@@ -573,7 +581,7 @@ export default function RaceSetup({
 
         <div className="grid g4" style={{ marginBottom: 10 }}>
           <label className="stat">
-            <span className="label">比赛日期</span>
+            <span className="label">{isZh ? "比赛日期" : "Race Date"}</span>
             <input
               value={date}
               onChange={(e) => setDate(e.target.value)}
@@ -582,35 +590,35 @@ export default function RaceSetup({
             />
           </label>
           <label className="stat">
-            <span className="label">赛事名称</span>
-            <input value={name} onChange={(e) => setName(e.target.value)} placeholder="2026 XX 马拉松" />
+            <span className="label">{isZh ? "赛事名称" : "Race Name"}</span>
+            <input value={name} onChange={(e) => setName(e.target.value)} placeholder={isZh ? "2026 XX 马拉松" : "2026 XX Marathon"} />
           </label>
           <label className="stat">
-            <span className="label">城市</span>
-            <input value={city} onChange={(e) => setCity(e.target.value)} placeholder="城市，如 深圳" />
+            <span className="label">{isZh ? "城市" : "City"}</span>
+            <input value={city} onChange={(e) => setCity(e.target.value)} placeholder={isZh ? "城市，如 深圳" : "City, e.g. Boston"} />
           </label>
           <label className="stat">
-            <span className="label">距离</span>
+            <span className="label">{isZh ? "距离" : "Distance"}</span>
             <select
               value={distPreset}
               onChange={(e) => {
                 const key = e.target.value;
                 setDistPreset(key);
-                const hit = DIST_PRESETS.find((p) => p.key === key);
+                const hit = distPresets.find((p) => p.key === key);
                 // 选「其他」时保留当前值让用户接着改，不要清空
                 if (hit) setDist(hit.km);
               }}
             >
-              {DIST_PRESETS.map((p) => (
+              {distPresets.map((p) => (
                 <option key={p.key} value={p.key}>{p.label}</option>
               ))}
-              <option value="other">其他（自定义）</option>
+              <option value="other">{isZh ? "其他（自定义）" : "Custom Distance"}</option>
             </select>
             {distPreset === "other" && (
               <input
                 value={dist}
                 onChange={(e) => setDist(e.target.value)}
-                placeholder="公里数，如 25"
+                placeholder={isZh ? "公里数，如 25" : "Distance in km, e.g. 25"}
                 style={{ marginTop: 6 }}
               />
             )}
@@ -661,10 +669,10 @@ export default function RaceSetup({
                       setGoalM("");
                       setGoalS(0);
                     }}
-                    title="清空目标成绩"
+                    title={isZh ? "清空目标成绩" : "Clear goal time"}
                     style={{ cursor: "pointer", padding: "1px 6px", fontSize: 11 }}
                   >
-                    清空
+                    {isZh ? "清空" : "Clear"}
                   </button>
                 )}
               </div>
@@ -688,11 +696,11 @@ export default function RaceSetup({
                       if (goalM === "") setGoalM(0);
                     }
                   }}
-                  placeholder="时"
+                  placeholder={isZh ? "时" : "hr"}
                   style={{ textAlign: "center", paddingRight: 24 }}
                 />
                 <span style={{ position: "absolute", right: 8, fontSize: 11, color: "var(--muted)", pointerEvents: "none" }}>
-                  时
+                  {isZh ? "时" : "h"}
                 </span>
               </div>
 
@@ -714,11 +722,11 @@ export default function RaceSetup({
                       if (goalH === "") setGoalH(0);
                     }
                   }}
-                  placeholder="分"
+                  placeholder={isZh ? "分" : "min"}
                   style={{ textAlign: "center", paddingRight: 24 }}
                 />
                 <span style={{ position: "absolute", right: 8, fontSize: 11, color: "var(--muted)", pointerEvents: "none" }}>
-                  分
+                  {isZh ? "分" : "m"}
                 </span>
               </div>
 
@@ -739,18 +747,18 @@ export default function RaceSetup({
                       setGoalS(val);
                     }
                   }}
-                  placeholder="秒"
+                  placeholder={isZh ? "秒" : "sec"}
                   style={{ textAlign: "center", paddingRight: 24 }}
                 />
                 <span style={{ position: "absolute", right: 8, fontSize: 11, color: "var(--muted)", pointerEvents: "none" }}>
-                  秒
+                  {isZh ? "秒" : "s"}
                 </span>
               </div>
             </div>
 
             {quickGoals.length > 0 ? (
               <div style={{ display: "flex", flexWrap: "wrap", gap: 5, marginTop: 6, alignItems: "center", minHeight: 22 }}>
-                <span style={{ fontSize: 11, color: "var(--text-faint)", marginRight: 2 }}>常用成绩:</span>
+                <span style={{ fontSize: 11, color: "var(--text-faint)", marginRight: 2 }}>{isZh ? "常用成绩:" : "Presets:"}</span>
                 {quickGoals.map((q) => {
                   const isMatch = goalH === q.h && goalM === q.m && goalS === q.s;
                   return (
@@ -773,21 +781,23 @@ export default function RaceSetup({
               </div>
             ) : (
               <span className="hint" style={{ margin: 0, marginTop: 6, minHeight: 22, display: "flex", alignItems: "center" }}>
-                可直接输入时、分、秒，留空表示不设目标
+                {isZh ? "可直接输入时、分、秒，留空表示不设目标" : "Enter hours, minutes, seconds. Leave empty for no goal"}
               </span>
             )}
           </div>
 
           <label className="stat" style={{ gridColumn: "span 2" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", minHeight: 22 }}>
-              <span className="label" style={{ margin: 0 }}>路线来源</span>
+              <span className="label" style={{ margin: 0 }}>{isZh ? "路线来源" : "Route Source"}</span>
             </div>
             <select value={routeMode} onChange={(e) => setRouteMode(e.target.value as RouteMode)}>
-              <option value="file">导入轨迹文件（GPX / KML，推荐）</option>
-              <option value="none">先不填路线（之后可补）</option>
+              <option value="file">{isZh ? "导入轨迹文件（GPX / KML，推荐）" : "Import GPS track file (GPX / KML, recommended)"}</option>
+              <option value="none">{isZh ? "先不填路线（之后可补）" : "Skip route for now (can add later)"}</option>
             </select>
             <span className="hint" style={{ margin: 0, marginTop: 6, minHeight: 22, display: "flex", alignItems: "center" }}>
-              {routeMode === "file" ? "导入轨迹自动生成海拔剖面与分段配速" : "先登记赛事信息，之后随时可在详情中补传轨迹"}
+              {routeMode === "file"
+                ? (isZh ? "导入轨迹自动生成海拔剖面与分段配速" : "Import track to auto-generate elevation profile & pacing")
+                : (isZh ? "先登记赛事信息，之后随时可在详情中补传轨迹" : "Register race details first; track can be uploaded anytime")}
             </span>
           </label>
         </div>
@@ -798,23 +808,23 @@ export default function RaceSetup({
               <div className="banner info" style={{ marginBottom: 10, lineHeight: 1.6 }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 6 }}>
                   <strong>
-                    ✓ 已绑定轨迹{fileNameFromNote(detail.race.sourceNote) ? `：${fileNameFromNote(detail.race.sourceNote)}` : ""}
+                    {isZh ? "✓ 已绑定轨迹" : "✓ Track linked"}{fileNameFromNote(detail.race.sourceNote) ? `：${fileNameFromNote(detail.race.sourceNote)}` : ""}
                   </strong>
                   <span style={{ fontSize: 11, color: "var(--text-faint)" }}>
-                    不重新上传将保留原轨迹；选新文件或粘新内容将自动覆盖
+                    {isZh ? "不重新上传将保留原轨迹；选新文件或粘新内容将自动覆盖" : "Existing track will be retained unless overwritten"}
                   </span>
                 </div>
                 {detail.profile && (
                   <div style={{ fontSize: 11.5, color: "var(--text-dim)", marginTop: 4 }}>
                     {detail.profile.distanceKm != null ? `${detail.profile.distanceKm} km` : ""}
-                    {detail.profile.gainM != null ? ` · 爬升 ${detail.profile.gainM} m` : ""}
-                    {detail.profile.eleMin != null ? ` · 海拔 ${detail.profile.eleMin}–${detail.profile.eleMax} m` : ""}
-                    {detail.profile.profile?.length ? ` · ${detail.profile.profile.length} 个剖面采样点` : ""}
+                    {detail.profile.gainM != null ? (isZh ? ` · 爬升 ${detail.profile.gainM} m` : ` · Gain ${detail.profile.gainM} m`) : ""}
+                    {detail.profile.eleMin != null ? (isZh ? ` · 海拔 ${detail.profile.eleMin}–${detail.profile.eleMax} m` : ` · Elev ${detail.profile.eleMin}–${detail.profile.eleMax} m`) : ""}
+                    {detail.profile.profile?.length ? (isZh ? ` · ${detail.profile.profile.length} 个剖面采样点` : ` · ${detail.profile.profile.length} sample points`) : ""}
                   </div>
                 )}
               </div>
             )}
-            <span className="label">导入轨迹文件</span>
+            <span className="label">{isZh ? "导入轨迹文件" : "Import Track File"}</span>
             <div
               className={`dropzone ${dragOver ? "drag-over" : ""}`}
               onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
@@ -852,37 +862,39 @@ export default function RaceSetup({
                 }}
               />
               <div style={{ fontSize: 13, fontWeight: 500, color: "var(--text)" }}>
-                {dragOver ? "松开鼠标即可导入轨迹文件" : "点击选择文件，或将 .gpx / .kml 拖拽至此处"}
+                {dragOver
+                  ? (isZh ? "松开鼠标即可导入轨迹文件" : "Drop to import track file")
+                  : (isZh ? "点击选择文件，或将 .gpx / .kml 拖拽至此处" : "Click to select or drag .gpx / .kml file here")}
               </div>
               <div style={{ fontSize: 11.5, color: "var(--text-faint)", marginTop: 4 }}>
-                支持两步路 / Strava / Garmin 导出的 GPX 或 KML 轨迹（自带实测海拔）
+                {isZh ? "支持两步路 / Strava / Garmin 导出的 GPX 或 KML 轨迹（自带实测海拔）" : "Supports GPX or KML tracks exported from Strava / Garmin / COROS (includes elevation)"}
               </div>
               {routeFileName && (
                 <div style={{ fontSize: 12, marginTop: 8, color: "var(--good)" }}>
-                  已选文件：<strong>{routeFileName}</strong>
+                  {isZh ? "已选文件：" : "Selected file: "}<strong>{routeFileName}</strong>
                 </div>
               )}
-              {previewing && <div className="hint" style={{ marginTop: 6 }}>正在核对文件…</div>}
+              {previewing && <div className="hint" style={{ marginTop: 6 }}>{isZh ? "正在核对文件…" : "Validating file…"}</div>}
             </div>
 
             {preview && preview.ok && (
               <div className="banner info" style={{ marginTop: 8, lineHeight: 1.7 }}>
-                已解析：{preview.distanceKm} km ／ 累计爬升 {preview.gainM} m ／{" "}
-                {preview.pointCount} 个点
+                {isZh
+                  ? `已解析：${preview.distanceKm} km ／ 累计爬升 ${preview.gainM} m ／ ${preview.pointCount} 个点`
+                  : `Parsed: ${preview.distanceKm} km / Gain ${preview.gainM} m / ${preview.pointCount} points`}
                 {preview.profilePointCount && preview.profilePointCount !== preview.pointCount
-                  ? `（剖面图画 ${preview.profilePointCount} 个点）`
+                  ? (isZh ? `（剖面图画 ${preview.profilePointCount} 个点）` : ` (${preview.profilePointCount} profile points)`)
                   : ""}
                 <br />
-                海拔来源：{preview.kind === "kml" ? "KML 轨迹" : "GPX 实测"}（±5-10m）
+                {isZh ? "海拔来源：" : "Elevation source: "}{preview.kind === "kml" ? (isZh ? "KML 轨迹" : "KML track") : (isZh ? "GPX 实测" : "GPX GPS")}（±5-10m）
                 {preview.coarseSpacing && preview.sampleSpacingM ? (
                   <>
                     <br />
                     <strong style={{ color: "var(--warn, #d9a441)" }}>
-                      这份轨迹采样较稀（平均每点 {preview.sampleSpacingM} 米）
+                      {isZh ? `这份轨迹采样较稀（平均每点 ${preview.sampleSpacingM} 米）` : `Course track sampling is coarse (avg ${preview.sampleSpacingM}m per point)`}
                     </strong>
                     <br />
-                    起伏落在采样点之间就丢了，上面的爬升很可能偏低。
-                    能导出更密的轨迹最好（手表调到 1 秒或实时模式）。
+                    {isZh ? "起伏落在采样点之间就丢了，上面的爬升很可能偏低。能导出更密的轨迹最好（手表调到 1 秒或实时模式）。" : "Micro-undulations may be missed. High-frequency 1s recording is recommended."}
                   </>
                 ) : (
                   ""
@@ -896,12 +908,11 @@ export default function RaceSetup({
                       <>
                         <br />
                         <span style={{ color: "var(--warn)" }}>
-                          ⚠ 文件距离与目标项目距离差 {(drift * 100).toFixed(1)}%。
+                          ⚠ {isZh ? `文件距离与目标项目距离差 ${(drift * 100).toFixed(1)}%。` : `Track distance differs from race target by ${(drift * 100).toFixed(1)}%. `}
                           {big
-                            ? `这已经「不是」 GPS 漂移能解释的范围（通常 ±0.5% 以内）——` +
-                              `请确认这个文件是否对应当前距离项目。`
-                            : `属于 GPS 漂移的常见范围。`}
-                          这里填的仍按设定距离 {dist} km 计算，剖面图横轴用文件自身的距离。
+                            ? (isZh ? `这已经「不是」 GPS 漂移能解释的范围（通常 ±0.5% 以内）——请确认这个文件是否对应当前距离项目。` : `This exceeds standard GPS drift range (±0.5%). Please verify this file matches the intended distance. `)
+                            : (isZh ? `属于 GPS 漂移的常见范围。` : `Within normal GPS drift range. `)}
+                          {isZh ? `这里填的仍按设定距离 ${dist} km 计算，剖面图横轴用文件自身的距离。` : `Calculations use configured ${dist} km; chart displays track file distance.`}
                         </span>
                       </>
                     );
@@ -915,21 +926,21 @@ export default function RaceSetup({
             )}
 
             <label className="stat" style={{ display: "block", marginTop: 10 }}>
-              <span className="label">或粘贴 GPX / KML 内容</span>
+              <span className="label">{isZh ? "或粘贴 GPX / KML 内容" : "Or Paste GPX / KML XML"}</span>
               <textarea
                 value={gpxText}
                 onChange={(e) => onPasteChange(e.target.value)}
                 placeholder={
                   formMode === "edit" && detail && detail.race.routeSource === "gpx"
-                    ? "粘贴新的轨迹内容会覆盖现在这份。不粘贴就是保留。"
-                    : "手机上只有文本、或者要排查解析问题时，可以直接把文件内容粘到这里"
+                    ? (isZh ? "粘贴新的轨迹内容会覆盖现在这份。不粘贴就是保留。" : "Pasting new track XML will overwrite current track. Leave empty to retain.")
+                    : (isZh ? "手机上只有文本、或者要排查解析问题时，可以直接把文件内容粘到这里" : "Paste raw GPX/KML file contents directly here")
                 }
                 style={{ minHeight: 80, fontFamily: "ui-monospace, monospace", fontSize: 11 }}
               />
               <span className="hint">
-                文件框与粘贴框写的是同一份内容，谁先填谁生效。
+                {isZh ? "文件框与粘贴框写的是同一份内容，谁先填谁生效。" : "File selector and paste area write to the same buffer."}
                 {formMode === "edit" && detail && detail.race.routeSource === "gpx" && gpxText.trim().length === 0 &&
-                  "（这场赛事已有轨迹文件，不选新文件直接保存会保留原来的。）"}
+                  (isZh ? "（这场赛事已有轨迹文件，不选新文件直接保存会保留原来的。）" : " (Existing track file will be kept if unchanged.)")}
               </span>
             </label>
           </div>
@@ -937,18 +948,18 @@ export default function RaceSetup({
 
         {routeMode === "none" && (
           <div className="hint" style={{ margin: "0 0 10px", lineHeight: 1.7 }}>
-            先把赛事登记下来就好，路线之后随时能补 ——
-            到时候在卡片右上角点「上传轨迹文件」，或点「修改」回到这里导入。
-            现在不填路线不影响其它功能，只是不会有赛道剖面与爬升。
+            {isZh
+              ? "先把赛事登记下来就好，路线之后随时能补 —— 到时候在卡片右上角点「上传轨迹文件」，或点「修改」回到这里导入。现在不填路线不影响其它功能，只是不会有赛道剖面与爬升。"
+              : "Register race information first; track files can be uploaded anytime later to generate elevation profiles."}
           </div>
         )}
 
         <div style={{ display: "flex", gap: 10, marginTop: 14 }}>
           <button className="sync-btn" style={{ maxWidth: 160 }} onClick={() => void save()} disabled={busy}>
-            {busy ? "保存中…" : formMode === "create" ? "创建赛事" : "保存修改"}
+            {busy ? (isZh ? "保存中…" : "Saving…") : formMode === "create" ? (isZh ? "创建赛事" : "Create Race") : (isZh ? "保存修改" : "Save Changes")}
           </button>
           <button className="sync-btn" style={{ maxWidth: 120 }} onClick={() => setOpen(false)}>
-            取消
+            {isZh ? "取消" : "Cancel"}
           </button>
         </div>
       </div>
@@ -1074,7 +1085,7 @@ export default function RaceSetup({
       </div>
 
       {err && <div className="banner error" style={{ marginTop: 10 }}>{err}</div>}
-      {busy && <div className="banner info" style={{ marginTop: 10 }}>处理中…</div>}
+      {busy && <div className="banner info" style={{ marginTop: 10 }}>{isZh ? "处理中…" : "Processing…"}</div>}
 
       {open && renderForm()}
 
@@ -1155,13 +1166,13 @@ export default function RaceSetup({
               }}
             >
               <button className="btn" onClick={() => setPendingConfirm(null)}>
-                取消
+                {isZh ? "取消" : "Cancel"}
               </button>
               <button
                 className="btn primary"
                 onClick={pendingConfirm.onConfirm}
               >
-                确定
+                {isZh ? "确定" : "Confirm"}
               </button>
             </div>
           </div>

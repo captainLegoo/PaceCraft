@@ -60,20 +60,20 @@ export function formatDuration(
  * 格式化已过去的时间（如同步耗时：“28 秒”、“2 分钟 15 秒”、“1 小时 5 分钟 2 秒”）
  * @param startedAt 毫秒级时间戳
  */
-export function formatElapsed(startedAt: number | null | undefined): string {
+export function formatElapsed(startedAt: number | null | undefined, isZh = true): string {
   if (!startedAt) return "";
   const totalSeconds = Math.max(0, Math.round((Date.now() - startedAt) / 1000));
   if (totalSeconds < 60) {
-    return `${totalSeconds} 秒`;
+    return isZh ? `${totalSeconds} 秒` : `${totalSeconds}s`;
   }
   const m = Math.floor(totalSeconds / 60);
   const s = totalSeconds % 60;
   if (m < 60) {
-    return `${m} 分钟 ${s} 秒`;
+    return isZh ? `${m} 分钟 ${s} 秒` : `${m}m ${s}s`;
   }
   const h = Math.floor(m / 60);
   const remM = m % 60;
-  return `${h} 小时 ${remM} 分钟 ${s} 秒`;
+  return isZh ? `${h} 小时 ${remM} 分钟 ${s} 秒` : `${h}h ${remM}m ${s}s`;
 }
 
 /**

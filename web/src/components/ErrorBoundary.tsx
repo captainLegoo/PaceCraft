@@ -25,6 +25,7 @@ export default class ErrorBoundary extends Component<Props, State> {
 
   render() {
     if (this.state.hasError) {
+      const isEn = typeof window !== "undefined" && window.localStorage.getItem("coros-dashboard-locale") === "en-US";
       return (
         <div
           style={{
@@ -40,10 +41,10 @@ export default class ErrorBoundary extends Component<Props, State> {
           }}
         >
           <h2 style={{ color: "#ef4444", marginTop: 0, fontSize: 18, display: "flex", alignItems: "center", gap: 8 }}>
-            <span>⚠️</span> 界面渲染异常
+            <span>⚠️</span> {isEn ? "Interface Rendering Error" : "界面渲染异常"}
           </h2>
           <p style={{ fontSize: 13, color: "#94a3b8", lineHeight: 1.6 }}>
-            移动端或浏览器加载时遇到了未捕获的错误：
+            {isEn ? "An unhandled error occurred while loading the page:" : "移动端或浏览器加载时遇到了未捕获的错误："}
           </p>
           <pre
             style={{
@@ -74,7 +75,7 @@ export default class ErrorBoundary extends Component<Props, State> {
                 fontWeight: 500,
               }}
             >
-              重新加载
+              {isEn ? "Reload Page" : "重新加载"}
             </button>
             <button
               type="button"
@@ -93,7 +94,7 @@ export default class ErrorBoundary extends Component<Props, State> {
                 fontSize: 13,
               }}
             >
-              重置缓存
+              {isEn ? "Reset Cache" : "重置缓存"}
             </button>
           </div>
         </div>

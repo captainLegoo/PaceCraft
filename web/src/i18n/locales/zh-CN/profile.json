@@ -1,0 +1,12 @@
+{
+  "mainProfile": "主跑友档案",
+  "title": "跑友档案",
+  "switch": "切换",
+  "switchHint": "点击切换跑友档案",
+  "dropdownTitle": "切换跑友档案",
+  "addNew": "+ 添加新跑友档案",
+  "inputPlaceholder": "输入跑友姓名或备注",
+  "createBtn": "创建档案",
+  "edit": "编辑",
+  "deleteConfirm": "确定要删除该跑友档案吗？此操作将彻底抹除该档案下的本地数据。"
+}

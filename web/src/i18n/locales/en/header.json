@@ -1,0 +1,19 @@
+{
+  "themeLight": "Switch to Light Mode",
+  "themeDark": "Switch to Dark Mode",
+  "langSwitch": "Switch Language",
+  "newVersion": "Update",
+  "newVersionDesc": "A new version is available. Click to view release notes.",
+  "profile": "Athlete Profile",
+  "syncNow": "Sync Now",
+  "syncing": "Syncing...",
+  "syncProgress": "Syncing",
+  "syncAllDevices": "All Connected Devices",
+  "syncCorosOnly": "Sync COROS Only",
+  "syncGarminCnOnly": "Sync Garmin (China) Only",
+  "syncGarminGlobalOnly": "Sync Garmin (Global) Only",
+  "refreshPage": "Refresh Page",
+  "refreshPageTooltip": "Refresh page (Cmd+R / Ctrl+R)",
+  "connectWatchTooltip": "No watch connected yet. Click to connect your device.",
+  "connectWatchBtn": "Connect Watch"
+}

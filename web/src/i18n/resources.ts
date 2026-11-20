@@ -7,6 +7,11 @@ import zhRace from "./locales/zh-CN/race.json";
 import zhCoach from "./locales/zh-CN/coach.json";
 import zhTraining from "./locales/zh-CN/training.json";
 import zhSession from "./locales/zh-CN/session.json";
+import zhAerobic from "./locales/zh-CN/aerobic.json";
+import zhSync from "./locales/zh-CN/sync.json";
+import zhProfile from "./locales/zh-CN/profile.json";
+import zhHeader from "./locales/zh-CN/header.json";
+import zhConnect from "./locales/zh-CN/connect.json";
 
 // en JSON namespaces
 import enCommon from "./locales/en/common.json";
@@ -17,6 +22,11 @@ import enRace from "./locales/en/race.json";
 import enCoach from "./locales/en/coach.json";
 import enTraining from "./locales/en/training.json";
 import enSession from "./locales/en/session.json";
+import enAerobic from "./locales/en/aerobic.json";
+import enSync from "./locales/en/sync.json";
+import enProfile from "./locales/en/profile.json";
+import enHeader from "./locales/en/header.json";
+import enConnect from "./locales/en/connect.json";
 
 export const resources = {
   "zh-CN": {
@@ -28,6 +38,11 @@ export const resources = {
     coach: zhCoach,
     training: zhTraining,
     session: zhSession,
+    aerobic: zhAerobic,
+    sync: zhSync,
+    profile: zhProfile,
+    header: zhHeader,
+    connect: zhConnect,
   },
   "en-US": {
     common: enCommon,
@@ -38,6 +53,11 @@ export const resources = {
     coach: enCoach,
     training: enTraining,
     session: enSession,
+    aerobic: enAerobic,
+    sync: enSync,
+    profile: enProfile,
+    header: enHeader,
+    connect: enConnect,
   },
   "en": {
     common: enCommon,
@@ -48,6 +68,11 @@ export const resources = {
     coach: enCoach,
     training: enTraining,
     session: enSession,
+    aerobic: enAerobic,
+    sync: enSync,
+    profile: enProfile,
+    header: enHeader,
+    connect: enConnect,
   },
 } as const;
 

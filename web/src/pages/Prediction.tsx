@@ -224,7 +224,9 @@ export default function Prediction() {
           {d.fatigue.series.length > 2 && (
             <div style={{ marginTop: 14 }}>
               <div className="hint" style={{ marginBottom: 8 }}>
-                近 {d.fatigue.series.length} 天趋势（柱高 = 疲劳指数，柱下数字 = 当日自算负荷；0 = 休息日）
+                {isZh
+                  ? `近 ${d.fatigue.series.length} 天趋势（柱高 = 疲劳指数，柱下数字 = 当日自算负荷；0 = 休息日）`
+                  : `Past ${d.fatigue.series.length} days (Bar = Fatigue score, Sub-number = Daily load; 0 = Rest day)`}
               </div>
               <div style={{
                 display: "flex", gap: 6, alignItems: "flex-end",
@@ -234,7 +236,7 @@ export default function Prediction() {
                   <div key={s.date} style={{
                     flex: 1, height: "100%", display: "flex",
                     flexDirection: "column", justifyContent: "flex-end", alignItems: "center",
-                  }} title={`${s.date}｜疲劳 ${s.score}｜负荷 ${s.load}`}>
+                  }} title={isZh ? `${s.date}｜疲劳 ${s.score}｜负荷 ${s.load}` : `${s.date} | Fatigue ${s.score} | Load ${s.load}`}>
                     <div className="hint num" style={{ fontSize: 9, marginBottom: 2, opacity: .7 }}>{s.score}</div>
                     <div style={{
                       width: "72%", maxWidth: 30,
@@ -392,13 +394,17 @@ export default function Prediction() {
                   <tr
                     className={`clickable ${isOpen ? "open" : ""}`}
                     onClick={() => setOpenModels(isOpen ? null : String(p.distanceKm))}
-                    title={isOpen ? "点击收起模型明细" : "点击展开模型明细"}
+                    title={isOpen ? (isZh ? "点击收起模型明细" : "Click to collapse details") : (isZh ? "点击展开模型明细" : "Click to expand details")}
                   >
                     <td>{p.name}</td>
                     <td className="num" style={{ color: "var(--accent)", fontWeight: 600 }}>{fmtT(p.seconds)}</td>
                     <td className="num">{fmtP(p.paceSec)}</td>
                     <td className="num" style={{ color: "var(--text-faint)" }}>{fmtT(p.low)} ~ {fmtT(p.high)}</td>
-                    <td><span className={`pill ${p.confidence === "高" ? "good" : p.confidence === "中" ? "warn" : "bad"}`}>{p.confidence}</span></td>
+                    <td>
+                      <span className={`pill ${p.confidence === "高" ? "good" : p.confidence === "中" ? "warn" : "bad"}`}>
+                        {p.confidence === "高" ? (isZh ? "高" : "High") : p.confidence === "中" ? (isZh ? "中" : "Med") : (isZh ? "低" : "Low")}
+                      </span>
+                    </td>
                     {/* 实测交叉校验：预测 vs 真实跑出来的配速 */}
                     <td className="num" style={{
                       color: p.groundTruth
@@ -422,22 +428,32 @@ export default function Prediction() {
                           <div className="hint" style={{ marginBottom: 10 }}>{p.confidenceNote}</div>
                           {p.groundTruth && (
                             <div className="ground-truth-box">
-                              <strong>实测交叉校验</strong>：
-                              你在 {p.groundTruth.date} 跑过 {p.groundTruth.actualKm.toFixed(2)}km，
-                              用时 {fmtT(p.groundTruth.actualSec)}（{fmtP(p.groundTruth.actualSec / p.groundTruth.actualKm)}/km）。
-                              按这个配速折算到{p.name}是 <strong className="num">{fmtT(p.groundTruth.impliedSec)}</strong>，
-                              本模型预测 <strong className="num">{fmtT(p.seconds)}</strong>，
+                              <strong>{isZh ? "实测交叉校验" : "Cross-Validation"}</strong>：
+                              {isZh
+                                ? `你在 ${p.groundTruth.date} 跑过 ${p.groundTruth.actualKm.toFixed(2)}km，用时 ${fmtT(p.groundTruth.actualSec)}（${fmtP(p.groundTruth.actualSec / p.groundTruth.actualKm)}/km）。按这个配速折算到${p.name}是 `
+                                : `On ${p.groundTruth.date} you completed ${p.groundTruth.actualKm.toFixed(2)}km in ${fmtT(p.groundTruth.actualSec)} (${fmtP(p.groundTruth.actualSec / p.groundTruth.actualKm)}/km). Extrapolated to ${p.name} is `}
+                              <strong className="num">{fmtT(p.groundTruth.impliedSec)}</strong>，
+                              {isZh ? "本模型预测 " : "model predicts "}
+                              <strong className="num">{fmtT(p.seconds)}</strong>，
                               <span style={{
                                 color: Math.abs(p.groundTruth.deltaPct) < 3 ? "var(--good)"
                                   : Math.abs(p.groundTruth.deltaPct) < 6 ? "var(--warn)" : "var(--bad)",
                               }}>
-                                {" "}相差 {p.groundTruth.deltaPct > 0 ? "+" : ""}{p.groundTruth.deltaPct.toFixed(1)}%
+                                {isZh
+                                  ? ` 相差 ${p.groundTruth.deltaPct > 0 ? "+" : ""}${p.groundTruth.deltaPct.toFixed(1)}%`
+                                  : ` diff ${p.groundTruth.deltaPct > 0 ? "+" : ""}${p.groundTruth.deltaPct.toFixed(1)}%`}
                               </span>。
                             </div>
                           )}
                           <table className="detail-table">
                             <thead>
-                              <tr><th>锚点层级</th><th>模型</th><th>预测</th><th>权重</th><th>依据</th></tr>
+                              <tr>
+                                <th>{isZh ? "锚点层级" : "Tier"}</th>
+                                <th>{isZh ? "模型" : "Model"}</th>
+                                <th>{isZh ? "预测" : "Prediction"}</th>
+                                <th>{isZh ? "权重" : "Weight"}</th>
+                                <th>{isZh ? "依据" : "Basis"}</th>
+                              </tr>
                             </thead>
                             <tbody>
                               {p.models.map((m) => (

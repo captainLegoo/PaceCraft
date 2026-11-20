@@ -1,0 +1,12 @@
+{
+  "mainProfile": "Primary Athlete Profile",
+  "title": "Athlete Profile",
+  "switch": "Switch",
+  "switchHint": "Click to switch athlete profiles",
+  "dropdownTitle": "Switch Athlete Profile",
+  "addNew": "+ Add Athlete Profile",
+  "inputPlaceholder": "Enter athlete name or alias",
+  "createBtn": "Create Profile",
+  "edit": "Edit",
+  "deleteConfirm": "Are you sure you want to delete this athlete profile? This will permanently wipe all local workouts for this profile."
+}

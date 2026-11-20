@@ -178,6 +178,7 @@ export function BarChart({
   onSelect?: (i: number) => void;
   selectedIndex?: number | null;
 }) {
+  const { isZh } = useI18n();
   const [ref, w] = useWidth<HTMLDivElement>();
   const tip = useChartTooltip();
   // 有叠加曲线时右边要放它的刻度，先让出右边距
@@ -259,7 +260,7 @@ export function BarChart({
       </svg>
       {overlayColor && (
         <div className="legend">
-          <div className="legend-item"><span className="legend-swatch" style={{ background: color }} />主指标</div>
+          <div className="legend-item"><span className="legend-swatch" style={{ background: color }} />{isZh ? "主指标" : "Primary"}</div>
           <div className="legend-item"><span className="legend-swatch" style={{ background: overlayColor }} />{overlayLabel}</div>
         </div>
       )}
@@ -556,6 +557,7 @@ export type ResidualRow = {
 };
 
 export function paceHrResidual(rows: ResidualRow[], height = 240) {
+  const { isZh } = useI18n();
   const [ref, w] = useWidth<HTMLDivElement>();
   const tip = useChartTooltip();
   const padL = 40, padR = 12;
@@ -592,14 +594,14 @@ export function paceHrResidual(rows: ResidualRow[], height = 240) {
           textAnchor="end" className="axis-label"
           style={{ fill: "var(--chart-bad)", opacity: 0.85, fontSize: 11, fontWeight: 500 }}
         >
-          ▲ 吃力硬撑区（心率偏高）
+          ▲ {isZh ? "吃力硬撑区（心率偏高）" : "High Strain Zone (Elevated HR)"}
         </text>
         <text
           x={padL + iw - 6} y={padT + ih - 6}
           textAnchor="end" className="axis-label"
           style={{ fill: "var(--chart-good)", opacity: 0.85, fontSize: 11, fontWeight: 500 }}
         >
-          ▼ 充沛轻松区（心率偏低）
+          ▼ {isZh ? "充沛轻松区（心率偏低）" : "Efficient Zone (Low HR)"}
         </text>
 
         {/* 参考线：±maxAbs 的上下界 + 零线 */}
@@ -660,8 +662,8 @@ export function paceHrResidual(rows: ResidualRow[], height = 240) {
         ))}
       </svg>
       <div className="legend">
-        <div className="legend-item"><span className="legend-swatch" style={{ background: "var(--chart-bad)" }} />心率高于配速基准（吃力硬撑 / 后程漂移）</div>
-        <div className="legend-item"><span className="legend-swatch" style={{ background: "var(--chart-good)" }} />心率低于配速基准（充沛轻松 / 经济性好）</div>
+        <div className="legend-item"><span className="legend-swatch" style={{ background: "var(--chart-bad)" }} />{isZh ? "心率高于配速基准（吃力硬撑 / 后程漂移）" : "HR above pace baseline (Strained / Drift)"}</div>
+        <div className="legend-item"><span className="legend-swatch" style={{ background: "var(--chart-good)" }} />{isZh ? "心率低于配速基准（充沛轻松 / 经济性好）" : "HR below pace baseline (Efficient / Economical)"}</div>
       </div>
       {tip.el}
     </div>
@@ -701,28 +703,36 @@ export function hrResiduals(
 }
 
 /** r 的绝对值分档，用于给一句人话结论 */
-export function couplingVerdict(r: number) {
+export function couplingVerdict(r: number, isZh = true) {
   const a = Math.abs(r);
   if (a < 0.3) {
     return {
       level: "none" as const,
-      title: "配速与心率离散度大",
-      text: "心率起伏受配速以外的因素影响较多（如爬升起伏、气温或后程疲劳），不宜单凭配速直接对标能力。",
+      title: isZh ? "配速与心率离散度大" : "High HR/Pace Dispersion",
+      text: isZh
+        ? "心率起伏受配速以外的因素影响较多（如爬升起伏、气温或后程疲劳），不宜单凭配速直接对标能力。"
+        : "HR fluctuates due to factors beyond pace (elevation, temperature, or late fatigue).",
     };
   }
   if (a < 0.6) {
     return {
       level: "weak" as const,
-      title: "配速与心率基本匹配",
-      text: "心率随配速变化有一定起伏，整体在正常调节范围内。",
+      title: isZh ? "配速与心率基本匹配" : "Moderate HR/Pace Correlation",
+      text: isZh
+        ? "心率随配速变化有一定起伏，整体在正常调节范围内。"
+        : "Heart rate adapts reasonably to pace fluctuations within normal aerobic bounds.",
     };
   }
   return {
     level: "strong" as const,
-    title: "配速与心率高度联动",
+    title: isZh ? "配速与心率高度联动" : "High HR/Pace Coupling",
     text: r < 0
-      ? "身体对速度变化反应灵敏，提速心率升、降速心率降，体能控制处于良好状态。"
-      : "配速与心率呈反常同向，可能存在数据异常或极特殊地形影响。",
+      ? (isZh
+          ? "身体对速度变化反应灵敏，提速心率升、降速心率降，体能控制处于良好状态。"
+          : "Cardiovascular system responds sharply to speed changes, showing strong aerobic conditioning.")
+      : (isZh
+          ? "配速与心率呈反常同向，可能存在数据异常或极特殊地形影响。"
+          : "Unusual co-directional drift; check data integrity or extreme elevation."),
   };
 }
 
@@ -745,10 +755,24 @@ export type ZoneBasis = {
 };
 
 export function ZoneBar({ zones, basis }: { zones: ZoneInput[]; basis: number | ZoneBasis }) {
+  const { isZh } = useI18n();
   const total = zones.reduce((s, z) => s + z.seconds, 0) || 1;
   const b: ZoneBasis = typeof basis === "number" ? { basis } : basis;
   const hasHrRange = zones.some((z) => z.hrLo != null);
   const belowPct = b.belowZone1Pct ?? 0;
+
+  const translateZoneLabel = (lbl: string) => {
+    if (isZh) return lbl;
+    const map: Record<string, string> = {
+      "积极恢复": "Active Recovery",
+      "有氧耐力": "Aerobic Endurance",
+      "有氧动力": "Aerobic Power",
+      "乳酸阈值": "Threshold",
+      "速度耐力": "Speed Endurance",
+      "无氧动力": "Anaerobic Power",
+    };
+    return map[lbl] || lbl;
+  };
 
   return (
     <div>
@@ -756,7 +780,7 @@ export function ZoneBar({ zones, basis }: { zones: ZoneInput[]; basis: number | 
         {/* 低于 Z1 下界（Z0 积极恢复/热身/走路）用灰色占位，避免百分比看起来对不上 */}
         {belowPct > 0 && (
           <div
-            title={`Z0 积极恢复（${zones[0]?.hrLo != null ? `< ${zones[0].hrLo}` : "低于 Z1"} bpm）— ${belowPct}%`}
+            title={`${isZh ? "Z0 积极恢复" : "Z0 Active Recovery"}（${zones[0]?.hrLo != null ? `< ${zones[0].hrLo}` : isZh ? "低于 Z1" : "< Z1"} bpm）— ${belowPct}%`}
             style={{
               width: `${belowPct}%`,
               background: "var(--chart-muted)",
@@ -768,7 +792,7 @@ export function ZoneBar({ zones, basis }: { zones: ZoneInput[]; basis: number | 
         {zones.map((z) => (
           <div
             key={z.zone}
-            title={`${z.zone} ${z.label}${z.hrLo != null ? ` ${z.hrHi && z.hrHi < 900 ? `${z.hrLo}–${z.hrHi}` : `>${z.hrLo}`} bpm（${z.pctLabel ?? ""}）` : ""} — ${fmtDur(z.seconds)} (${z.pct}%)`}
+            title={`${z.zone} ${translateZoneLabel(z.label)}${z.hrLo != null ? ` ${z.hrHi && z.hrHi < 900 ? `${z.hrLo}–${z.hrHi}` : `>${z.hrLo}`} bpm（${z.pctLabel ?? ""}）` : ""} — ${fmtDur(z.seconds)} (${z.pct}%)`}
             style={{
               width: `${(z.seconds / total) * 100}%`,
               background: `var(--chart-${z.zone.toLowerCase()})`,
@@ -782,7 +806,7 @@ export function ZoneBar({ zones, basis }: { zones: ZoneInput[]; basis: number | 
         {belowPct > 0 && (
           <div className="legend-item" style={{ opacity: 0.7 }}>
             <span className="legend-swatch" style={{ background: "var(--chart-muted)", opacity: 0.5 }} />
-            Z0 积极恢复
+            {isZh ? "Z0 积极恢复" : "Z0 Active Recovery"}
             <span className="num" style={{ color: "var(--text-faint)", fontSize: 11 }}>
               &lt; {zones[0]?.hrLo ?? "—"}
             </span>
@@ -792,7 +816,7 @@ export function ZoneBar({ zones, basis }: { zones: ZoneInput[]; basis: number | 
         {zones.map((z) => (
           <div className="legend-item" key={z.zone} style={{ opacity: z.seconds > 0 ? 1 : 0.4 }}>
             <span className="legend-swatch" style={{ background: `var(--chart-${z.zone.toLowerCase()})` }} />
-            {z.zone} {z.label}
+            {z.zone} {translateZoneLabel(z.label)}
             {hasHrRange && z.hrLo != null && (
               <span className="num" style={{ color: "var(--text-faint)", fontSize: 11 }}>
                 {z.hrHi && z.hrHi < 900 ? `${z.hrLo}–${z.hrHi}` : `>${z.hrLo}`}{z.pctLabel ? ` (${z.pctLabel})` : ""}
@@ -803,13 +827,27 @@ export function ZoneBar({ zones, basis }: { zones: ZoneInput[]; basis: number | 
         ))}
       </div>
       <div className="hint" style={{ marginTop: 8 }}>
-        按<strong>{b.method ?? "五区间心率法"}</strong>划分
-        {b.method?.includes("自定义")
-          ? "（使用你在设置中指定的各区间绝对心率）"
-          : b.restingHr
-            ? `，最大心率 ${b.maxHr ?? b.basis} bpm − 静息 ${b.restingHr} bpm = 储备 ${b.reserve} bpm。括号内百分比是对应的 HRR 占比`
-            : ""}
-        。心率分区由平台按储备心率（HRR）模型统一自算。
+        {isZh ? (
+          <>
+            按<strong>{b.method ?? "五区间心率法"}</strong>划分
+            {b.method?.includes("自定义")
+              ? "（使用你在设置中指定的各区间绝对心率）"
+              : b.restingHr
+                ? `，最大心率 ${b.maxHr ?? b.basis} bpm − 静息 ${b.restingHr} bpm = 储备 ${b.reserve} bpm。括号内百分比是对应的 HRR 占比`
+                : ""}
+            。心率分区由平台按储备心率（HRR）模型统一自算。
+          </>
+        ) : (
+          <>
+            Segmented by <strong>{b.method === "自定义五区间" ? "Custom 5-Zone" : (b.method ?? "5-Zone Heart Rate")}</strong>
+            {b.method?.includes("自定义")
+              ? " (using absolute thresholds configured in Settings)"
+              : b.restingHr
+                ? `, Max HR ${b.maxHr ?? b.basis} bpm − Resting ${b.restingHr} bpm = Reserve ${b.reserve} bpm. Parentheses show HRR percentage`
+                : ""}
+            . Automatically calculated via Karvonen Heart Rate Reserve (HRR) model.
+          </>
+        )}
       </div>
     </div>
   );
@@ -990,24 +1028,33 @@ export type DecouplingResult = {
 
 export function calculateAerobicDecoupling(
   laps: { distanceM: number; timeSec: number; avgPaceSec?: number | null; avgHr?: number | null; elevGain?: number | null }[],
-  options?: { distanceKm?: number; durationSec?: number; isInterval?: boolean; isCombo?: boolean },
+  options?: { distanceKm?: number; durationSec?: number; isInterval?: boolean; isCombo?: boolean; isZh?: boolean },
 ): DecouplingResult {
+  const isZh = options?.isZh ?? true;
   const isInterval = options?.isInterval ?? false;
   if (isInterval) {
-    return { eligible: false, reason: "间歇训练快慢交替，心率与配速剧烈波动，不适用稳态有氧脱钩分析" };
+    return {
+      eligible: false,
+      reason: isZh ? "间歇训练快慢交替，心率与配速剧烈波动，不适用稳态有氧脱钩分析" : "Interval workout with alternating paces; steady-state decoupling analysis is not applicable.",
+    };
   }
 
   const isCombo = options?.isCombo ?? false;
   if (isCombo) {
     return {
       eligible: false,
-      reason: "组合训练可能由多组间歇或力量训练等混合项目构成，配速与心率非持续稳态，脱钩率判定不准确，不进行计算",
+      reason: isZh
+        ? "组合训练可能由多组间歇或力量训练等混合项目构成，配速与心率非持续稳态，脱钩率判定不准确，不进行计算"
+        : "Combo training involves mixed workouts; non-steady-state heart rate invalidates aerobic decoupling calculation.",
     };
   }
 
   const validLaps = (laps ?? []).filter((l) => l.avgHr && l.avgHr > 40 && l.timeSec > 0 && l.distanceM > 0);
   if (validLaps.length < 4) {
-    return { eligible: false, reason: "有效分圈不足（至少需要 4 段有效心率与配速数据）" };
+    return {
+      eligible: false,
+      reason: isZh ? "有效分圈不足（至少需要 4 段有效心率与配速数据）" : "Insufficient laps (requires at least 4 segments with valid pace and heart rate data).",
+    };
   }
 
   const totalDistM = validLaps.reduce((s, l) => s + l.distanceM, 0);
@@ -1016,7 +1063,9 @@ export function calculateAerobicDecoupling(
   if (totalDistM < 5000 || totalTimeSec < 1500) {
     return {
       eligible: false,
-      reason: `距离或用时偏短（${(totalDistM / 1000).toFixed(1)}km / ${Math.round(totalTimeSec / 60)}分钟），有氧脱钩需在持续稳态长距离（建议 ≥5km）中评估`,
+      reason: isZh
+        ? `距离或用时偏短（${(totalDistM / 1000).toFixed(1)}km / ${Math.round(totalTimeSec / 60)}分钟），有氧脱钩需在持续稳态长距离（建议 ≥5km）中评估`
+        : `Distance or duration is too short (${(totalDistM / 1000).toFixed(1)}km / ${Math.round(totalTimeSec / 60)} min). Aerobic decoupling requires a continuous steady run (≥5km recommended).`,
     };
   }
 
@@ -1025,7 +1074,9 @@ export function calculateAerobicDecoupling(
   if (gainPerKm > 18) {
     return {
       eligible: false,
-      reason: `路线爬升较大（${Math.round(totalGain)}m，${gainPerKm.toFixed(1)} m/km），坡度对配速心率比扰动过大，脱钩率计算失真`,
+      reason: isZh
+        ? `路线爬升较大（${Math.round(totalGain)}m，${gainPerKm.toFixed(1)} m/km），坡度对配速心率比扰动过大，脱钩率计算失真`
+        : `Significant elevation gain (${Math.round(totalGain)}m, ${gainPerKm.toFixed(1)} m/km); elevation changes disrupt decoupling analysis accuracy.`,
     };
   }
 
@@ -1065,7 +1116,10 @@ export function calculateAerobicDecoupling(
   }
 
   if (time1 <= 0 || time2 <= 0 || dist1 <= 0 || dist2 <= 0) {
-    return { eligible: false, reason: "分段耗时异常，未能计算前后半效率因子" };
+    return {
+      eligible: false,
+      reason: isZh ? "分段耗时异常，未能计算前后半效率因子" : "Split duration anomaly; failed to compute efficiency factor.",
+    };
   }
 
   const speed1 = dist1 / time1;
@@ -1087,32 +1141,40 @@ export function calculateAerobicDecoupling(
 
   if (decouplingPct < 0) {
     badge = {
-      label: "越跑越顺 (负脱钩)",
+      label: isZh ? "越跑越顺 (负脱钩)" : "Negative Decoupling (<0%)",
       level: "good",
-      text: "后程效率甚至略高于前半程（越跑越顺），说明前半程热身充分、心血管无明显疲劳漂移，后程体能充沛。",
+      text: isZh
+        ? "后程效率甚至略高于前半程（越跑越顺），说明前半程热身充分、心血管无明显疲劳漂移，后程体能充沛。"
+        : "Second-half efficiency was slightly higher than the first half, confirming adequate warm-up and strong stamina.",
     };
-    subText = "后程越跑越顺 · 动能充沛";
+    subText = isZh ? "后程越跑越顺 · 动能充沛" : "Acceleration with high stamina";
   } else if (decouplingPct <= 5.0) {
     badge = {
-      label: "优秀稳态 (漂移<5%)",
+      label: isZh ? "优秀稳态 (漂移<5%)" : "Excellent Stability (<5%)",
       level: "good",
-      text: "前后半程配速与心率高度平行。后程虽然有点累或轻微动能消耗（完全在正常受控范围），但基础有氧耐力与代谢能力极其扎实。",
+      text: isZh
+        ? "前后半程配速与心率高度平行。后程虽然有点累或轻微动能消耗（完全在正常受控范围），但基础有氧耐力与代谢能力极其扎实。"
+        : "Heart rate and pace remained highly parallel throughout the entire run. Outstanding aerobic base and energy economy.",
     };
-    subText = "后程有点累/轻微消耗 · 整体极稳";
+    subText = isZh ? "后程有点累/轻微消耗 · 整体极稳" : "Solid aerobic endurance";
   } else if (decouplingPct <= 8.0) {
     badge = {
-      label: "轻度疲劳 (5%–8%)",
+      label: isZh ? "轻度疲劳 (5%–8%)" : "Mild Decoupling (5%–8%)",
       level: "warn",
-      text: "后程动能有所下降，出现轻微心率上浮或配速微降，属于长距离后程正常的疲劳累积与散热温升，处于可控范围。",
+      text: isZh
+        ? "后程动能有所下降，出现轻微心率上浮或配速微降，属于长距离后程正常的疲劳累积与散热温升，处于可控范围。"
+        : "Minor cardiac drift observed in the second half. Normal thermal strain and cumulative fatigue during a long run.",
     };
-    subText = "后程动能下降 · 轻度疲劳";
+    subText = isZh ? "后程动能下降 · 轻度疲劳" : "Mild fatigue in 2nd half";
   } else {
     badge = {
-      label: "显著疲劳 (>8%)",
+      label: isZh ? "显著疲劳 (>8%)" : "High Decoupling (>8%)",
       level: "bad",
-      text: "后程动能明显衰减（心率持续升高或配速掉速较多），提示当前配速略高于有氧舒适区，或存在脱水、糖原不足等耐力短板。",
+      text: isZh
+        ? "后程动能明显衰减（心率持续升高或配速掉速较多），提示当前配速略高于有氧舒适区，或存在脱水、糖原不足等耐力短板。"
+        : "Noticeable cardiac drift or pace drop. Indicates running above true aerobic ceiling, dehydration, or energy depletion.",
     };
-    subText = "后程明显变累 · 动能衰退";
+    subText = isZh ? "后程明显变累 · 动能衰退" : "Significant cardiovascular drift";
   }
 
   return {
@@ -1149,7 +1211,7 @@ export function AerobicDecouplingCard({
   options?: { distanceKm?: number; durationSec?: number; isInterval?: boolean; isCombo?: boolean };
 }) {
   const { isZh, t } = useI18n();
-  const result = calculateAerobicDecoupling(laps, options);
+  const result = calculateAerobicDecoupling(laps, { ...options, isZh });
 
   if (!result.eligible) {
     return (
@@ -1157,7 +1219,7 @@ export function AerobicDecouplingCard({
         <h3 className="card-title">{t("aerobic.title")}</h3>
         <p className="card-sub">{isZh ? "基于 Joe Friel 有氧模型（EF = 配速 / 心率）评估心血管漂移与有氧耐力储备。" : "Joe Friel Aerobic Decoupling model (EF = Speed / HR) evaluating cardiovascular drift."}</p>
         <div className="banner info" style={{ marginTop: 10, marginBottom: 0, fontSize: 12.5 }}>
-          {isZh ? (result.reason ?? "当前训练暂不适用有氧脱钩评估") : t("aerobic.notEligible")}
+          {result.reason ?? (isZh ? "当前训练暂不适用有氧脱钩评估" : t("aerobic.notEligible"))}
         </div>
       </div>
     );

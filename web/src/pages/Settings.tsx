@@ -18,6 +18,152 @@ export type PopularModel = {
   tag?: string;
 };
 
+const SPORT_EN_MAP: Record<string, string> = {
+  run: "Running",
+  "跑步": "Running",
+  bike: "Cycling",
+  "骑行": "Cycling",
+  swim: "Swimming",
+  "游泳": "Swimming",
+  cardio: "Cardio / Strength",
+  "有氧 / 力量": "Cardio / Strength",
+  walk: "Walking / Fitness",
+  "步行 / 健身": "Walking / Fitness",
+  ski: "Ski & Snow",
+  "滑雪": "Ski & Snow",
+  row: "Water Sports",
+  "水上 / 钓鱼": "Water Sports",
+  climb: "Climbing",
+  "攀岩": "Climbing",
+  ball: "Ball Sports",
+  "球类": "Ball Sports",
+  "户外跑": "Outdoor Run",
+  "室内跑": "Indoor Run",
+  "越野跑": "Trail Run",
+  "场地跑": "Track Run",
+  "徒步": "Hiking",
+  "登山": "Mountaineering",
+  "多段攀登": "Multi-pitch Climbing",
+  "户外骑": "Outdoor Cycling",
+  "室内骑": "Indoor Cycling",
+  "电助力车": "E-Bike",
+  "砾石骑": "Gravel Cycling",
+  "山地骑": "Mountain Biking",
+  "山地电助力": "E-MTB",
+  "头盔骑": "Smart Helmet Cycling",
+  "泳池": "Pool Swim",
+  "开放水域": "Open Water Swim",
+  "室内有氧": "Indoor Cardio",
+  "GPS 有氧": "GPS Cardio",
+  "力量训练": "Strength Training",
+  "步行": "Walking",
+  "跳绳": "Jump Rope",
+  "爬楼": "Stair Climbing",
+  "椭圆机": "Elliptical",
+  "瑜伽": "Yoga",
+  "普拉提": "Pilates",
+  "拳击": "Boxing",
+  "单板": "Snowboarding",
+  "越野滑雪": "Cross-Country Skiing",
+  "登山滑雪": "Ski Touring",
+  "划船": "Rowing",
+  "室内划船机": "Indoor Rower",
+  "激流皮划艇": "Whitewater Kayak",
+  "静水皮划艇": "Flatwater Kayak",
+  "风帆冲浪": "Windsurfing",
+  "速帆": "Speed Sailing",
+  "室内单攀": "Indoor Climbing",
+  "抱石": "Bouldering",
+  "户外攀岩": "Outdoor Climbing",
+  "羽毛球": "Badminton",
+  "乒乓球": "Table Tennis",
+  "篮球": "Basketball",
+  "足球": "Soccer",
+  "匹克球": "Pickleball",
+  "网球": "Tennis",
+};
+
+function formatSportName(name: string, isZh: boolean): string {
+  if (isZh) return name;
+  return SPORT_EN_MAP[name] || name;
+}
+
+const AI_DESC_EN_MAP: Record<string, string> = {
+  "高性价比首选 · 综合能力卓越": "Cost-effective · Excellent overall performance",
+  "深度长链推理与反思": "Deep long-chain reasoning & reflection",
+  "轻快高性价比 · 跑友首选": "Fast & cost-effective · Recommended",
+  "全能多模态旗舰": "All-around multimodal flagship",
+  "高性价比强推理": "Cost-effective strong reasoning",
+  "通用深度思考推理": "General deep reasoning",
+  "混合推理与深度思考旗舰": "Hybrid reasoning flagship",
+  "标杆大模型": "Benchmark model",
+  "轻量快速高性价比": "Lightweight & fast",
+  "兼顾深度思考与极速响应": "Balanced thinking & fast response",
+  "复杂分析推理旗舰": "Complex analysis flagship",
+  "低延迟极速生成": "Low latency fast generation",
+  "百万长上下文": "1M long context",
+  "能力均衡全面 · 主力推荐": "Balanced capabilities · Recommended",
+  "千问旗舰大模型 · 复杂推理": "Flagship model · Complex reasoning",
+  "响应极速 · 超低成本": "Ultra fast · Low cost",
+  "阿里云托管 R1": "Hosted DeepSeek-R1",
+  "阿里云托管 V3": "Hosted DeepSeek-V3",
+  "开源旗舰底座": "Open-source flagship",
+  "极速稳定 · 极高性价比": "Fast & stable · Highly cost-effective",
+  "深度思考推理": "Deep reasoning",
+  "企业高可用专线": "Enterprise high-availability",
+  "企业推理专线": "Enterprise reasoning",
+  "通义千问开源旗舰": "Qwen open-source flagship",
+  "官方免费调用 · 响应极快": "Official free tier · Ultra fast",
+  "智谱旗舰大模型 · 综合逻辑强": "Flagship model · Strong logic",
+  "高性价比极速版": "Cost-effective fast edition",
+  "100万长上下文支持": "1M context window",
+  "标准长上下文": "Standard long context",
+  "中长上下文": "Medium-long context",
+  "多模态思考推理预览版": "Multimodal reasoning preview",
+  "豆包旗舰主力模型": "Doubao flagship model",
+  "轻量极速模型": "Lightweight fast model",
+  "经典专业版": "Classic pro edition",
+  "400万超长文本新一代旗舰": "4M long context flagship",
+  "轻量高性价比": "Lightweight cost-effective",
+  "OpenRouter 托管路由": "OpenRouter routed",
+  "OpenRouter R1 深度推理": "OpenRouter R1 reasoning",
+  "免绑卡聚合调用": "Aggregated model access",
+  "高性价比": "Cost-effective",
+  "超低单价": "Ultra low cost",
+  "开源旗舰": "Open-source flagship",
+  "每秒近 300 token 极速响应": "~300 tokens/sec ultra fast",
+  "百炼托管专线": "Hosted dedicated line",
+  "本地 8B 模型": "Local 8B model",
+  "本地 14B 模型": "Local 14B model",
+  "本地 32B 深度思考模型": "Local 32B reasoning model",
+  "本地轻量思考模型": "Local lightweight reasoning model",
+};
+
+const API_KEY_HINT_EN: Record<string, string> = {
+  "Google AI Studio 提供充沛的免费调用额度，通过兼容接口直连": "Google AI Studio offers generous free quota, connected directly via OpenAI-compatible endpoint",
+  "热门模型托管平台，新用户常有赠送 Token": "Popular model hosting platform with free starter credits",
+  "GLM-4-Flash 永久免费，零门槛轻松体验": "GLM-4-Flash is permanently free with zero setup barrier",
+  "模型名称可填官方模型名或控制台接入点 Endpoint ID (ep-xxxx)": "Model name can be official name or Console Endpoint ID (ep-xxxx)",
+  "单 API Key 自由调用数百款大模型": "Access hundreds of top LLMs with a single API Key",
+  "本地运行保护隐私无需联网。默认无需密钥，API Key 可填任意字符（如 ollama）": "Runs locally with 100% privacy, no internet needed. API Key can be any string (e.g. ollama)",
+};
+
+function getAiDesc(desc?: string, isZh?: boolean): string | undefined {
+  if (!desc || isZh) return desc;
+  return AI_DESC_EN_MAP[desc] || desc;
+}
+
+function formatDocLabel(label?: string, isZh?: boolean): string {
+  if (!label) return isZh ? "平台控制台" : "Platform Console";
+  if (isZh) return label;
+  return label.replace("开放平台", " Open Platform").replace("控制台", " Console").replace("平台", " Platform");
+}
+
+function formatApiKeyHint(hint?: string, isZh?: boolean): string | undefined {
+  if (!hint || isZh) return hint;
+  return API_KEY_HINT_EN[hint] || hint;
+}
+
 export type ProviderPreset = {
   id: string;
   name: string;
@@ -1192,11 +1338,11 @@ export default function Settings({
                     href={currentProvider.docUrl}
                     style={{ color: "var(--accent)", textDecoration: "none", fontWeight: 500 }}
                   >
-                    🔗 获取 API Key（{currentProvider.docLabel || "平台控制台"}）↗
+                    🔗 {isZh ? `获取 API Key（${currentProvider.docLabel || "平台控制台"}）↗` : `Get API Key (${formatDocLabel(currentProvider.docLabel, isZh)}) ↗`}
                   </ExternalLink>
                 )}
                 {currentProvider.apiKeyHint && (
-                  <span>· {currentProvider.apiKeyHint}</span>
+                  <span>· {formatApiKeyHint(currentProvider.apiKeyHint, isZh)}</span>
                 )}
               </div>
             )}
@@ -1207,7 +1353,7 @@ export default function Settings({
                 <span>API Key</span>
                 {currentHasSavedKey && (
                   <span style={{ fontSize: 11, color: "var(--accent)", fontWeight: 500 }}>
-                    已保存密钥 ({savedProviders[currentProviderId]?.apiKeyMasked || "已保护"})
+                    {isZh ? "已保存密钥" : "Key saved"} ({savedProviders[currentProviderId]?.apiKeyMasked || (isZh ? "已保护" : "Protected")})
                   </span>
                 )}
               </div>
@@ -1236,11 +1382,14 @@ export default function Settings({
                 placeholder={isZh ? "例如 deepseek-chat、qwen-plus 或 gpt-4o-mini" : "e.g. gpt-4o-mini, deepseek-chat, or claude-3-5-sonnet"}
               />
               <datalist id="ai-model-datalist">
-                {currentProvider?.popularModels?.map((pm) => (
-                  <option key={pm.model} value={pm.model}>
-                    {pm.label} {pm.desc ? `(${pm.desc})` : ""}
-                  </option>
-                ))}
+                {currentProvider?.popularModels?.map((pm) => {
+                  const desc = getAiDesc(pm.desc, isZh);
+                  return (
+                    <option key={pm.model} value={pm.model}>
+                      {pm.label} {desc ? `(${desc})` : ""}
+                    </option>
+                  );
+                })}
               </datalist>
             </label>
 
@@ -1632,30 +1781,32 @@ export default function Settings({
 
           {/* 当前数据状态：填补左列高度，实现左右列高度对称 */}
           <div className="card">
-            <h3 className="card-title"><IconDatabase size={14} />当前数据状态</h3>
+            <h3 className="card-title"><IconDatabase size={14} />{isZh ? "当前数据状态" : "Database & Sync Status"}</h3>
             <p className="card-sub">
               {status?.lastSync
-                ? `上次同步：${new Date(status.lastSync.startedAt * 1000).toLocaleString("zh-CN")}（${status.lastSync.status === "ok" ? "成功" : "有错误"}）`
-                : "尚未同步过"}
+                ? (isZh
+                    ? `上次同步：${new Date(status.lastSync.startedAt * 1000).toLocaleString("zh-CN")}（${status.lastSync.status === "ok" ? "成功" : "有错误"}）`
+                    : `Last synced: ${new Date(status.lastSync.startedAt * 1000).toLocaleString("en-US")} (${status.lastSync.status === "ok" ? "Success" : "Errors occurred"})`)
+                : (isZh ? "尚未同步过" : "Never synced yet")}
             </p>
             {status && (
               <table>
                 <tbody>
-                  <tr><td>活动记录</td><td className="num">{status.counts.activities}</td></tr>
-                  <tr><td>分圈数据</td><td className="num">{status.counts.laps}</td></tr>
-                  <tr><td>训练负荷</td><td className="num">{status.counts.loadDays} 天</td></tr>
-                  <tr><td>每日健康</td><td className="num">{status.counts.healthDays} 天</td></tr>
-                  <tr><td>睡眠记录</td><td className="num">{status.counts.sleepDays} 天</td></tr>
-                  <tr><td>最近训练</td><td className="num">{status.latestActivityDate ?? "—"}</td></tr>
-                  <tr><td>AI 模型</td><td>{status.aiConfigured ? <span className="pill good">已配置</span> : <span className="pill">未配置</span>}</td></tr>
+                  <tr><td>{isZh ? "活动记录" : "Workouts"}</td><td className="num">{status.counts.activities}</td></tr>
+                  <tr><td>{isZh ? "分圈数据" : "Laps"}</td><td className="num">{status.counts.laps}</td></tr>
+                  <tr><td>{isZh ? "训练负荷" : "Training Load"}</td><td className="num">{status.counts.loadDays}{isZh ? " 天" : " days"}</td></tr>
+                  <tr><td>{isZh ? "每日健康" : "Daily Health"}</td><td className="num">{status.counts.healthDays}{isZh ? " 天" : " days"}</td></tr>
+                  <tr><td>{isZh ? "睡眠记录" : "Sleep"}</td><td className="num">{status.counts.sleepDays}{isZh ? " 天" : " days"}</td></tr>
+                  <tr><td>{isZh ? "最近训练" : "Latest Activity"}</td><td className="num">{status.latestActivityDate ?? "—"}</td></tr>
+                  <tr><td>{isZh ? "AI 模型" : "AI Coach Model"}</td><td>{status.aiConfigured ? <span className="pill good">{isZh ? "已配置" : "Configured"}</span> : <span className="pill">{isZh ? "未配置" : "Not configured"}</span>}</td></tr>
                   <tr>
-                    <td>当前版本</td>
+                    <td>{isZh ? "当前版本" : "App Version"}</td>
                     <td>
                       <div style={{ display: "inline-flex", alignItems: "center", gap: 6, verticalAlign: "middle" }}>
                         <ExternalLink
                           href="https://github.com/captainLegoo/PaceCraft"
                           className="version-tag"
-                          title={`当前版本：${appVersion}（访问 GitHub 仓库）`}
+                          title={isZh ? `当前版本：${appVersion}（访问 GitHub 仓库）` : `Version: ${appVersion} (Visit GitHub)`}
                         >
                           <span className="dot" />
                           <span>{appVersion}</span>
@@ -1681,7 +1832,7 @@ export default function Settings({
                               }}
                             />
                           )}
-                          <span>{hasNewUpdate ? "发现新版本" : "检查更新"}</span>
+                          <span>{hasNewUpdate ? (isZh ? "发现新版本" : "Update available") : (isZh ? "检查更新" : "Check for updates")}</span>
                         </button>
                       </div>
                     </td>
@@ -1694,25 +1845,27 @@ export default function Settings({
           {/* 关于数据来源与系统：接续在当前数据状态下方，彻底消灭左列留白 */}
           <div className="card">
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 8, marginBottom: 4 }}>
-              <h3 className="card-title" style={{ margin: 0 }}>关于数据来源与系统</h3>
+              <h3 className="card-title" style={{ margin: 0 }}>{isZh ? "关于数据来源与系统" : "About Data Sources & Privacy"}</h3>
               <ExternalLink
                 href="https://github.com/captainLegoo/PaceCraft"
                 className="version-tag"
-                title="访问 GitHub 仓库"
+                title={isZh ? "访问 GitHub 仓库" : "Visit GitHub repository"}
               >
                 <span className="dot" />
                 <span>PaceCraft {appVersion}</span>
               </ExternalLink>
             </div>
             <p className="card-sub" style={{ margin: "2px 0 10px 0" }}>
-              本看板所有数据均来自各品牌官方开放平台（高驰 COROS 官方开放接口 / 佳明 Garmin Personal API），未使用任何非官方接口。
+              {isZh
+                ? "本看板所有数据均来自各品牌官方开放平台（高驰 COROS 官方开放接口 / 佳明 Garmin Personal API），未使用任何非官方接口。"
+                : "All data originates directly from official brand developer platforms (COROS Open Platform & Garmin Personal API). No unofficial scraping or private APIs."}
             </p>
             <ul style={{ color: "var(--text-dim)", fontSize: 12, lineHeight: 1.8, paddingLeft: 18, margin: 0 }}>
-              <li>高驰授权通过 OAuth 2.0 动态客户端注册 + PKCE 完成，Garmin 通过官方 Personal API Key 接入，Token 与 Key 均仅存储于你本机 SQLite 数据库。</li>
-              <li>时序活动数据、分圈轨迹与 .FIT 文件均经平台独立解析引擎统一标准化归一化处理。</li>
-              <li>分圈距离原始单位已在多次活动上与记录距离交叉验证一致。</li>
-              <li>心率区间与能力预测由本看板独立引擎计算，完全跨品牌通用。</li>
-              <li>高驰 FIT 原始文件每日限 50 次下载（官方限制，Garmin 不受此限），超出后保留基础时序指标。</li>
+              <li>{isZh ? "高驰授权通过 OAuth 2.0 动态客户端注册 + PKCE 完成，Garmin 通过官方 Personal API Key 接入，Token 与 Key 均仅存储于你本机 SQLite 数据库。" : "COROS connects via OAuth 2.0 PKCE and Garmin via Personal API Key. Credentials remain strictly on your local SQLite database."}</li>
+              <li>{isZh ? "时序活动数据、分圈轨迹与 .FIT 文件均经平台独立解析引擎统一标准化归一化处理。" : "Time-series workouts, lap telemetry, and raw .FIT files are standardized and processed by our local engine."}</li>
+              <li>{isZh ? "分圈距离原始单位已在多次活动上与记录距离交叉验证一致。" : "Lap distance precision is cross-verified against official summary records across hundreds of test sessions."}</li>
+              <li>{isZh ? "心率区间与能力预测由本看板独立引擎计算，完全跨品牌通用。" : "Heart rate zones and predictive modeling are computed locally, fully interoperable across brands."}</li>
+              <li>{isZh ? "高驰 FIT 原始文件每日限 50 次下载（官方限制，Garmin 不受此限），超出后保留基础时序指标。" : "COROS raw FIT files carry an official limit of 50 downloads daily (Garmin has no limit); summary telemetry is always retained."}</li>
             </ul>
           </div>
         </div>
@@ -1756,7 +1909,9 @@ export default function Settings({
                   )}
                 </h3>
                 <p className="card-sub">
-                  通过高驰官方 OAuth 2.0 PKCE 协议连接。授权凭证只保存在你本地电脑，不经过任何第三方服务器。
+                  {isZh
+                    ? "通过高驰官方 OAuth 2.0 PKCE 协议连接。授权凭证只保存在你本地电脑，不经过任何第三方服务器。"
+                    : "Connected via official COROS OAuth 2.0 PKCE. Credentials remain strictly stored on your local machine."}
                 </p>
                 {authMsg && (
                   <div className={`sync-msg ${authMsg.kind}`} style={{ marginBottom: 10 }}>
@@ -1766,20 +1921,26 @@ export default function Settings({
                 {auth?.connected ? (
                   <div style={{ background: "var(--bg-subtle, rgba(255,255,255,0.03))", padding: "12px 14px", borderRadius: 8, border: "1px solid var(--border)", marginBottom: 8 }}>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
-                      <span style={{ fontSize: 13, fontWeight: 600 }}>高驰昵称：{auth.nickname || "已绑定（未拉取昵称）"}</span>
-                      <span style={{ fontSize: 11, color: "#10b981", background: "rgba(16,185,129,0.1)", padding: "2px 8px", borderRadius: 12 }}>● 正常连接</span>
+                      <span style={{ fontSize: 13, fontWeight: 600 }}>
+                        {isZh ? "高驰昵称：" : "Nickname: "}
+                        {auth.nickname || (isZh ? "已绑定（未拉取昵称）" : "Connected (No alias)")}
+                      </span>
+                      <span style={{ fontSize: 11, color: "#10b981", background: "rgba(16,185,129,0.1)", padding: "2px 8px", borderRadius: 12 }}>
+                        {isZh ? "● 正常连接" : "● Connected"}
+                      </span>
                     </div>
                     <div style={{ fontSize: 12, color: "var(--text-dim)" }}>
-                      Token 有效期至：{auth.expiresAt ? new Date(auth.expiresAt * 1000).toLocaleString("zh-CN") : "长期有效（自动续期）"}
+                      {isZh ? "Token 有效期至：" : "Token valid until: "}
+                      {auth.expiresAt ? new Date(auth.expiresAt * 1000).toLocaleString(isZh ? "zh-CN" : "en-US") : (isZh ? "长期有效（自动续期）" : "Long-term (Auto-refreshed)")}
                     </div>
                     {corosQuota && (
                       <div style={{ fontSize: 12, color: "var(--text-dim)", marginTop: 4 }}>
-                        FIT 文件每日下载配额：{corosQuota.used}/{corosQuota.limit}{corosQuota.exhausted ? "（今日已用完，官方限制 50 次/天）" : "（官方限制 50 次/天）"}
+                        {isZh ? "FIT 文件每日下载配额：" : "Daily FIT Download Quota: "}{corosQuota.used}/{corosQuota.limit}{corosQuota.exhausted ? (isZh ? "（今日已用完，官方限制 50 次/天）" : " (Limit reached, 50/day)") : (isZh ? "（官方限制 50 次/天）" : " (50/day limit)")}
                       </div>
                     )}
                     <div style={{ display: "flex", gap: 8, marginTop: 12, alignItems: "center", flexWrap: "wrap" }}>
                       <button className="btn-secondary" onClick={connectCoros} disabled={authConnecting} style={{ fontSize: 12, padding: "5px 12px" }}>
-                        {authConnecting ? "正在打开授权页面…" : "重新授权"}
+                        {authConnecting ? (isZh ? "正在打开授权页面…" : "Opening auth...") : (isZh ? "重新授权" : "Re-authorize")}
                       </button>
                       {!confirmingDisconnect ? (
                         <button
@@ -1789,11 +1950,11 @@ export default function Settings({
                           disabled={authLoading}
                           style={{ fontSize: 12, padding: "5px 12px", background: "rgba(239,68,68,0.1)", color: "#ef4444", border: "1px solid rgba(239,68,68,0.2)", borderRadius: 6, cursor: "pointer" }}
                         >
-                          解除绑定
+                          {isZh ? "解除绑定" : "Disconnect"}
                         </button>
                       ) : (
                         <div style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "3px 8px", background: "rgba(239,68,68,0.08)", borderRadius: 6, border: "1px solid rgba(239,68,68,0.25)" }}>
-                          <span style={{ fontSize: 12, color: "#ef4444", fontWeight: 500 }}>确定解除？</span>
+                          <span style={{ fontSize: 12, color: "#ef4444", fontWeight: 500 }}>{isZh ? "确定解除？" : "Confirm disconnect?"}</span>
                           <button
                             type="button"
                             onClick={async () => {
@@ -1803,7 +1964,7 @@ export default function Settings({
                             disabled={authLoading}
                             style={{ fontSize: 11.5, padding: "3px 8px", background: "#ef4444", color: "#fff", border: "none", borderRadius: 4, cursor: "pointer", fontWeight: 600 }}
                           >
-                            {authLoading ? "解绑中…" : "确认解绑"}
+                            {authLoading ? (isZh ? "解绑中…" : "Disconnecting...") : (isZh ? "确认解绑" : "Confirm")}
                           </button>
                           <button
                             type="button"
@@ -1811,7 +1972,7 @@ export default function Settings({
                             disabled={authLoading}
                             style={{ fontSize: 11.5, padding: "3px 6px", background: "transparent", color: "var(--text-dim)", border: "1px solid var(--border)", borderRadius: 4, cursor: "pointer" }}
                           >
-                            取消
+                            {t("common.cancel")}
                           </button>
                         </div>
                       )}
@@ -1820,10 +1981,10 @@ export default function Settings({
                 ) : (
                   <div style={{ background: "rgba(245,158,11,0.06)", padding: "14px", borderRadius: 8, border: "1px dashed #f59e0b", marginBottom: 8 }}>
                     <div style={{ fontSize: 13, fontWeight: 600, color: "#f59e0b", marginBottom: 4 }}>
-                      当前尚未连接 COROS 账号
+                      {isZh ? "当前尚未连接 COROS 账号" : "No COROS account connected"}
                     </div>
                     <p style={{ fontSize: 12, color: "var(--text-dim)", margin: "0 0 12px 0", lineHeight: 1.5 }}>
-                      连接后可直接拉取历史跑步数据、心率、分圈及体能负荷指标。
+                      {isZh ? "连接后可直接拉取历史跑步数据、心率、分圈及体能负荷指标。" : "Connect to automatically sync workout activities, heart rate, laps, and load metrics."}
                     </p>
                     {!authConnecting ? (
                       <button
@@ -1843,13 +2004,13 @@ export default function Settings({
                           gap: 6,
                         }}
                       >
-                        🔗 一键连接 COROS 账号
+                        🔗 {isZh ? "一键连接 COROS 账号" : "Connect COROS Account"}
                       </button>
                     ) : (
                       <div style={{ background: "var(--bg-subtle, rgba(0,0,0,0.2))", padding: "10px 12px", borderRadius: 6, border: "1px solid var(--border)" }}>
                         <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8, fontSize: 12.5, fontWeight: 500, color: "#60a5fa" }}>
                           <span className="spinner" style={{ display: "inline-block", width: 12, height: 12, border: "2px solid #60a5fa", borderTopColor: "transparent", borderRadius: "50%", animation: "spin 1s linear infinite" }} />
-                          正在等待浏览器完成授权…
+                          {isZh ? "正在等待浏览器完成授权…" : "Waiting for browser authorization..."}
                         </div>
                         <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
                           <button
@@ -1857,7 +2018,7 @@ export default function Settings({
                             onClick={openCorosBrowser}
                             style={{ fontSize: 12, padding: "4px 10px", background: "#2563eb", color: "#fff", border: "none", borderRadius: 4, cursor: "pointer" }}
                           >
-                            🌐 在浏览器中打开
+                            🌐 {isZh ? "在浏览器中打开" : "Open in Browser"}
                           </button>
                           {authUrl && (
                             <button
@@ -1874,7 +2035,7 @@ export default function Settings({
                                 transition: "all 0.2s ease",
                               }}
                             >
-                              {copiedAuthUrl ? "✓ 授权链接已复制" : "📋 复制授权链接"}
+                              {copiedAuthUrl ? (isZh ? "✓ 授权链接已复制" : "✓ Link Copied") : (isZh ? "📋 复制授权链接" : "📋 Copy Link")}
                             </button>
                           )}
                           <button
@@ -1882,7 +2043,7 @@ export default function Settings({
                             onClick={cancelCoros}
                             style={{ fontSize: 12, padding: "4px 10px", background: "transparent", color: "var(--muted)", border: "1px solid var(--border)", borderRadius: 4, cursor: "pointer" }}
                           >
-                            取消
+                            {t("common.cancel")}
                           </button>
                         </div>
                       </div>
@@ -1895,7 +2056,7 @@ export default function Settings({
               <div className="card" style={{ margin: 0, background: "var(--surface-2, rgba(255,255,255,0.02))", border: "1px solid var(--border)" }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6, flexWrap: "wrap", gap: 8 }}>
                   <h3 className="card-title" style={{ margin: 0 }}>
-                    <span style={{ fontSize: 16 }}>⌚</span> Garmin 佳明 Connect 连接
+                    <span style={{ fontSize: 16 }}>⌚</span> {isZh ? "Garmin 佳明 Connect 连接" : "Garmin Connect Integration"}
                   </h3>
                   {garminAuth?.connected && (
                     <button
@@ -1904,15 +2065,21 @@ export default function Settings({
                       disabled={garminSyncing}
                       style={{ fontSize: 12, padding: "5px 12px", background: "#2563eb", color: "#fff", border: "none", borderRadius: 6, cursor: "pointer", fontWeight: 600 }}
                     >
-                      {garminSyncing ? "正在同步…" : "🔄 一键同步全部佳明"}
+                      {garminSyncing ? (isZh ? "正在同步…" : "Syncing...") : (isZh ? "🔄 一键同步全部佳明" : "🔄 Sync All Garmin")}
                     </button>
                   )}
                 </div>
                 <p className="card-sub">
-                  基于 Garmin Connect Personal API 官方接口。支持<strong>中国区与国际区同时连接</strong>，数据统一汇聚进当前档案，凭证仅保存在本地。
+                  {isZh ? (
+                    <>基于 Garmin Connect Personal API 官方接口。支持<strong>中国区与国际区同时连接</strong>，数据统一汇聚进当前档案，凭证仅保存在本地。</>
+                  ) : (
+                    <>Powered by official Garmin Connect Personal API. Supports <strong>concurrent China & Global sync</strong> into your local SQLite store.</>
+                  )}
                 </p>
                 <div style={{ fontSize: 12, color: "var(--text-dim)", marginBottom: 12, padding: "6px 10px", background: "rgba(255,255,255,0.03)", borderRadius: 6, border: "1px dashed var(--border)" }}>
-                  ℹ️ 首次同步需拉取并解析 1 年历史分圈以构建全量预测模型与体能曲线，同步时间可能较长（约 20~60 秒），请耐心等待。
+                  {isZh
+                    ? "ℹ️ 首次同步需拉取并解析 1 年历史分圈以构建全量预测模型与体能曲线，同步时间可能较长（约 20~60 秒），请耐心等待。"
+                    : "ℹ️ Initial sync downloads past 1 year of laps to calibrate models; please allow 20-60 seconds."}
                 </div>
 
                 {garminMsg && (
@@ -1939,26 +2106,26 @@ export default function Settings({
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 10, gap: 8 }}>
                       <div>
                         <div style={{ display: "flex", alignItems: "center", gap: 6, fontWeight: 600, fontSize: 13, marginBottom: 4 }}>
-                          <span>🇨🇳</span> 佳明 (中国区)
+                          <span>🇨🇳</span> {isZh ? "佳明 (中国区)" : "Garmin (China CN)"}
                         </div>
                         <span style={{ fontSize: 10.5, color: "#10b981", background: "rgba(16,185,129,0.1)", padding: "1px 6px", borderRadius: 10, display: "inline-block" }}>connect.garmin.cn</span>
                       </div>
                       {garminAuth?.cn?.connected ? (
                         <span style={{ fontSize: 11, color: "#10b981", background: "rgba(16,185,129,0.1)", padding: "3px 9px", borderRadius: 12, fontWeight: 500, whiteSpace: "nowrap", flexShrink: 0 }}>
-                          ● 已连接
+                          {isZh ? "● 已连接" : "● Connected"}
                         </span>
                       ) : (
-                        <span style={{ fontSize: 11, color: "var(--text-dim)", whiteSpace: "nowrap", flexShrink: 0 }}>未连接</span>
+                        <span style={{ fontSize: 11, color: "var(--text-dim)", whiteSpace: "nowrap", flexShrink: 0 }}>{isZh ? "未连接" : "Not connected"}</span>
                       )}
                     </div>
 
                     {garminAuth?.cn?.connected ? (
                       <div>
                         <div style={{ fontSize: 12, marginBottom: 4 }}>
-                          账号：<strong>{garminAuth.cn.userFullName || "已连接"}</strong>
+                          {isZh ? "账号：" : "Account: "}<strong>{garminAuth.cn.userFullName || (isZh ? "已连接" : "Connected")}</strong>
                         </div>
                         <div style={{ fontSize: 11.5, color: "var(--text-dim)", marginBottom: 10 }}>
-                          Token 状态：{garminAuth.cn.expired ? "已过期" : "正常（自动轮换）"}
+                          {isZh ? "Token 状态：" : "Token: "}{garminAuth.cn.expired ? (isZh ? "已过期" : "Expired") : (isZh ? "正常（自动轮换）" : "Active (Auto-rotated)")}
                         </div>
                         <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
                           <button
@@ -1966,7 +2133,7 @@ export default function Settings({
                             disabled={garminSyncing}
                             style={{ fontSize: 11.5, padding: "5px 12px", background: "var(--surface)", color: "var(--text)", border: "1px solid var(--border)", borderRadius: 6, cursor: "pointer", fontWeight: 500 }}
                           >
-                            {garminSyncing ? "同步中…" : "🔄 同步该区"}
+                            {garminSyncing ? (isZh ? "同步中…" : "Syncing...") : (isZh ? "🔄 同步该区" : "🔄 Sync CN")}
                           </button>
                           {confirmingGarminDisconnect !== "cn" ? (
                             <button
@@ -1974,7 +2141,7 @@ export default function Settings({
                               disabled={Boolean(garminDisconnecting)}
                               style={{ fontSize: 11.5, padding: "5px 12px", background: "rgba(239,68,68,0.1)", color: "#ef4444", border: "1px solid rgba(239,68,68,0.2)", borderRadius: 6, cursor: "pointer" }}
                             >
-                              解除绑定
+                              {isZh ? "解除绑定" : "Disconnect"}
                             </button>
                           ) : (
                             <div style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
@@ -1983,13 +2150,13 @@ export default function Settings({
                                 disabled={Boolean(garminDisconnecting)}
                                 style={{ fontSize: 11, padding: "3px 8px", background: "#ef4444", color: "#fff", border: "none", borderRadius: 4, cursor: "pointer", fontWeight: 600 }}
                               >
-                                {garminDisconnecting === "cn" ? "解绑中…" : "确认解绑"}
+                                {garminDisconnecting === "cn" ? (isZh ? "解绑中…" : "Disconnecting...") : (isZh ? "确认解绑" : "Confirm")}
                               </button>
                               <button
                                 onClick={() => setConfirmingGarminDisconnect(null)}
                                 style={{ fontSize: 11, padding: "3px 6px", background: "transparent", color: "var(--text-dim)", border: "1px solid var(--border)", borderRadius: 4, cursor: "pointer" }}
                               >
-                                取消
+                                {t("common.cancel")}
                               </button>
                             </div>
                           )}
@@ -1999,7 +2166,7 @@ export default function Settings({
                       <div>
                         <input
                           type="password"
-                          placeholder="粘贴中国区 Personal API Key"
+                          placeholder={isZh ? "粘贴中国区 Personal API Key" : "Paste China CN Personal API Key"}
                           value={garminCnKey}
                           onChange={(e) => setGarminCnKey(e.target.value)}
                           disabled={connectingRegion === "cn"}
@@ -2010,10 +2177,10 @@ export default function Settings({
                           disabled={connectingRegion === "cn" || !garminCnKey.trim()}
                           style={{ width: "100%", padding: "7px 0", fontSize: 12, background: "#10b981", color: "#fff", border: "none", borderRadius: 6, cursor: "pointer", fontWeight: 600, marginBottom: 8 }}
                         >
-                          {connectingRegion === "cn" ? "正在连接并拉取数据…" : "连接中国区账号"}
+                          {connectingRegion === "cn" ? (isZh ? "正在连接并拉取数据…" : "Connecting & syncing...") : (isZh ? "连接中国区账号" : "Connect China CN")}
                         </button>
                         <a href="https://connect.garmin.cn/app/settings/personalApiToken" target="_blank" rel="noopener noreferrer" style={{ fontSize: 11, color: "#60a5fa", textDecoration: "underline" }}>
-                          🔗 前往中国区后台生成 Key
+                          🔗 {isZh ? "前往中国区后台生成 Key" : "Generate Key at connect.garmin.cn"}
                         </a>
                       </div>
                     )}
@@ -2024,26 +2191,26 @@ export default function Settings({
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 10, gap: 8 }}>
                       <div>
                         <div style={{ display: "flex", alignItems: "center", gap: 6, fontWeight: 600, fontSize: 13, marginBottom: 4 }}>
-                          <span>🌐</span> 佳明 (国际区)
+                          <span>🌐</span> {isZh ? "佳明 (国际区)" : "Garmin (Global)"}
                         </div>
                         <span style={{ fontSize: 10.5, color: "#60a5fa", background: "rgba(96,165,250,0.1)", padding: "1px 6px", borderRadius: 10, display: "inline-block" }}>connect.garmin.com</span>
                       </div>
                       {garminAuth?.global?.connected ? (
                         <span style={{ fontSize: 11, color: "#10b981", background: "rgba(16,185,129,0.1)", padding: "3px 9px", borderRadius: 12, fontWeight: 500, whiteSpace: "nowrap", flexShrink: 0 }}>
-                          ● 已连接
+                          {isZh ? "● 已连接" : "● Connected"}
                         </span>
                       ) : (
-                        <span style={{ fontSize: 11, color: "var(--text-dim)", whiteSpace: "nowrap", flexShrink: 0 }}>未连接</span>
+                        <span style={{ fontSize: 11, color: "var(--text-dim)", whiteSpace: "nowrap", flexShrink: 0 }}>{isZh ? "未连接" : "Not connected"}</span>
                       )}
                     </div>
 
                     {garminAuth?.global?.connected ? (
                       <div>
                         <div style={{ fontSize: 12, marginBottom: 4 }}>
-                          账号：<strong>{garminAuth.global.userFullName || "已连接"}</strong>
+                          {isZh ? "账号：" : "Account: "}<strong>{garminAuth.global.userFullName || (isZh ? "已连接" : "Connected")}</strong>
                         </div>
                         <div style={{ fontSize: 11.5, color: "var(--text-dim)", marginBottom: 10 }}>
-                          Token 状态：{garminAuth.global.expired ? "已过期" : "正常（自动轮换）"}
+                          {isZh ? "Token 状态：" : "Token: "}{garminAuth.global.expired ? (isZh ? "已过期" : "Expired") : (isZh ? "正常（自动轮换）" : "Active (Auto-rotated)")}
                         </div>
                         <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
                           <button
@@ -2051,7 +2218,7 @@ export default function Settings({
                             disabled={garminSyncing}
                             style={{ fontSize: 11.5, padding: "5px 12px", background: "var(--surface)", color: "var(--text)", border: "1px solid var(--border)", borderRadius: 6, cursor: "pointer", fontWeight: 500 }}
                           >
-                            {garminSyncing ? "同步中…" : "🔄 同步该区"}
+                            {garminSyncing ? (isZh ? "同步中…" : "Syncing...") : (isZh ? "🔄 同步该区" : "🔄 Sync Global")}
                           </button>
                           {confirmingGarminDisconnect !== "global" ? (
                             <button
@@ -2059,7 +2226,7 @@ export default function Settings({
                               disabled={Boolean(garminDisconnecting)}
                               style={{ fontSize: 11.5, padding: "5px 12px", background: "rgba(239,68,68,0.1)", color: "#ef4444", border: "1px solid rgba(239,68,68,0.2)", borderRadius: 6, cursor: "pointer" }}
                             >
-                              解除绑定
+                              {isZh ? "解除绑定" : "Disconnect"}
                             </button>
                           ) : (
                             <div style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
@@ -2068,13 +2235,13 @@ export default function Settings({
                                 disabled={Boolean(garminDisconnecting)}
                                 style={{ fontSize: 11, padding: "3px 8px", background: "#ef4444", color: "#fff", border: "none", borderRadius: 4, cursor: "pointer", fontWeight: 600 }}
                               >
-                                {garminDisconnecting === "global" ? "解绑中…" : "确认解绑"}
+                                {garminDisconnecting === "global" ? (isZh ? "解绑中…" : "Disconnecting...") : (isZh ? "确认解绑" : "Confirm")}
                               </button>
                               <button
                                 onClick={() => setConfirmingGarminDisconnect(null)}
                                 style={{ fontSize: 11, padding: "3px 6px", background: "transparent", color: "var(--text-dim)", border: "1px solid var(--border)", borderRadius: 4, cursor: "pointer" }}
                               >
-                                取消
+                                {t("common.cancel")}
                               </button>
                             </div>
                           )}
@@ -2084,7 +2251,7 @@ export default function Settings({
                       <div>
                         <input
                           type="password"
-                          placeholder="粘贴国际区 Personal API Key"
+                          placeholder={isZh ? "粘贴国际区 Personal API Key" : "Paste Global Personal API Key"}
                           value={garminGlobalKey}
                           onChange={(e) => setGarminGlobalKey(e.target.value)}
                           disabled={connectingRegion === "global"}
@@ -2095,10 +2262,10 @@ export default function Settings({
                           disabled={connectingRegion === "global" || !garminGlobalKey.trim()}
                           style={{ width: "100%", padding: "7px 0", fontSize: 12, background: "#2563eb", color: "#fff", border: "none", borderRadius: 6, cursor: "pointer", fontWeight: 600, marginBottom: 8 }}
                         >
-                          {connectingRegion === "global" ? "正在连接并拉取数据…" : "连接国际区账号"}
+                          {connectingRegion === "global" ? (isZh ? "正在连接并拉取数据…" : "Connecting & syncing...") : (isZh ? "连接国际区账号" : "Connect Global Account")}
                         </button>
                         <a href="https://connect.garmin.com/modern/settings/personalApiToken" target="_blank" rel="noopener noreferrer" style={{ fontSize: 11, color: "#60a5fa", textDecoration: "underline" }}>
-                          🔗 前往国际区后台生成 Key
+                          🔗 {isZh ? "前往国际区后台生成 Key" : "Generate Key at connect.garmin.com"}
                         </a>
                       </div>
                     )}
@@ -2134,7 +2301,7 @@ export default function Settings({
                     return (
                       <div className="sport-group" key={g.key}>
                         <div className="sport-group-head">
-                          <span className="sport-group-name">{isZh ? g.label : (t(`settings.${g.key}`) || g.label)}</span>
+                          <span className="sport-group-name">{isZh ? g.label : (SPORT_EN_MAP[g.key] || SPORT_EN_MAP[g.label] || g.label)}</span>
                           <button className="sport-link" onClick={() => setGroup(g.types, !allOn)}>
                             {allOn ? t("settings.clearAll") : t("settings.selectAll")}
                           </button>
@@ -2146,7 +2313,7 @@ export default function Settings({
                               className={`sport-chip ${picked.includes(tItem.code) ? "on" : ""}`}
                               onClick={() => toggleSport(tItem.code)}
                             >
-                              {tItem.label}
+                              {formatSportName(tItem.label, isZh)}
                             </button>
                           ))}
                         </div>
@@ -2179,7 +2346,7 @@ export default function Settings({
                             return (
                               <div className="sport-group" key={g.key}>
                                 <div className="sport-group-head">
-                                  <span className="sport-group-name">{isZh ? g.label : (t(`settings.${g.key}`) || g.label)}</span>
+                                  <span className="sport-group-name">{isZh ? g.label : (SPORT_EN_MAP[g.key] || SPORT_EN_MAP[g.label] || g.label)}</span>
                                   <button className="sport-link" onClick={() => setGroup(g.types, !allOn)}>
                                     {allOn ? t("settings.clearAll") : t("settings.selectAll")}
                                   </button>
@@ -2191,7 +2358,7 @@ export default function Settings({
                                       className={`sport-chip ${picked.includes(tItem.code) ? "on" : ""}`}
                                       onClick={() => toggleSport(tItem.code)}
                                     >
-                                      {tItem.label}
+                                      {formatSportName(tItem.label, isZh)}
                                     </button>
                                   ))}
                                 </div>
@@ -2313,10 +2480,12 @@ export default function Settings({
       {testDataInfo && (testDataInfo.count > 0 || testCleanMsg) && (
         <div className="card" style={{ borderColor: "rgba(245, 158, 11, 0.4)", marginTop: 14 }}>
           <h3 className="card-title" style={{ color: "var(--warn, #f59e0b)" }}>
-            🧪 模拟测试数据管理
+            {isZh ? "🧪 模拟测试数据管理" : "🧪 Mock Test Data Management"}
           </h3>
           <p className="card-sub">
-            检测用于功能演练、双表去重测试注入的模拟活动记录。一键清理后将恢复真实主表记录，跑量与负荷回归 100% 真实纯净。
+            {isZh
+              ? "检测用于功能演练、双表去重测试注入的模拟活动记录。一键清理后将恢复真实主表记录，跑量与负荷回归 100% 真实纯净。"
+              : "Detects mock activity records injected for drills or deduplication testing. Cleaning restores authentic records, returning volume and load to 100% genuine data."}
           </p>
 
           {testDataInfo.count > 0 ? (
@@ -2329,12 +2498,12 @@ export default function Settings({
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 12 }}>
                 <div>
                   <div style={{ color: "var(--warn, #f59e0b)", fontWeight: 600, fontSize: 13.5 }}>
-                    发现 {testDataInfo.count} 条模拟测试记录：
+                    {isZh ? `发现 ${testDataInfo.count} 条模拟测试记录：` : `Found ${testDataInfo.count} mock test records:`}
                   </div>
                   <ul style={{ margin: "6px 0 0 18px", padding: 0, fontSize: 12, color: "var(--text-dim)", lineHeight: 1.6 }}>
                     {testDataInfo.items.map((i) => (
                       <li key={i.labelId}>
-                        [{i.source.toUpperCase()}] {i.dateLabel} · {i.distanceKm} km · {i.sportName}
+                        [{i.source.toUpperCase()}] {i.dateLabel} · {i.distanceKm} km · {formatSportName(i.sportName, isZh)}
                       </li>
                     ))}
                   </ul>
@@ -2352,11 +2521,11 @@ export default function Settings({
                       flexShrink: 0,
                     }}
                   >
-                    一键清理模拟测试数据
+                    {isZh ? "一键清理模拟测试数据" : "Clean Mock Test Data"}
                   </button>
                 ) : (
                   <div style={{ display: "inline-flex", gap: 6, alignItems: "center", flexShrink: 0 }}>
-                    <span style={{ fontSize: 12, color: "var(--warn)", fontWeight: 500 }}>确定清理并恢复？</span>
+                    <span style={{ fontSize: 12, color: "var(--warn)", fontWeight: 500 }}>{isZh ? "确定清理并恢复？" : "Clean & restore?"}</span>
                     <button
                       className="btn sm"
                       onClick={handleCleanTestData}
@@ -2368,14 +2537,14 @@ export default function Settings({
                         fontWeight: 600,
                       }}
                     >
-                      {cleaningTest ? "清理中…" : "确定"}
+                      {cleaningTest ? (isZh ? "清理中…" : "Cleaning…") : (isZh ? "确定" : "Confirm")}
                     </button>
                     <button
                       className="btn sm"
                       onClick={() => setConfirmingCleanTest(false)}
                       disabled={cleaningTest}
                     >
-                      取消
+                      {t("common.cancel")}
                     </button>
                   </div>
                 )}
@@ -2393,7 +2562,7 @@ export default function Settings({
               alignItems: "center",
               gap: 8,
             }}>
-              <span>✓</span> {testCleanMsg || "数据库中无模拟测试数据，所有训练记录均为真实同步数据。"}
+              <span>✓</span> {testCleanMsg || (isZh ? "数据库中无模拟测试数据，所有训练记录均为真实同步数据。" : "No simulated test data in database. All workouts are verified authentic sync records.")}
             </div>
           )}
         </div>
@@ -2401,21 +2570,25 @@ export default function Settings({
 
       <div className="card" style={{ borderColor: "rgba(239, 68, 68, 0.35)", marginTop: 14 }}>
         <h3 className="card-title" style={{ color: "var(--bad, #ef4444)" }}>
-          <IconDatabase size={14} /> 本地数据管理与安全重置 (Danger Zone)
+          <IconDatabase size={14} /> {isZh ? "本地数据管理与安全重置 (Danger Zone)" : "Local Data Management & Safety Reset (Danger Zone)"}
         </h3>
         <p className="card-sub">
-          PaceCraft 采用 100% 本地存储架构，所有运动记录、OAuth 凭证及跑力模型均存放在你的个人电脑主目录下。
+          {isZh
+            ? "PaceCraft 采用 100% 本地存储架构，所有运动记录、OAuth 凭证及跑力模型均存放在你的个人电脑主目录下。"
+            : "PaceCraft operates on a 100% local-storage architecture. All workouts, OAuth tokens, and physiological models reside entirely on your personal machine."}
         </p>
 
         <div style={{ background: "var(--surface-2)", padding: "10px 14px", borderRadius: 8, fontSize: 12.5, marginBottom: 14 }}>
-          <div style={{ color: "var(--muted)", marginBottom: 4 }}>本地持久化存储根路径：</div>
+          <div style={{ color: "var(--muted)", marginBottom: 4 }}>{isZh ? "本地持久化存储根路径：" : "Local Persistent Storage Root Path:"}</div>
           <code style={{ fontSize: 12, wordBreak: "break-all" }}>{dataDir || "~/.coros-dashboard"}</code>
         </div>
 
         {!showWipeBox ? (
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 12 }}>
             <div style={{ fontSize: 12, color: "var(--muted)", maxWidth: 520, lineHeight: 1.5 }}>
-              如需彻底卸载软件、抹除隐私或重置所有跑友档案，点击右侧按钮即可安全清空本地全部数据。
+              {isZh
+                ? "如需彻底卸载软件、抹除隐私或重置所有跑友档案，点击右侧按钮即可安全清空本地全部数据。"
+                : "To uninstall software, erase personal data, or reset all athlete profiles, click the button to safely wipe all local data."}
             </div>
             <button
               className="btn"
@@ -2428,7 +2601,7 @@ export default function Settings({
                 fontWeight: 600,
               }}
             >
-              清空本地所有档案与数据
+              {isZh ? "清空本地所有档案与数据" : "Wipe All Local Profiles & Data"}
             </button>
           </div>
         ) : (
@@ -2439,16 +2612,18 @@ export default function Settings({
             padding: "16px",
           }}>
             <div style={{ color: "#ef4444", fontWeight: 600, fontSize: 13.5, marginBottom: 8, display: "flex", alignItems: "center", gap: 6 }}>
-              <span>⚠️</span> 【高危操作警告】清空本地所有数据
+              <span>⚠️</span> {isZh ? "【高危操作警告】清空本地所有数据" : "[High Risk Warning] Wipe All Local Data"}
             </div>
             <p style={{ fontSize: 12.5, color: "var(--text-dim)", margin: "0 0 12px 0", lineHeight: 1.6 }}>
-              此操作将彻底删除本机所有跑友档案、SQLite 历史训练数据库与授权凭证，操作完全不可逆！<br />
-              如确认彻底抹除，请在下方输入 <strong style={{ color: "#ef4444", fontFamily: "monospace", fontSize: 13 }}>WIPE</strong> 并点击确认：
+              {isZh
+                ? "此操作将彻底删除本机所有跑友档案、SQLite 历史训练数据库与授权凭证，操作完全不可逆！"
+                : "This permanently deletes all athlete profiles, SQLite training history, and auth credentials. This action is irreversible!"}<br />
+              {isZh ? "如确认彻底抹除，请在下方输入 " : "To confirm permanent deletion, type "}<strong style={{ color: "#ef4444", fontFamily: "monospace", fontSize: 13 }}>WIPE</strong>{isZh ? " 并点击确认：" : " below and click confirm:"}
             </p>
             <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
               <input
                 type="text"
-                placeholder="输入 WIPE 确认"
+                placeholder={isZh ? "输入 WIPE 确认" : "Type WIPE to confirm"}
                 value={wipeInput}
                 onChange={(e) => setWipeInput(e.target.value)}
                 disabled={wiping}
@@ -2475,19 +2650,19 @@ export default function Settings({
                   fontWeight: 600,
                 }}
               >
-                {wiping ? <><span className="spin" /> 正在清空…</> : "确认彻底抹除"}
+                {wiping ? <><span className="spin" /> {isZh ? "正在清空…" : "Wiping…"}</> : (isZh ? "确认彻底抹除" : "Confirm Permanent Wipe")}
               </button>
               <button
                 className="btn btn-subtle"
                 onClick={() => { setShowWipeBox(false); setWipeInput(""); setWipeError(null); }}
                 disabled={wiping}
               >
-                取消
+                {t("common.cancel")}
               </button>
             </div>
             {wipeError && (
               <div style={{ marginTop: 10, color: "#ef4444", fontSize: 12 }}>
-                抹除失败：{wipeError}
+                {isZh ? "抹除失败：" : "Wipe failed: "}{wipeError}
               </div>
             )}
           </div>

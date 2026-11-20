@@ -4,6 +4,28 @@ import { BarChart, LineChart, fmtDate, fmtDur, fmtPace } from "../charts";
 import { IconCalendar, IconFlag, IconLoad, IconPulse, IconRoute, IconRun, IconShoe } from "../icons";
 import { useI18n } from "../i18n";
 
+const CLASSIFICATION_EN_MAP: Record<string, string> = {
+  "中等距离跑": "Medium Distance",
+  "长距离跑": "Long Run",
+  "间歇训练": "Intervals",
+  "多次短距离": "Multiple Reps",
+  "组合训练": "Mixed Workout",
+  "轻松跑": "Easy Run",
+  "恢复跑": "Recovery Run",
+  "节奏跑": "Tempo Run",
+  "乳酸阈值跑": "Threshold Run",
+  "马拉松配速跑": "Marathon Pace",
+  "冲刺跑": "Strides / Sprints",
+  "越野跑": "Trail Run",
+  "未分类跑": "Unclassified Run",
+};
+
+export function formatClassification(c: string | undefined | null, isZh = true) {
+  if (!c) return "—";
+  if (isZh) return c;
+  return CLASSIFICATION_EN_MAP[c] || c;
+}
+
 export default function Training({
   onOpen,
   onOpenSession,
@@ -51,7 +73,13 @@ export default function Training({
   }, [weeks]);
 
   if (err) return <div className="banner error">{err}</div>;
-  if (!Array.isArray(weekly) || weekly.length === 0) return <div className="empty-run"><IconRun size={42} /><span>暂无数据，请先在「设置」页同步</span></div>;
+  if (!Array.isArray(weekly) || weekly.length === 0)
+    return (
+      <div className="empty-run">
+        <IconRun size={42} />
+        <span>{isZh ? "暂无数据，请先在「设置」页同步" : "No data yet. Please sync your workouts in Settings."}</span>
+      </div>
+    );
 
   const last = weekly[weekly.length - 1];
   const prev = weekly[weekly.length - 2];
@@ -82,7 +110,7 @@ export default function Training({
   const rangeKm = sessionsInRange.reduce((n, s) => n + s.totals.distanceKm, 0);
   const multiInRange = sessionsInRange.filter((s) => s.activityCount > 1);
   const latestLoad = load[load.length - 1];
-  const loadStatus = ratioStatus(latestLoad?.ratio);
+  const loadStatus = ratioStatus(latestLoad?.ratio, isZh);
 
   // 寻找最近的未来目标赛事
   const today = new Date().toISOString().slice(0, 10);
@@ -116,7 +144,11 @@ export default function Training({
               cursor: onGoRace ? "pointer" : "default",
             }}
             onClick={() => onGoRace?.()}
-            title={targetRace ? "点击查看目标赛事与备战简报" : "点击前往赛事中心配置目标比赛与 GPX 路线"}
+            title={
+              targetRace
+                ? (isZh ? "点击查看目标赛事与备战简报" : "View target race & preparation briefing")
+                : (isZh ? "点击前往赛事中心配置目标比赛与 GPX 路线" : "Configure target race and GPX course in Race Hub")
+            }
           >
             <div
               style={{
@@ -136,20 +168,26 @@ export default function Training({
             </div>
             <div>
               <div style={{ fontSize: 12, color: "var(--text-dim)", display: "flex", alignItems: "center", gap: 6 }}>
-                <span>目标赛事备赛</span>
+                <span>{isZh ? "目标赛事备赛" : "Target Race"}</span>
                 {targetRace && (
                   <span className="pill accent" style={{ fontSize: 11, padding: "1px 6px" }}>
-                    {daysLeft != null ? (daysLeft > 0 ? `倒计时 ${daysLeft} 天` : daysLeft === 0 ? "今天比赛" : "已完赛") : targetRace.date}
+                    {daysLeft != null
+                      ? daysLeft > 0
+                        ? (isZh ? `倒计时 ${daysLeft} 天` : `${daysLeft} days to race`)
+                        : daysLeft === 0
+                        ? (isZh ? "今天比赛" : "Race Day!")
+                        : (isZh ? "已完赛" : "Finished")
+                      : targetRace.date}
                   </span>
                 )}
               </div>
               <div style={{ fontSize: 15, fontWeight: 700, color: "var(--text)", marginTop: 2 }}>
-                {targetRace ? targetRace.name : "尚未配置目标赛事"}
+                {targetRace ? targetRace.name : (isZh ? "尚未配置目标赛事" : "No target race configured")}
               </div>
               <div style={{ fontSize: 12, color: "var(--text-faint)", marginTop: 2 }}>
                 {targetRace
-                  ? `${targetRace.distanceKm} km · ${targetRace.city ?? "城市待定"}${targetRace.goalSec ? ` · 目标 ${fmtDur(targetRace.goalSec)}` : ""}`
-                  : "点击前往「赛事中心」上传 GPX 路线并设定目标成绩 →"}
+                  ? `${targetRace.distanceKm} km · ${targetRace.city ?? (isZh ? "城市待定" : "TBD")}${targetRace.goalSec ? ` · ${isZh ? "目标 " : "Goal "}${fmtDur(targetRace.goalSec)}` : ""}`
+                  : (isZh ? "点击前往「赛事中心」上传 GPX 路线并设定目标成绩 →" : "Click to go to Race Hub and configure route & goal time →")}
               </div>
             </div>
           </div>
@@ -174,7 +212,7 @@ export default function Training({
             </div>
             <div style={{ flex: 1 }}>
               <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                <span style={{ fontSize: 12, color: "var(--text-dim)" }}>今日训练指导</span>
+                <span style={{ fontSize: 12, color: "var(--text-dim)" }}>{isZh ? "今日训练指导" : "Today's Guidance"}</span>
                 {loadStatus && (
                   <span
                     className="pill"
@@ -192,7 +230,7 @@ export default function Training({
                 )}
               </div>
               <div style={{ fontSize: 13, color: "var(--text)", marginTop: 3, fontWeight: 500, lineHeight: 1.4 }}>
-                {loadStatus ? loadStatus.advice : "暂无负荷诊断"}
+                {loadStatus ? loadStatus.advice : (isZh ? "暂无负荷诊断" : "No workload diagnostics available")}
               </div>
             </div>
           </div>
@@ -205,19 +243,19 @@ export default function Training({
                 onClick={onGoCoach}
                 style={{ fontSize: 12, padding: "6px 14px", background: "var(--accent)", color: "#fff", border: "none" }}
               >
-                🎯 AI 课表
+                {isZh ? "🎯 AI 课表" : "🎯 AI Coach"}
               </button>
             )}
             {onGoRace && (
               <button className="btn" onClick={onGoRace} style={{ fontSize: 12, padding: "6px 12px" }}>
                 <IconFlag size={13} />
-                赛事中心
+                {isZh ? "赛事中心" : "Race Hub"}
               </button>
             )}
             {onGoReadiness && (
               <button className="btn" onClick={onGoReadiness} style={{ fontSize: 12, padding: "6px 12px" }}>
                 <IconPulse size={13} />
-                身体状态
+                {isZh ? "身体状态" : "Readiness"}
               </button>
             )}
           </div>
@@ -393,10 +431,12 @@ export default function Training({
             <div style={{ marginTop: 10, padding: "8px 12px", background: "var(--surface-2)", borderRadius: 8, fontSize: 12, lineHeight: 1.5 }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 6, marginBottom: 4 }}>
                 <span style={{ fontWeight: 600, color: "var(--text)", fontSize: 11.5 }}>
-                  Banister 冲量反应模型 · 体能与疲劳消长
+                  {isZh ? "Banister 冲量反应模型 · 体能与疲劳消长" : "Banister Impulse-Response Model · Fitness & Fatigue Balance"}
                 </span>
                 <span style={{ fontSize: 11.5, color: "var(--text-dim)" }}>
-                  短期疲劳 {latestLoad?.shortLoad ?? "—"} ｜ 长期体能 {latestLoad?.longLoad ?? "—"} ｜ 负荷比 {latestLoad?.ratio?.toFixed(2) ?? "—"}
+                  {isZh
+                    ? `短期疲劳 ${latestLoad?.shortLoad ?? "—"} ｜ 长期体能 ${latestLoad?.longLoad ?? "—"} ｜ 负荷比 ${latestLoad?.ratio?.toFixed(2) ?? "—"}`
+                    : `Acute ${latestLoad?.shortLoad ?? "—"} | Chronic ${latestLoad?.longLoad ?? "—"} | ACWR ${latestLoad?.ratio?.toFixed(2) ?? "—"}`}
                 </span>
               </div>
               {(() => {
@@ -407,17 +447,23 @@ export default function Training({
                   <div style={{ color: "var(--text)", fontSize: 11.5 }}>
                     <strong style={{ color: diff > 10 ? "var(--chart-accent)" : diff < -10 ? "var(--good)" : "var(--text)" }}>
                       {diff > 10
-                        ? `负荷刺激冲击期（疲劳高于体能 +${Math.round(diff)}）`
+                        ? (isZh ? `负荷刺激冲击期（疲劳高于体能 +${Math.round(diff)}）` : `Stimulation Phase (Fatigue exceeds fitness +${Math.round(diff)})`)
                         : diff < -10
-                        ? `减量消退期（疲劳低于体能 ${Math.round(diff)}）`
-                        : "平稳维持期（疲劳与体能均衡）"}
+                        ? (isZh ? `减量消退期（疲劳低于体能 ${Math.round(diff)}）` : `Taper / Recovery Phase (Fatigue below fitness ${Math.round(diff)})`)
+                        : (isZh ? "平稳维持期（疲劳与体能均衡）" : "Maintenance Phase (Fatigue & fitness balanced)")}
                     </strong>
                     ：
                     {diff > 10
-                      ? "近期训练刺激高于过去四周基准，体能处于积极蓄能期，需注意软组织放松与营养补充以促进超量代偿。"
+                      ? (isZh
+                        ? "近期训练刺激高于过去四周基准，体能处于积极蓄能期，需注意软组织放松与营养补充以促进超量代偿。"
+                        : "Recent training exceeds your 4-week baseline. Fitness is building; ensure recovery, mobility work, and nutrition for supercompensation.")
                       : diff < -10
-                      ? "近期训练负荷主动回落，前期疲劳正加速消退，长期体能储备即将释放，适合赛前减量或状态摸底。"
-                      : "当前短期刺激与长期储备高度同步，训练负荷稳步推进，没有过量疲劳积压。"}
+                      ? (isZh
+                        ? "近期训练负荷主动回落，前期疲劳正加速消退，长期体能储备即将释放，适合赛前减量或状态摸底。"
+                        : "Training load has dialed back. Accumulated fatigue is dissipating and fitness is peaking, ideal for race taper or tune-ups.")
+                      : (isZh
+                        ? "当前短期刺激与长期储备高度同步，训练负荷稳步推进，没有过量疲劳积压。"
+                        : "Acute stimulus and chronic base are synchronized. Workload is progressing smoothly without excessive fatigue accumulation.")}
                   </div>
                 );
               })()}
@@ -427,24 +473,24 @@ export default function Training({
               <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 4, fontWeight: 500, fontSize: 11.5 }}>
                 <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
                   <span style={{ width: 7, height: 7, borderRadius: 2, background: "var(--good)" }} />
-                  0.80–1.30 最佳甜点区
+                  {isZh ? "0.80–1.30 最佳甜点区" : "0.80–1.30 Sweet Spot"}
                 </span>
                 <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
                   <span style={{ width: 7, height: 7, borderRadius: 2, background: "var(--warn)" }} />
-                  1.30–1.50 负荷警示
+                  {isZh ? "1.30–1.50 负荷警示" : "1.30–1.50 Caution"}
                 </span>
                 <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
                   <span style={{ width: 7, height: 7, borderRadius: 2, background: "var(--bad)" }} />
-                  &gt;1.50 高危区
+                  {isZh ? ">1.50 高危区" : ">1.50 High Risk"}
                 </span>
                 <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
                   <span style={{ width: 7, height: 7, borderRadius: 2, background: "var(--info)" }} />
-                  &lt;0.80 减量区
+                  {isZh ? "<0.80 减量区" : "<0.80 Taper Zone"}
                 </span>
               </div>
               {loadStatus && (
                 <div style={{ color: "var(--text)", fontSize: 11.5 }}>
-                  <strong style={{ color: loadStatus.color }}>当前伤病诊断</strong>：{loadStatus.advice}
+                  <strong style={{ color: loadStatus.color }}>{isZh ? "当前伤病诊断" : "Injury Diagnostics"}</strong>：{loadStatus.advice}
                 </div>
               )}
             </div>
@@ -523,13 +569,13 @@ export default function Training({
               </thead>
               <tbody>
                 {sessionsInRange.length === 0 && (
-                  <tr><td colSpan={10}><div className="empty-run"><IconCalendar size={40} /><span>该时间范围内没有训练</span></div></td></tr>
+                  <tr><td colSpan={10}><div className="empty-run"><IconCalendar size={40} /><span>{isZh ? "该时间范围内没有训练" : "No training sessions in this time range"}</span></div></td></tr>
                 )}
                 {paginatedSessions.map((s) => (
                   <tr key={s.key} className="clickable" onClick={() => onOpenSession(s.key)}>
                     <td>{s.date || "—"}</td>
                     <td style={{ textAlign: "left" }}>
-                      <span className={`pill ${s.kind === "multi" ? "accent" : ""}`}>{s.classification}</span>
+                      <span className={`pill ${s.kind === "multi" ? "accent" : ""}`}>{formatClassification(s.classification, isZh)}</span>
                     </td>
                     <td className="num" style={{ color: s.activityCount > 1 ? "var(--accent)" : undefined }}>
                       {s.activityCount}
@@ -544,14 +590,14 @@ export default function Training({
                         <span
                           className={`pill ${s.decoupling.level}`}
                           style={{ fontSize: 11, fontWeight: 600 }}
-                          title={`Joe Friel 有氧脱钩率：后程效率因子变化 ${s.decoupling.pct}%`}
+                          title={isZh ? `Joe Friel 有氧脱钩率：后程效率因子变化 ${s.decoupling.pct}%` : `Joe Friel Decoupling: Cardiac drift ${s.decoupling.pct}%`}
                         >
-                          {s.decoupling.label}
+                          {isZh ? s.decoupling.label : (s.decoupling.pct < 0 ? "Negative (<0%)" : s.decoupling.pct <= 5.0 ? "Steady (<5%)" : s.decoupling.pct <= 8.0 ? "Mild (5-8%)" : "High (>8%)")}
                         </span>
                       ) : (
                         <span
                           style={{ color: "var(--text-faint)", fontSize: 12, cursor: "help" }}
-                          title={decouplingReason(s)}
+                          title={decouplingReason(s, isZh)}
                         >
                           —
                         </span>
@@ -571,31 +617,43 @@ export default function Training({
               page={currentPage}
               pageSize={PAGE_SIZE}
               onPageChange={setPage}
-              unitLabel="场训练"
+              unitLabel={isZh ? "场训练" : "sessions"}
+              isZh={isZh}
             />
           </div>
         ) : (
           <div className="table-wrap" key="record-table-wrap">
             <div className="range-bar">
               <div className="seg">
-                {([["2w", "近 2 周"], ["1m", "近 1 月"], ["3m", "近 3 月"], ["all", "全部"]] as const).map(([k, lbl]) => (
+                {([["2w", isZh ? "近 2 周" : "2 Weeks"], ["1m", isZh ? "近 1 月" : "1 Month"], ["3m", isZh ? "近 3 月" : "3 Months"], ["all", isZh ? "全部" : "All"]] as const).map(([k, lbl]) => (
                   <button key={k} className={range === k ? "active" : ""} onClick={() => setRange(k)}>{lbl}</button>
                 ))}
               </div>
               <span className="range-info">
-                共 <strong>{acts.length}</strong> 条，当前显示 <strong>{actsInRange.length}</strong> 条
+                {isZh ? (
+                  <>共 <strong>{acts.length}</strong> 条，当前显示 <strong>{actsInRange.length}</strong> 条</>
+                ) : (
+                  <><strong>{actsInRange.length}</strong> of <strong>{acts.length}</strong> records shown</>
+                )}
               </span>
             </div>
             <table>
               <thead>
                 <tr>
-                  <th>日期</th><th>项目</th><th>距离</th><th>用时</th>
-                  <th>配速</th><th>心率</th><th>步频</th><th>负荷</th><th>重点</th>
+                  <th>{isZh ? "日期" : "Date"}</th>
+                  <th>{isZh ? "项目" : "Activity"}</th>
+                  <th>{isZh ? "距离" : "Distance"}</th>
+                  <th>{isZh ? "用时" : "Duration"}</th>
+                  <th>{isZh ? "配速" : "Pace"}</th>
+                  <th>{isZh ? "心率" : "HR"}</th>
+                  <th>{isZh ? "步频" : "Cadence"}</th>
+                  <th>{isZh ? "负荷" : "Load"}</th>
+                  <th>{isZh ? "重点" : "Focus"}</th>
                 </tr>
               </thead>
               <tbody>
                 {actsInRange.length === 0 && (
-                  <tr><td colSpan={9}><div className="empty-run"><IconCalendar size={40} /><span>该时间范围内没有训练记录</span></div></td></tr>
+                  <tr><td colSpan={9}><div className="empty-run"><IconCalendar size={40} /><span>{isZh ? "该时间范围内没有训练记录" : "No activity records in this time range"}</span></div></td></tr>
                 )}
                 {paginatedActs.map((a) => (
                   <tr key={a.labelId} className="clickable" onClick={() => onOpen(a.labelId)}>
@@ -603,12 +661,14 @@ export default function Training({
                     <td style={{ textAlign: "left", color: "var(--text-dim)" }}>
                       <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
                         {a.source === "garmin" ? (
-                          <span style={{ fontSize: 10, padding: "1px 5px", borderRadius: 4, background: "rgba(16, 185, 129, 0.12)", color: "#10b981", fontWeight: 600 }}>佳明</span>
+                          <span style={{ fontSize: 10, padding: "1px 5px", borderRadius: 4, background: "rgba(16, 185, 129, 0.12)", color: "#10b981", fontWeight: 600 }}>Garmin</span>
                         ) : (
-                          <span style={{ fontSize: 10, padding: "1px 5px", borderRadius: 4, background: "rgba(59, 130, 246, 0.12)", color: "#3b82f6", fontWeight: 600 }}>高驰</span>
+                          <span style={{ fontSize: 10, padding: "1px 5px", borderRadius: 4, background: "rgba(59, 130, 246, 0.12)", color: "#3b82f6", fontWeight: 600 }}>COROS</span>
                         )}
                         {a.isDuplicate === 1 && (
-                          <span style={{ fontSize: 10, padding: "1px 5px", borderRadius: 4, background: "rgba(234, 179, 8, 0.15)", color: "#eab308", fontWeight: 600 }} title="同一时段双表记录，已归档为对比样本，不重复累加跑量与负荷">对比样本</span>
+                          <span style={{ fontSize: 10, padding: "1px 5px", borderRadius: 4, background: "rgba(234, 179, 8, 0.15)", color: "#eab308", fontWeight: 600 }} title={isZh ? "同一时段双表记录，已归档为对比样本，不重复累加跑量与负荷" : "Dual-watch recording archived as reference; not double-counted"}>
+                            {isZh ? "对比样本" : "Reference"}
+                          </span>
                         )}
                         <span>{a.sportName}</span>
                       </span>
@@ -629,7 +689,8 @@ export default function Training({
               page={currentPage}
               pageSize={PAGE_SIZE}
               onPageChange={setPage}
-              unitLabel="条记录"
+              unitLabel={isZh ? "条记录" : "records"}
+              isZh={isZh}
             />
           </div>
         )}
@@ -644,12 +705,14 @@ function TablePagination({
   pageSize,
   onPageChange,
   unitLabel = "条",
+  isZh = true,
 }: {
   total: number;
   page: number;
   pageSize: number;
   onPageChange: (p: number) => void;
   unitLabel?: string;
+  isZh?: boolean;
 }) {
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
   if (totalPages <= 1) return null;
@@ -670,7 +733,11 @@ function TablePagination({
       }}
     >
       <div>
-        共 <strong>{total}</strong> {unitLabel} · 第 <strong>{page}</strong> / {totalPages} 页
+        {isZh ? (
+          <>共 <strong>{total}</strong> {unitLabel} · 第 <strong>{page}</strong> / {totalPages} 页</>
+        ) : (
+          <>Total <strong>{total}</strong> {unitLabel} · Page <strong>{page}</strong> of {totalPages}</>
+        )}
       </div>
       <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
         <button
@@ -687,7 +754,7 @@ function TablePagination({
             fontSize: 11.5,
           }}
         >
-          上一页
+          {isZh ? "上一页" : "Prev"}
         </button>
 
         {Array.from({ length: totalPages }, (_, i) => i + 1)
@@ -734,7 +801,7 @@ function TablePagination({
             fontSize: 11.5,
           }}
         >
-          下一页
+          {isZh ? "下一页" : "Next"}
         </button>
       </div>
     </div>
@@ -749,57 +816,73 @@ function ratioColor(r: number | null | undefined) {
   return "var(--good)";
 }
 
-function ratioStatus(r: number | null | undefined) {
+function ratioStatus(r: number | null | undefined, isZh = true) {
   if (r == null) return null;
   if (r >= 1.5) {
     return {
-      label: "危险激增 (>1.5)",
+      label: isZh ? "危险激增 (>1.5)" : "High Risk (>1.5)",
       color: "var(--bad)",
       bg: "var(--bad-bg)",
       border: "var(--bad-border)",
-      title: "危险激增区（高伤病风险）",
-      advice: "短期疲劳显著超过长期体能储备，软组织伤病发生率成倍飙升。强烈建议未来 48 小时以纯休息或 Z1 轻松慢摇排酸为主，严禁冲击高强度课表。",
+      title: isZh ? "危险激增区（高伤病风险）" : "High Risk Zone (High Injury Probability)",
+      advice: isZh
+        ? "短期疲劳显著超过长期体能储备，软组织伤病发生率成倍飙升。强烈建议未来 48 小时以纯休息或 Z1 轻松慢摇排酸为主，严禁冲击高强度课表。"
+        : "Acute fatigue significantly exceeds chronic fitness. Injury risk escalates exponentially. Rest or easy Z1 recovery is strongly recommended for the next 48 hours; avoid high-intensity workouts.",
     };
   }
   if (r >= 1.3) {
     return {
-      label: "负荷警示 (1.3–1.5)",
+      label: isZh ? "负荷警示 (1.3–1.5)" : "Caution (1.3–1.5)",
       color: "var(--warn)",
       bg: "var(--warn-bg)",
       border: "var(--warn-border)",
-      title: "负荷警示累积区",
-      advice: "疲劳累积速度快于体能恢复速度，需密切关注跟腱、足底及小腿肌肉酸痛反馈，避免连续安排两场高强度训练。",
+      title: isZh ? "负荷警示累积区" : "Caution Zone (Fatigue Accumulating)",
+      advice: isZh
+        ? "疲劳累积速度快于体能恢复速度，需密切关注跟腱、足底及小腿肌肉酸痛反馈，避免连续安排两场高强度训练。"
+        : "Fatigue accumulation is outpacing recovery. Monitor achilles, calves, and plantars closely; avoid consecutive hard training days.",
     };
   }
   if (r >= 0.8) {
     return {
-      label: "安全甜点区 (0.8–1.3)",
+      label: isZh ? "安全甜点区 (0.8–1.3)" : "Optimal Sweet Spot (0.8–1.3)",
       color: "var(--good)",
       bg: "var(--good-bg)",
       border: "var(--good-border)",
-      title: "最佳适宜甜点区（The Sweet Spot）",
-      advice: "短期疲劳与长期体能储备维持在极佳的动态平衡中，伤病发生概率极低（<5%），体能正处于高效率稳步累积期。",
+      title: isZh ? "最佳适宜甜点区（The Sweet Spot）" : "Optimal Training Sweet Spot",
+      advice: isZh
+        ? "短期疲劳与长期体能储备维持在极佳的动态平衡中，伤病发生概率极低（<5%），体能正处于高效率稳步累积期。"
+        : "Acute and chronic workloads are in optimal dynamic equilibrium. Injury risk is minimal (<5%); aerobic fitness is building efficiently.",
     };
   }
   return {
-    label: "减量恢复区 (<0.8)",
+    label: isZh ? "减量恢复区 (<0.8)" : "Recovery / Taper (<0.8)",
     color: "var(--hr)",
     bg: "var(--info-bg)",
     border: "var(--info-border)",
-    title: "减量恢复/欠训练区",
-    advice: "短期负荷较低，身体处于充分休整或疲劳消退期。适合赛前 1~2 周减量恢复巅峰体能，若处于正常训练期则可逐步恢复跑量以维持体能储备。",
+    title: isZh ? "减量恢复/欠训练区" : "Recovery / Undertraining Zone",
+    advice: isZh
+      ? "短期负荷较低，身体处于充分休整或疲劳消退期。适合赛前 1~2 周减量恢复巅峰体能，若处于正常训练期则可逐步恢复跑量以维持体能储备。"
+      : "Low acute load. Fatigue is dissipating. Ideal for pre-race taper; during regular training, gradually increase mileage to maintain fitness.",
   };
 }
 
-function decouplingReason(s: Session): string {
+function decouplingReason(s: Session, isZh = true): string {
   if (s.classification === "间歇训练") {
-    return "不适用：间歇训练快慢交替、心率剧烈起伏，不符合稳态跑评估前提";
+    return isZh
+      ? "不适用：间歇训练快慢交替、心率剧烈起伏，不符合稳态跑评估前提"
+      : "Not applicable: Interval sessions involve fluctuating paces and spikes, unsuitable for steady-state decoupling.";
   }
   if (s.classification === "组合训练" || s.classification === "多次短距离") {
-    return "不适用：组合训练可能由多组间歇或力量训练等混合项目构成，配速与心率非持续稳态，脱钩率判定不准确";
+    return isZh
+      ? "不适用：组合训练可能由多组间歇或力量训练等混合项目构成，配速与心率非持续稳态，脱钩率判定不准确"
+      : "Not applicable: Mixed workouts contain multiple discontinuous activities; decoupling is not reliable.";
   }
   if (s.totals.durationSec < 1500 || s.totals.distanceKm < 4.0) {
-    return `保护性过滤：当前单次 ${s.totals.distanceKm}km / ${fmtDur(s.totals.durationSec)}，时长或距离较短，处于前程心率爬坡升温期，不满足稳态门槛（需 ≥4km 且 ≥25min）`;
+    return isZh
+      ? `保护性过滤：当前单次 ${s.totals.distanceKm}km / ${fmtDur(s.totals.durationSec)}，时长或距离较短，处于前程心率爬坡升温期，不满足稳态门槛（需 ≥4km 且 ≥25min）`
+      : `Protected: Session (${s.totals.distanceKm}km / ${fmtDur(s.totals.durationSec)}) is too short for steady-state assessment (requires ≥4km & ≥25min).`;
   }
-  return "不适用：分圈样本数不足、心率缺失或山地大爬升（>20m/km）扰动";
+  return isZh
+    ? "不适用：分圈样本数不足、心率缺失或山地大爬升（>20m/km）扰动"
+    : "Not applicable: Insufficient lap samples, missing HR, or extreme elevation gain (>20m/km).";
 }

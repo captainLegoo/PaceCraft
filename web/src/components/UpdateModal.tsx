@@ -4,6 +4,7 @@ import { check, type Update } from "@tauri-apps/plugin-updater";
 import { relaunch } from "@tauri-apps/plugin-process";
 import { openExternal } from "../openExternal";
 import MarkdownView from "./MarkdownView";
+import { useI18n } from "../i18n";
 
 export function isTauriEnv(): boolean {
   return typeof window !== "undefined" && Boolean((window as any).__TAURI_INTERNALS__);
@@ -40,6 +41,7 @@ export default function UpdateModal({
   currentAppVersion: string;
   onReloadPage?: () => void;
 }) {
+  const { isZh } = useI18n();
   const [checking, setChecking] = useState(false);
   const [updateObj, setUpdateObj] = useState<Update | null>(null);
   const [releaseData, setReleaseData] = useState<ReleaseCheckResponse | null>(null);
@@ -425,7 +427,7 @@ export default function UpdateModal({
             </div>
             <div>
               <div style={{ fontSize: 14, fontWeight: 600, letterSpacing: "-0.01em" }}>PaceCraft</div>
-              <div style={{ fontSize: 11, color: "var(--text-dim)" }}>跑者 AI 训练中心</div>
+              <div style={{ fontSize: 11, color: "var(--text-dim)" }}>{isZh ? "跑者 AI 训练中心" : "AI Endurance Hub"}</div>
             </div>
           </div>
 
@@ -443,7 +445,7 @@ export default function UpdateModal({
                 fontSize: 14,
                 lineHeight: 1,
               }}
-              title="关闭"
+              title={isZh ? "关闭" : "Close"}
             >
               ✕
             </button>
@@ -455,21 +457,21 @@ export default function UpdateModal({
           {status === "checking" && (
             <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "12px 0" }}>
               <span className="spin" style={{ width: 14, height: 14, borderWidth: 2 }} />
-              <span style={{ fontSize: 13, color: "var(--text-dim)" }}>正在检查可用更新…</span>
+              <span style={{ fontSize: 13, color: "var(--text-dim)" }}>{isZh ? "正在检查可用更新…" : "Checking for updates..."}</span>
             </div>
           )}
 
           {status === "up-to-date" && (
             <div style={{ padding: "6px 0" }}>
               <div style={{ fontSize: 13.5, fontWeight: 500, color: "var(--text)", marginBottom: 6 }}>
-                当前已是最新版本
+                {isZh ? "当前已是最新版本" : "You're on the latest version"}
               </div>
               <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                 <span className="version-tag">
                   <span className="dot" />
                   <span>v{cleanCurrent}</span>
                 </span>
-                <span style={{ fontSize: 12, color: "var(--text-dim)" }}>PaceCraft 目前无需更新。</span>
+                <span style={{ fontSize: 12, color: "var(--text-dim)" }}>{isZh ? "PaceCraft 目前无需更新。" : "No updates available at this time."}</span>
               </div>
             </div>
           )}
@@ -478,7 +480,7 @@ export default function UpdateModal({
             <div>
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
                 <span style={{ fontSize: 13.5, fontWeight: 600, color: "var(--text)" }}>
-                  发现新版本
+                  {isZh ? "发现新版本" : "Update Available"}
                 </span>
                 <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                   <span style={{ fontSize: 11, color: "var(--text-dim)" }}>v{cleanCurrent} →</span>
@@ -516,7 +518,7 @@ export default function UpdateModal({
 
               {!isTauriEnv() && (
                 <div style={{ fontSize: 11.5, color: "var(--text-dim)", lineHeight: 1.5 }}>
-                  当前在网页端运行，请前往 Release 页面获取桌面安装包。
+                  {isZh ? "当前在网页端运行，请前往 Release 页面获取桌面安装包。" : "Running in web mode. Please visit GitHub Releases for desktop packages."}
                 </div>
               )}
             </div>
@@ -526,7 +528,7 @@ export default function UpdateModal({
             <div style={{ padding: "8px 0" }}>
               <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, marginBottom: 6, color: "var(--text)" }}>
                 <span>
-                  正在下载{releaseData?.platformAsset?.name ? ` ${releaseData.platformAsset.name}` : "更新安装包"}…
+                  {isZh ? `正在下载${releaseData?.platformAsset?.name ? ` ${releaseData.platformAsset.name}` : "更新安装包"}…` : `Downloading update${releaseData?.platformAsset?.name ? ` ${releaseData.platformAsset.name}` : ""}...`}
                 </span>
                 <span style={{ fontVariantNumeric: "tabular-nums", fontFamily: "var(--mono)" }}>
                   {progress.percent}%
@@ -557,7 +559,7 @@ export default function UpdateModal({
                     ? `${formatSize(progress.downloaded)} / ${formatSize(progress.total)}`
                     : progress.downloaded > 0
                     ? formatSize(progress.downloaded)
-                    : "正在连接下载节点…"}
+                    : (isZh ? "正在连接下载节点…" : "Connecting to download server...")}
                 </span>
                 {downloadSpeed > 0 && (
                   <span style={{ color: "var(--accent)", fontFamily: "var(--mono)", fontWeight: 500 }}>
@@ -571,14 +573,14 @@ export default function UpdateModal({
           {status === "ready" && (
             <div style={{ padding: "6px 0" }}>
               <div style={{ fontSize: 13.5, fontWeight: 500, color: "var(--text)", marginBottom: 4 }}>
-                {downloadMode === "installer" ? "安装包下载完成" : "更新已准备就绪"}
+                {downloadMode === "installer" ? (isZh ? "安装包下载完成" : "Installer Downloaded") : (isZh ? "更新已准备就绪" : "Update Ready")}
               </div>
               <div style={{ fontSize: 12, color: "var(--text-dim)", lineHeight: 1.5 }}>
                 {downloadMode === "installer"
                   ? installerStarted
-                    ? "已启动安装向导。请在系统安装窗口中按提示操作；安装完成后重新打开 PaceCraft 即可。"
-                    : `新版本安装包 (${releaseData?.platformAsset?.name || "安装程序"}) 已下载至本地，点击「立即安装」将为您启动安装向导。`
-                  : "安装包已校验完成，重启应用即可升级到最新版本。"}
+                    ? (isZh ? "已启动安装向导。请在系统安装窗口中按提示操作；安装完成后重新打开 PaceCraft 即可。" : "Installer launched. Please follow the system setup wizard and reopen PaceCraft when complete.")
+                    : (isZh ? `新版本安装包 (${releaseData?.platformAsset?.name || "安装程序"}) 已下载至本地，点击「立即安装」将为您启动安装向导。` : `New installer (${releaseData?.platformAsset?.name || "package"}) downloaded. Click "Install Now" to begin.`)
+                  : (isZh ? "安装包已校验完成，重启应用即可升级到最新版本。" : "Update verified. Relaunch PaceCraft to apply.")}
               </div>
             </div>
           )}
@@ -586,7 +588,7 @@ export default function UpdateModal({
           {status === "error" && (
             <div style={{ padding: "6px 0" }}>
               <div style={{ fontSize: 13, fontWeight: 500, color: "var(--bad, #ef4444)", marginBottom: 4 }}>
-                更新或下载未成功
+                {isZh ? "更新或下载未成功" : "Update Failed"}
               </div>
               <div style={{ fontSize: 11.5, color: "var(--text-dim)", lineHeight: 1.5 }}>
                 {errorMsg}
@@ -614,7 +616,7 @@ export default function UpdateModal({
               onClick={onClose}
               style={{ padding: "5px 14px", fontSize: 12 }}
             >
-              确定
+              {isZh ? "确定" : "OK"}
             </button>
           )}
 
@@ -629,9 +631,9 @@ export default function UpdateModal({
                     onReloadPage();
                   }}
                   style={{ padding: "5px 12px", fontSize: 12 }}
-                  title="跳过本次更新并直接刷新当前页面"
+                  title={isZh ? "跳过本次更新并直接刷新当前页面" : "Skip this update and reload page"}
                 >
-                  仅刷新页面
+                  {isZh ? "仅刷新页面" : "Reload Page Only"}
                 </button>
               )}
               <button
@@ -640,7 +642,7 @@ export default function UpdateModal({
                 onClick={onClose}
                 style={{ padding: "5px 12px", fontSize: 12 }}
               >
-                稍后
+                {isZh ? "稍后" : "Later"}
               </button>
               <button
                 type="button"
@@ -655,7 +657,7 @@ export default function UpdateModal({
                   borderColor: "transparent",
                 }}
               >
-                {isTauriEnv() && updateObj ? "立即更新" : "下载更新"}
+                {isTauriEnv() && updateObj ? (isZh ? "立即更新" : "Update Now") : (isZh ? "下载更新" : "Download Update")}
               </button>
             </>
           )}
@@ -669,9 +671,9 @@ export default function UpdateModal({
                     className="btn btn-subtle"
                     onClick={handleOpenFolder}
                     style={{ padding: "5px 12px", fontSize: 12 }}
-                    title="在系统文件管理器中查看已下载的安装包"
+                    title={isZh ? "在系统文件管理器中查看已下载的安装包" : "Show installer file in system file manager"}
                   >
-                    在文件夹中显示
+                    {isZh ? "在文件夹中显示" : "Show in Folder"}
                   </button>
                   <button
                     type="button"
@@ -686,7 +688,7 @@ export default function UpdateModal({
                       borderColor: "transparent",
                     }}
                   >
-                    {installerStarted ? "再次启动安装程序" : "立即安装"}
+                    {installerStarted ? (isZh ? "再次启动安装程序" : "Relaunch Installer") : (isZh ? "立即安装" : "Install Now")}
                   </button>
                 </>
               ) : (
@@ -703,7 +705,7 @@ export default function UpdateModal({
                     borderColor: "transparent",
                   }}
                 >
-                  重启应用
+                  {isZh ? "重启应用" : "Relaunch"}
                 </button>
               )}
             </>
@@ -717,7 +719,7 @@ export default function UpdateModal({
                 onClick={onClose}
                 style={{ padding: "5px 12px", fontSize: 12 }}
               >
-                关闭
+                {isZh ? "关闭" : "Close"}
               </button>
               {releaseData?.platformAsset?.downloadUrl && (
                 <button
@@ -725,9 +727,9 @@ export default function UpdateModal({
                   className="btn btn-subtle"
                   onClick={() => openExternal(releaseData.platformAsset!.downloadUrl)}
                   style={{ padding: "5px 12px", fontSize: 12 }}
-                  title="直接在浏览器中下载安装包文件"
+                  title={isZh ? "直接在浏览器中下载安装包文件" : "Download file in default web browser"}
                 >
-                  在浏览器中下载
+                  {isZh ? "在浏览器中下载" : "Download in Browser"}
                 </button>
               )}
               <button
@@ -736,7 +738,7 @@ export default function UpdateModal({
                 onClick={() => executeCheck()}
                 style={{ padding: "5px 14px", fontSize: 12 }}
               >
-                重试
+                {isZh ? "重试" : "Retry"}
               </button>
             </>
           )}

@@ -1,0 +1,15 @@
+{
+  "progressCoros": "Syncing COROS workouts...",
+  "progressGarmin": "Syncing Garmin workouts...",
+  "progressWorkflow": "Analyzing EWMA training load & models...",
+  "progressDefault": "Syncing endurance data...",
+  "checkingCoros": "Connecting to COROS to check incremental activities...",
+  "checkingGarmin": "Connecting to Garmin to check incremental activities...",
+  "elapsed": "Elapsed",
+  "summaryTitle": "Sync Completed",
+  "summaryTitleWarn": "Sync Completed with Warnings",
+  "closeSummary": "Dismiss",
+  "corosBrand": "COROS",
+  "garminBrand": "Garmin",
+  "dedupBrand": "Smart Dedup"
+}

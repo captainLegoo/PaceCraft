@@ -1,0 +1,15 @@
+{
+  "progressCoros": "高驰 COROS 训练数据同步中",
+  "progressGarmin": "佳明 Garmin 训练数据同步中",
+  "progressWorkflow": "疲劳负荷与智能模型分析中",
+  "progressDefault": "运动手表数据增量同步中",
+  "checkingCoros": "正在连接高驰 COROS 检查增量记录...",
+  "checkingGarmin": "正在连接 Garmin 佳明检查增量训练...",
+  "elapsed": "已用时",
+  "summaryTitle": "运动数据同步结算",
+  "summaryTitleWarn": "同步完成（部分有提示）",
+  "closeSummary": "关闭通知",
+  "corosBrand": "高驰 COROS",
+  "garminBrand": "佳明 Garmin",
+  "dedupBrand": "智能去重"
+}

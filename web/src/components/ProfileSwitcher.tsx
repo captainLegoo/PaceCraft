@@ -311,7 +311,7 @@ export default function ProfileSwitcher({
                             fontWeight: 600,
                           }}
                         >
-                          确认删除
+                          {isZh ? "确认删除" : "Delete"}
                         </button>
                         <button
                           type="button"
@@ -326,7 +326,7 @@ export default function ProfileSwitcher({
                             cursor: "pointer",
                           }}
                         >
-                          取消
+                          {isZh ? "取消" : "Cancel"}
                         </button>
                       </div>
                     ) : (
@@ -337,7 +337,7 @@ export default function ProfileSwitcher({
                             setEditingId(p.id);
                             setEditName(p.name);
                           }}
-                          title="修改档案名称"
+                          title={isZh ? "修改档案名称" : "Rename profile"}
                           style={{
                             border: "none",
                             background: "transparent",
@@ -353,7 +353,7 @@ export default function ProfileSwitcher({
                           <button
                             type="button"
                             onClick={(e) => handleDelete(e, p.id, nameText)}
-                            title="删除该档案"
+                            title={isZh ? "删除该档案" : "Delete profile"}
                             style={{
                               border: "none",
                               background: "transparent",
@@ -381,7 +381,7 @@ export default function ProfileSwitcher({
               <div style={{ display: "flex", gap: 6 }}>
                 <input
                   type="text"
-                  placeholder="跑友称呼，如：老张"
+                  placeholder={isZh ? "跑友称呼，如：老张" : "Profile name, e.g. Alex"}
                   value={newName}
                   onChange={(e) => setNewName(e.target.value)}
                   onKeyDown={(e) => e.key === "Enter" && handleCreate()}

@@ -17,5 +17,9 @@
   "firstHalf": "前半程 (前 50% 时间)",
   "secondHalf": "后半程 (后 50% 时间)",
   "secondHalfSensations": "后程体感变化",
-  "diagnosis": "诊断结论"
+  "diagnosis": "诊断结论",
+  "singleActivity": "单次记录",
+  "categorizedAs": "判定为",
+  "avgHr": "平均心率",
+  "trainingLoadTotal": "训练负荷合计"
 }

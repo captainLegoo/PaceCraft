@@ -148,33 +148,56 @@ function PredictionCard({ b, goalSec }: { b: Briefing; goalSec: number | null })
           }}
         >
           {reachable ? (
-            <>
-              目标 <strong>{fDur(goalSec!)}</strong> 比当前预测 <strong>{fDur(p.bestSec)}</strong> 还快{" "}
-              <strong>{fDur(Math.abs(gapSec))}</strong>。
-              这在现阶段的体能之上，属于需要靠接下来 {b.daysToRace} 天训练去争取的目标 —— 不是判断你做不到。
-            </>
+            isZh ? (
+              <>
+                目标 <strong>{fDur(goalSec!)}</strong> 比当前预测 <strong>{fDur(p.bestSec)}</strong> 还快{" "}
+                <strong>{fDur(Math.abs(gapSec))}</strong>。
+                这在现阶段的体能之上，属于需要靠接下来 {b.daysToRace} 天训练去争取的目标 —— 不是判断你做不到。
+              </>
+            ) : (
+              <>
+                Goal <strong>{fDur(goalSec!)}</strong> is <strong>{fDur(Math.abs(gapSec))}</strong> faster than predicted{" "}
+                <strong>{fDur(p.bestSec)}</strong>. An ambitious target requiring focused training over the remaining {b.daysToRace} days.
+              </>
+            )
           ) : gapHard ? (
-            <>
-              目标 <strong>{fDur(goalSec!)}</strong> 仅比当前预测 <strong>{fDur(p.bestSec)}</strong> 慢{" "}
-              <strong>{fDur(Math.abs(gapSec))}</strong>（余量约 {(Math.abs(gapSec) / p.bestSec * 100).toFixed(1)}%），需稳定控速，容错较小。
-            </>
+            isZh ? (
+              <>
+                目标 <strong>{fDur(goalSec!)}</strong> 仅比当前预测 <strong>{fDur(p.bestSec)}</strong> 慢{" "}
+                <strong>{fDur(Math.abs(gapSec))}</strong>（余量约 {(Math.abs(gapSec) / p.bestSec * 100).toFixed(1)}%），需稳定控速，容错较小。
+              </>
+            ) : (
+              <>
+                Goal <strong>{fDur(goalSec!)}</strong> is only <strong>{fDur(Math.abs(gapSec))}</strong> slower than predicted{" "}
+                <strong>{fDur(p.bestSec)}</strong> (~{(Math.abs(gapSec) / p.bestSec * 100).toFixed(1)}% buffer); requires steady pacing discipline.
+              </>
+            )
           ) : (
-            <>
-              目标 <strong>{fDur(goalSec!)}</strong> 比当前预测 <strong>{fDur(p.bestSec)}</strong> 慢{" "}
-              <strong>{fDur(Math.abs(gapSec))}</strong>，余量充裕，以当前状态跑进目标的把握较大。
-            </>
+            isZh ? (
+              <>
+                目标 <strong>{fDur(goalSec!)}</strong> 比当前预测 <strong>{fDur(p.bestSec)}</strong> 慢{" "}
+                <strong>{fDur(Math.abs(gapSec))}</strong>，余量充裕，以当前状态跑进目标的把握较大。
+              </>
+            ) : (
+              <>
+                Goal <strong>{fDur(goalSec!)}</strong> is <strong>{fDur(Math.abs(gapSec))}</strong> slower than predicted{" "}
+                <strong>{fDur(p.bestSec)}</strong>; comfortable buffer with high probability of meeting target.
+              </>
+            )
           )}
         </div>
       )}
 
       <details style={{ marginTop: 4 }}>
         <summary style={{ cursor: "pointer", fontSize: 12, color: "var(--text-dim)", userSelect: "none" }}>
-          查看预测算法依据与关键影响因子
+          {isZh ? "查看预测算法依据与关键影响因子" : "View prediction model details & key factors"}
         </summary>
         <div style={{ marginTop: 8, padding: "8px 10px", background: "var(--surface)", borderRadius: 6, border: "1px solid var(--border)" }}>
           <div style={{ fontSize: 11.5, color: "var(--text-dim)", lineHeight: 1.6 }}>{p.basis}</div>
           <div style={{ marginTop: 8 }}>
-            <div style={{ margin: "0 0 6px", fontSize: 11.5, color: "var(--text-dim)", fontWeight: 500 }}>关键影响因子</div>
+            <div style={{ margin: "0 0 6px", fontSize: 11.5, color: "var(--text-dim)", fontWeight: 500 }}>
+              {isZh ? "关键影响因子" : "Key Factors"}
+            </div>
             <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
               {p.factors.map((f, i) => (
                 <span key={i} className="pill" style={{ color: TONE_COLOR[f.tone], fontSize: 11, padding: "2px 8px" }}>
@@ -185,7 +208,10 @@ function PredictionCard({ b, goalSec }: { b: Briefing; goalSec: number | null })
           </div>
           <div style={{ marginTop: 6, fontSize: 11.5, color: "var(--text-faint)" }}>{p.confidenceNote}</div>
           <div style={{ marginTop: 8, padding: "6px 8px", background: "var(--bg)", borderRadius: 4, fontSize: 11, color: "var(--text-faint)", lineHeight: 1.5 }}>
-            💡 <strong>与预测主页的区别</strong>：此处的备赛预测直接锚定历史真实比赛实战净成绩（反映大赛减量与全力拼搏上限），并针对本场赛道折算地形与海拔；而「预测」主页是日常训练与轻松长跑（LSD）的多模型加权推导，偏向日常保守基线。
+            💡 <strong>{isZh ? "与预测主页的区别：" : "Difference vs Prediction tab: "}</strong>
+            {isZh
+              ? "此处的备赛预测直接锚定历史真实比赛实战净成绩（反映大赛减量与全力拼搏上限），并针对本场赛道折算地形与海拔；而「预测」主页是日常训练与轻松长跑（LSD）的多模型加权推导，偏向日常保守基线。"
+              : "This race briefing prediction anchors directly to real race personal bests adjusted for course elevation & altitude. The 'Prediction' tab uses training runs and daily workouts as a baseline."}
           </div>
         </div>
       </details>
@@ -255,17 +281,18 @@ function TrainingStateCard({ training: t }: { training: Briefing["training"] }) 
           lineHeight: 1.5,
         }}
       >
-        <span>统计窗口：截至 <strong>{t.asOf}</strong></span>
+        <span>{isZh ? "统计窗口：截至 " : "Stats window: As of "}<strong>{t.asOf}</strong></span>
         {t.daysSinceAnchor > 0 && (
           <span style={{ color: t.daysSinceAnchor >= 3 ? "var(--warn)" : "var(--text-dim)" }}>
-            距上次训练 {t.daysSinceAnchor} 天{t.daysSinceAnchor >= 3 ? "（建议尽快同步新数据）" : ""}
+            {isZh ? `距上次训练 ${t.daysSinceAnchor} 天` : `${t.daysSinceAnchor}d since last workout`}
+            {t.daysSinceAnchor >= 3 ? (isZh ? "（建议尽快同步新数据）" : " (sync recommended)") : ""}
           </span>
         )}
       </div>
 
       {t.loadAsOf && (
         <div style={{ fontSize: 11.5, color: "var(--text-faint)", marginTop: 4, paddingLeft: 2 }}>
-          负荷比计算基准日：{t.loadAsOf}
+          {isZh ? "负荷比计算基准日：" : "Load ACWR baseline: "}{t.loadAsOf}
         </div>
       )}
     </>
@@ -273,6 +300,7 @@ function TrainingStateCard({ training: t }: { training: Briefing["training"] }) 
 }
 
 function PacingCard({ b }: { b: Briefing }) {
+  const { isZh } = useI18n();
   const p = b.pacing;
   if (!p) return null;
   return (
@@ -282,7 +310,13 @@ function PacingCard({ b }: { b: Briefing }) {
         <div className="table-scroll briefing-table-scroll">
           <table>
             <thead>
-              <tr><th>阶段</th><th>里程</th><th>建议配速</th><th>心率上限</th><th>战术执行意图</th></tr>
+              <tr>
+                <th>{isZh ? "阶段" : "Phase"}</th>
+                <th>{isZh ? "里程" : "Distance"}</th>
+                <th>{isZh ? "建议配速" : "Target Pace"}</th>
+                <th>{isZh ? "心率上限" : "Max HR"}</th>
+                <th>{isZh ? "战术执行意图" : "Tactical Intent"}</th>
+              </tr>
             </thead>
             <tbody>
               {p.segments.map((s, i) => (
@@ -293,7 +327,7 @@ function PacingCard({ b }: { b: Briefing }) {
                     {fPace(s.targetPaceSec)}<span style={{ color: "var(--text-faint)" }}> /km</span>
                   </td>
                   <td className="num" style={{ color: s.targetHr ? "var(--hr)" : "var(--text-faint)" }}>
-                    {s.targetHr ? `≤ ${s.targetHr} bpm` : "不限"}
+                    {s.targetHr ? `≤ ${s.targetHr} bpm` : (isZh ? "不限" : "No cap")}
                   </td>
                   <td className="cell-text" style={{ textAlign: "left", fontSize: 12, color: "var(--text-dim)" }}>
                     {s.intent}
@@ -305,7 +339,8 @@ function PacingCard({ b }: { b: Briefing }) {
         </div>
       </div>
       <div className="hint" style={{ marginTop: 8 }}>
-        心率上限设定依据：{p.hrCapSource === "anchors" ? "历史实测比赛心率" : "最大心率储备比例"} —— {p.hrCapNote}
+        {isZh ? "心率上限设定依据：" : "HR cap basis: "}
+        {p.hrCapSource === "anchors" ? (isZh ? "历史实测比赛心率" : "Historical race HR") : (isZh ? "最大心率储备比例" : "Max HR reserve %")} —— {p.hrCapNote}
       </div>
       {p.warnings.length > 0 && (
         <div style={{ marginTop: 10 }}>
@@ -328,6 +363,7 @@ function PacingCard({ b }: { b: Briefing }) {
  *   撤销 → 交回自动判定
  */
 function AnchorTable({ anchors, onChanged }: { anchors: RaceAnchor[]; onChanged?: () => void }) {
+  const { t, isZh } = useI18n();
   const [editing, setEditing] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
@@ -355,7 +391,16 @@ function AnchorTable({ anchors, onChanged }: { anchors: RaceAnchor[]; onChanged?
         <div className="table-scroll briefing-table-scroll">
           <table>
             <thead>
-              <tr><th>日期</th><th>赛事</th><th>实测</th><th>海平面等效</th><th>爬升</th><th>海拔</th><th>前后半</th><th>状态与操作</th></tr>
+              <tr>
+                <th>{isZh ? "日期" : "Date"}</th>
+                <th>{isZh ? "赛事" : "Race"}</th>
+                <th>{isZh ? "实测" : "Official"}</th>
+                <th>{isZh ? "海平面等效" : "Sea-Level Eq"}</th>
+                <th>{isZh ? "爬升" : "Climb"}</th>
+                <th>{isZh ? "海拔" : "Altitude"}</th>
+                <th>{isZh ? "前后半" : "Splits"}</th>
+                <th>{isZh ? "状态与操作" : "Status & Actions"}</th>
+              </tr>
             </thead>
             <tbody>
               {anchors.map((a, i) => (
@@ -367,13 +412,13 @@ function AnchorTable({ anchors, onChanged }: { anchors: RaceAnchor[]; onChanged?
                   <td className="num">{a.climbRate} m/km</td>
                   <td className="num" style={{ color: a.altitudeSource === "unknown" ? "var(--warn)" : undefined }}
                       title={a.altitudeSource === "fit"
-                        ? "来自手环气压计实测（最准）"
+                        ? (isZh ? "来自手环气压计实测（最准）" : "From watch barometer (most accurate)")
                         : a.altitudeSource === "city-table"
-                          ? "来自城市海拔兜底表（按城市中心点）"
-                          : "未知：这场没折算海拔，跨比赛比较可能偏差"}>
+                          ? (isZh ? "来自城市海拔兜底表（按城市中心点）" : "From city baseline table")
+                          : (isZh ? "未知：这场没折算海拔，跨比赛比较可能偏差" : "Unknown: no altitude adjustment")}>
                     {a.altitude >= 1000
                       ? `${Math.round(a.altitude)} m ⚠`
-                      : a.altitudeSource === "unknown" ? "未知" : `${Math.round(a.altitude)} m`}
+                      : a.altitudeSource === "unknown" ? (isZh ? "未知" : "Unknown") : `${Math.round(a.altitude)} m`}
                   </td>
                   <td className="num" style={{ color: (a.fadePct ?? 0) < 0 ? "var(--good)" : "var(--warn)" }}>
                     {a.fadePct != null ? `${a.fadePct > 0 ? "+" : ""}${a.fadePct}%` : "—"}
@@ -382,14 +427,14 @@ function AnchorTable({ anchors, onChanged }: { anchors: RaceAnchor[]; onChanged?
                     <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
                       {a.excluded ? (
                         <span className="pill warn" style={{ fontSize: 10.5 }} title={a.excludeReason}>
-                          {a.excludeSource === "manual" ? "已排除·手动" : "已排除·自动"}
+                          {a.excludeSource === "manual" ? (isZh ? "已排除·手动" : "Excluded (Manual)") : (isZh ? "已排除·自动" : "Excluded (Auto)")}
                         </span>
                       ) : a.excludeSource === "included" ? (
-                        <span className="pill good" style={{ fontSize: 10.5 }} title="自动判定为异常，但你要求纳入基准">
-                          有效·手动纳入
+                        <span className="pill good" style={{ fontSize: 10.5 }} title={isZh ? "自动判定为异常，但你要求纳入基准" : "Manually included into baseline"}>
+                          {isZh ? "有效·手动纳入" : "Valid (Included)"}
                         </span>
                       ) : (
-                        <span className="pill good" style={{ fontSize: 10.5 }}>有效</span>
+                        <span className="pill good" style={{ fontSize: 10.5 }}>{isZh ? "有效" : "Valid"}</span>
                       )}
                       {editing === a.labelId ? (
                         <span style={{ display: "inline-flex", gap: 4, alignItems: "center" }}>
@@ -400,15 +445,15 @@ function AnchorTable({ anchors, onChanged }: { anchors: RaceAnchor[]; onChanged?
                               if (e.key === "Enter") run(a.labelId, true, draft);
                               if (e.key === "Escape") setEditing(null);
                             }}
-                            placeholder="排除原因（仅本地记账）"
+                            placeholder={isZh ? "排除原因（仅本地记账）" : "Reason (local record only)"}
                             style={{ width: 180, fontSize: 11.5, padding: "2px 6px" }}
                             autoFocus
                           />
                           <button className="btn" style={{ fontSize: 11, padding: "2px 8px" }}
                             disabled={busy === a.labelId}
-                            onClick={() => run(a.labelId, true, draft)}>确定</button>
+                            onClick={() => run(a.labelId, true, draft)}>{isZh ? "确定" : "OK"}</button>
                           <button className="btn" style={{ fontSize: 11, padding: "2px 8px" }}
-                            onClick={() => setEditing(null)}>取消</button>
+                            onClick={() => setEditing(null)}>{t("common.cancel")}</button>
                         </span>
                       ) : (
                         <span style={{ display: "inline-flex", gap: 4 }}>
@@ -416,26 +461,26 @@ function AnchorTable({ anchors, onChanged }: { anchors: RaceAnchor[]; onChanged?
                             <>
                               <button className="btn" style={{ fontSize: 11, padding: "2px 8px" }}
                                 disabled={busy === a.labelId}
-                                title="强制纳入基准，覆盖自动判定"
-                                onClick={() => run(a.labelId, false)}>纳入</button>
+                                title={isZh ? "强制纳入基准，覆盖自动判定" : "Force include into baseline"}
+                                onClick={() => run(a.labelId, false)}>{isZh ? "纳入" : "Include"}</button>
                               {a.excludeSource === "manual" && (
                                 <button className="btn" style={{ fontSize: 11, padding: "2px 8px" }}
                                   disabled={busy === a.labelId}
-                                  title="撤销人工设定，交回自动判定"
-                                  onClick={() => run(a.labelId, null)}>撤销</button>
+                                  title={isZh ? "撤销人工设定，交回自动判定" : "Revert manual override"}
+                                  onClick={() => run(a.labelId, null)}>{isZh ? "撤销" : "Revert"}</button>
                               )}
                             </>
                           ) : (
                             <>
                               <button className="btn" style={{ fontSize: 11, padding: "2px 8px" }}
                                 disabled={busy === a.labelId}
-                                title="移出能力基准"
-                                onClick={() => { setDraft(""); setEditing(a.labelId); }}>排除</button>
+                                title={isZh ? "移出能力基准" : "Exclude from baseline"}
+                                onClick={() => { setDraft(""); setEditing(a.labelId); }}>{isZh ? "排除" : "Exclude"}</button>
                               {a.excludeSource === "included" && (
                                 <button className="btn" style={{ fontSize: 11, padding: "2px 8px" }}
                                   disabled={busy === a.labelId}
-                                  title="撤销人工纳入，交回自动判定"
-                                  onClick={() => run(a.labelId, null)}>撤销</button>
+                                  title={isZh ? "撤销人工纳入，交回自动判定" : "Revert manual inclusion"}
+                                  onClick={() => run(a.labelId, null)}>{isZh ? "撤销" : "Revert"}</button>
                               )}
                             </>
                           )}
@@ -451,7 +496,8 @@ function AnchorTable({ anchors, onChanged }: { anchors: RaceAnchor[]; onChanged?
       </div>
       <details className="briefing-explain-details" style={{ marginTop: 10 }}>
         <summary style={{ cursor: "pointer", fontSize: 11.5, color: "var(--text-dim)", userSelect: "none", padding: "4px 2px" }}>
-          💡 什么是「海平面等效」与「基准调控」？<span style={{ fontSize: 10.5, color: "var(--text-faint)", marginLeft: 4 }}>（点击展开说明）</span>
+          💡 {isZh ? "什么是「海平面等效」与「基准调控」？" : "What are Sea-Level Equivalent and Baseline Tuning?"}
+          <span style={{ fontSize: 10.5, color: "var(--text-faint)", marginLeft: 4 }}>({isZh ? "点击展开说明" : "Click to expand"})</span>
         </summary>
         <div
           style={{
@@ -466,13 +512,15 @@ function AnchorTable({ anchors, onChanged }: { anchors: RaceAnchor[]; onChanged?
           }}
         >
           <div style={{ display: "flex", gap: 8, alignItems: "flex-start", marginBottom: 6 }}>
-            <span className="pill" style={{ fontSize: 10, padding: "1px 5px", flexShrink: 0 }}>海平面等效</span>
-            <span>扣除赛道爬升代价与高原惩罚后的标准成绩，是跨赛事公平横向对标能力的唯一基准。</span>
+            <span className="pill" style={{ fontSize: 10, padding: "1px 5px", flexShrink: 0 }}>{isZh ? "海平面等效" : "Sea-Level Equivalent"}</span>
+            <span>{isZh ? "扣除赛道爬升代价与高原惩罚后的标准成绩，是跨赛事公平横向对标能力的唯一基准。" : "Standardized finish time normalized for course elevation gain and altitude, providing an objective cross-race comparison baseline."}</span>
           </div>
           <div style={{ display: "flex", gap: 8, alignItems: "flex-start" }}>
-            <span className="pill" style={{ fontSize: 10, padding: "1px 5px", flexShrink: 0 }}>基准调控</span>
+            <span className="pill" style={{ fontSize: 10, padding: "1px 5px", flexShrink: 0 }}>{isZh ? "基准调控" : "Baseline Tuning"}</span>
             <span>
-              系统会自动识别后程掉速且心率反常下降的异常场次并默认移出基准。你可以通过表格中的按钮随时手动「纳入 / 排除 / 撤销」，定制符合个人真实水平的基准池。
+              {isZh
+                ? "系统会自动识别后程掉速且心率反常下降的异常场次并默认移出基准。你可以通过表格中的按钮随时手动「纳入 / 排除 / 撤销」，定制符合个人真实水平的基准池。"
+                : "The system automatically flags anomalous races (late fade combined with abnormal HR drops). You can manually Include, Exclude, or Revert races at any time."}
             </span>
           </div>
         </div>
@@ -572,22 +620,22 @@ export default function RaceBriefingCard({ d, onChanged }: { d: RaceBriefing; on
                 togglePacing();
               }
             }}
-            title={pacingOpen ? "点击收起各阶段配速策略" : "点击展开各阶段配速策略"}
+            title={pacingOpen ? (isZh ? "点击收起各阶段配速策略" : "Click to collapse segment pacing") : (isZh ? "点击展开各阶段配速策略" : "Click to expand segment pacing")}
           >
             <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", flex: 1, minWidth: 0 }}>
               <h4 style={{ margin: 0, fontSize: 13, color: "var(--text-dim)" }}>
-                各阶段配速策略
+                {isZh ? "各阶段配速策略" : "Segment Pacing Strategy"}
               </h4>
-              <span className="pill" style={{ fontSize: 11 }}>{b.pacing.segments.length} 个阶段</span>
+              <span className="pill" style={{ fontSize: 11 }}>{isZh ? `${b.pacing.segments.length} 个阶段` : `${b.pacing.segments.length} segments`}</span>
               <span className="pill accent" style={{ fontSize: 11 }}>
-                目标 {fDur(b.pacing.goalSec)}（均速 {avgPaceSec ? fPace(avgPaceSec) : "--"}/km）
+                {isZh ? "目标" : "Goal"} {fDur(b.pacing.goalSec)}（{isZh ? "均速" : "Avg"} {avgPaceSec ? fPace(avgPaceSec) : "--"}/km）
               </span>
               {b.pacing.warnings.length > 0 && (
-                <span className="pill warn" style={{ fontSize: 11 }}>⚠ {b.pacing.warnings.length} 条提醒</span>
+                <span className="pill warn" style={{ fontSize: 11 }}>⚠ {isZh ? `${b.pacing.warnings.length} 条提醒` : `${b.pacing.warnings.length} warnings`}</span>
               )}
             </div>
             <div className="briefing-toggle-btn">
-              <span>{pacingOpen ? "收起" : "展开"}</span>
+              <span>{pacingOpen ? (isZh ? "收起" : "Collapse") : (isZh ? "展开" : "Expand")}</span>
               <span style={{ fontSize: 10, transition: "transform 0.18s", transform: pacingOpen ? "rotate(180deg)" : "rotate(0deg)" }}>▼</span>
             </div>
           </div>
@@ -613,22 +661,22 @@ export default function RaceBriefingCard({ d, onChanged }: { d: RaceBriefing; on
                 toggleAnchors();
               }
             }}
-            title={anchorsOpen ? "点击收起能力基准锚点" : "点击展开能力基准锚点"}
+            title={anchorsOpen ? (isZh ? "点击收起能力基准锚点" : "Click to collapse race anchors") : (isZh ? "点击展开能力基准锚点" : "Click to expand race anchors")}
           >
             <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", flex: 1, minWidth: 0 }}>
               <h4 style={{ margin: 0, fontSize: 13, color: "var(--text-dim)" }}>
-                能力基准锚点（历史赛事记录）
+                {isZh ? "能力基准锚点（历史赛事记录）" : "Performance Anchors (Race History)"}
               </h4>
-              <span className="pill" style={{ fontSize: 11 }}>收录 {b.anchors.length} 场</span>
-              <span className="pill good" style={{ fontSize: 11 }}>{validAnchorsCount} 场有效基准</span>
+              <span className="pill" style={{ fontSize: 11 }}>{isZh ? `收录 ${b.anchors.length} 场` : `${b.anchors.length} recorded`}</span>
+              <span className="pill good" style={{ fontSize: 11 }}>{isZh ? `${validAnchorsCount} 场有效基准` : `${validAnchorsCount} active`}</span>
               {excludedAnchorsCount > 0 && (
                 <span className="pill warn" style={{ fontSize: 11 }}>
-                  {excludedAnchorsCount} 场已排除
+                  {isZh ? `${excludedAnchorsCount} 场已排除` : `${excludedAnchorsCount} excluded`}
                 </span>
               )}
             </div>
             <div className="briefing-toggle-btn">
-              <span>{anchorsOpen ? "收起" : "展开"}</span>
+              <span>{anchorsOpen ? (isZh ? "收起" : "Collapse") : (isZh ? "展开" : "Expand")}</span>
               <span style={{ fontSize: 10, transition: "transform 0.18s", transform: anchorsOpen ? "rotate(180deg)" : "rotate(0deg)" }}>▼</span>
             </div>
           </div>

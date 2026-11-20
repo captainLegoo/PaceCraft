@@ -1,0 +1,17 @@
+{
+  "title": "Aerobic Decoupling Analysis",
+  "subtitle": "Comparing Aerobic Efficiency Factor (Pace/HR) between halves: Negative (-) indicates strong fatigue resistance; Positive (+) indicates cardiovascular drift. Decoupling ≤ 5% confirms a rock-solid aerobic base.",
+  "notEligible": "Not eligible for decoupling analysis (requires steady aerobic endurance running with sufficient distance)",
+  "firstHalf": "First Half (50% Elapsed)",
+  "secondHalf": "Second Half (50% Elapsed)",
+  "sensation": "Second Half Drift",
+  "elapsed": "Elapsed",
+  "conclusion": "Diagnostic Conclusion",
+  "goodText": "Heart rate and pace remained highly parallel between halves. Minor cardiac drift is well within normal limits, reflecting outstanding aerobic stamina and metabolic efficiency.",
+  "warnText": "Slight aerobic decoupling observed with mild HR upward drift or minor pace drop. Represents normal thermal strain and cumulative muscular fatigue during long runs.",
+  "badText": "Significant aerobic decoupling detected (cardiovascular drift > 8% or notable pace drop). Indicates running above true aerobic ceiling, dehydration, or glycogen depletion.",
+  "hrSteady": "Heart rate & pace remained exceptionally steady across both halves",
+  "hrIncreased": "Cardiac drift observed: HR drifted upward in 2nd half",
+  "paceSlowed": "Minor fatigue detected: Pace slowed in 2nd half",
+  "paceFaster": "Negative decoupling: Accelerated smoothly in 2nd half with energy to spare"
+}

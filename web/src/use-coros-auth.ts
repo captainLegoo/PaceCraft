@@ -1,8 +1,10 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { api, type AuthStatus } from "./api";
 import { openExternal } from "./openExternal";
+import { useI18n } from "./i18n";
 
 export function useCorosAuth(onSuccess?: () => void, onDisconnect?: () => void) {
+  const { isZh } = useI18n();
   const [auth, setAuth] = useState<AuthStatus | null>(null);
   const [loading, setLoading] = useState(false);
   const [connecting, setConnecting] = useState(false);
@@ -74,13 +76,16 @@ export function useCorosAuth(onSuccess?: () => void, onDisconnect?: () => void) 
           if (e.data.ok) {
             const s = await refreshAuth();
             if (s?.mismatch) {
-              setMsg({ text: "检测到授权账号与当前档案已有数据不一致，请在界面中选择处理方式", kind: "ok" });
+              setMsg({
+                text: isZh ? "检测到授权账号与当前档案已有数据不一致，请在界面中选择处理方式" : "Account mismatch detected. Please select an option in the dialog.",
+                kind: "ok",
+              });
             } else {
-              setMsg({ text: "COROS 账号连接成功！", kind: "ok" });
+              setMsg({ text: isZh ? "COROS 账号连接成功！" : "COROS account connected successfully!", kind: "ok" });
               onSuccessRef.current?.();
             }
           } else {
-            setMsg({ text: "授权未完成或已被取消", kind: "err" });
+            setMsg({ text: isZh ? "授权未完成或已被取消" : "Authorization was cancelled or not completed.", kind: "err" });
           }
           setConnecting(false);
           setAuthUrl(null);
@@ -100,9 +105,12 @@ export function useCorosAuth(onSuccess?: () => void, onDisconnect?: () => void) 
           const latest = await refreshAuth();
           if (latest?.connected) {
             if (latest.mismatch) {
-              setMsg({ text: "检测到授权账号与当前档案已有数据不一致，请在界面中选择处理方式", kind: "ok" });
+              setMsg({
+                text: isZh ? "检测到授权账号与当前档案已有数据不一致，请在界面中选择处理方式" : "Account mismatch detected. Please select an option in the dialog.",
+                kind: "ok",
+              });
             } else {
-              setMsg({ text: "COROS 账号已就绪！", kind: "ok" });
+              setMsg({ text: isZh ? "COROS 账号已就绪！" : "COROS account is ready!", kind: "ok" });
               onSuccessRef.current?.();
             }
           }
@@ -115,15 +123,18 @@ export function useCorosAuth(onSuccess?: () => void, onDisconnect?: () => void) 
           setConnecting(false);
           setAuthUrl(null);
           if (s.mismatch) {
-            setMsg({ text: "检测到授权账号与当前档案已有数据不一致，请在界面中选择处理方式", kind: "ok" });
+            setMsg({
+              text: isZh ? "检测到授权账号与当前档案已有数据不一致，请在界面中选择处理方式" : "Account mismatch detected. Please select an option in the dialog.",
+              kind: "ok",
+            });
           } else {
-            setMsg({ text: "COROS 账号连接成功！", kind: "ok" });
+            setMsg({ text: isZh ? "COROS 账号连接成功！" : "COROS account connected successfully!", kind: "ok" });
             onSuccessRef.current?.();
           }
         }
       }, 2000);
     } catch (e) {
-      setMsg({ text: `发起授权失败：${(e as Error).message}`, kind: "err" });
+      setMsg({ text: isZh ? `发起授权失败：${(e as Error).message}` : `Failed to start authorization: ${(e as Error).message}`, kind: "err" });
       setConnecting(false);
       setAuthUrl(null);
     }
@@ -134,10 +145,10 @@ export function useCorosAuth(onSuccess?: () => void, onDisconnect?: () => void) 
     try {
       await api.disconnectAuth();
       await refreshAuth();
-      setMsg({ text: "已解除 COROS 账号绑定", kind: "ok" });
+      setMsg({ text: isZh ? "已解除 COROS 账号绑定" : "COROS account disconnected.", kind: "ok" });
       onDisconnectRef.current?.();
     } catch (e) {
-      setMsg({ text: `解绑失败：${(e as Error).message}`, kind: "err" });
+      setMsg({ text: isZh ? `解绑失败：${(e as Error).message}` : `Failed to disconnect: ${(e as Error).message}`, kind: "err" });
     } finally {
       setLoading(false);
     }

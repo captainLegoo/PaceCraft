@@ -48,13 +48,6 @@ type Route = {
   weekStart?: string;
 };
 
-const NAV: { key: "training" | "coach" | "race" | "readiness" | "settings"; label: string; shortLabel?: string; sub: string; icon: any }[] = [
-  { key: "training", label: "训练看板", shortLabel: "训练", sub: "跑量 · 场次 · 负荷", icon: IconShoe },
-  { key: "coach", label: "AI 科学课表", shortLabel: "AI 课表", sub: "双周滚动 · 科学自适应", icon: IconTarget },
-  { key: "race", label: "赛事中心", shortLabel: "赛事", sub: "赛道 · 预测 · 备赛", icon: IconFlag },
-  { key: "readiness", label: "身体状态", shortLabel: "状态", sub: "恢复 · 睡眠 · 体能", icon: IconPulse },
-  { key: "settings", label: "系统设置", shortLabel: "设置", sub: "AI · 同步 · 工作流", icon: IconDatabase },
-];
 
 function routeToHash(r: Route): string {
   switch (r.page) {
@@ -498,7 +491,7 @@ export default function App() {
       refresh();
       void runSyncRef.current?.();
     } catch (err: any) {
-      setMismatchError(err?.message || "处理失败，请稍后重试");
+      setMismatchError(err?.message || (isZh ? "处理失败，请稍后重试" : "Operation failed, please try again later"));
     } finally {
       setResolvingMismatch(false);
     }
@@ -583,7 +576,7 @@ export default function App() {
       }
       return r;
     } catch (e) {
-      setSyncMsg({ text: `同步失败：${(e as Error).message}`, kind: "err" });
+      setSyncMsg({ text: isZh ? `同步失败：${(e as Error).message}` : `Sync failed: ${(e as Error).message}`, kind: "err" });
       return null;
     } finally {
       // 保持轮询直到后端真正完成 active: false
@@ -634,7 +627,7 @@ export default function App() {
           current: 0,
           total: 100,
           percent: 10,
-          message: "正在连接高驰 COROS 检查增量记录...",
+          message: isZh ? "正在连接高驰 COROS 检查增量记录..." : "Connecting to COROS to check for workouts...",
           startedAt: Date.now(),
         });
 
@@ -665,7 +658,7 @@ export default function App() {
             if (res.conflictsResolved) totalConflictsResolved += res.conflictsResolved;
           } else if (res.busy) {
             // 后台已有同步任务正在进行中（并发保护提示，不是出错，不要误报错误）
-            setSyncMsg({ text: res.message || "后台已有同步任务正在进行中，请稍候...", kind: "ok" });
+            setSyncMsg({ text: res.message || (isZh ? "后台已有同步任务正在进行中，请稍候..." : "Sync task already in progress in background, please wait..."), kind: "ok" });
             let waitAttempts = 0;
             while (waitAttempts < 60) {
               await new Promise((r) => setTimeout(r, 1000));
@@ -682,14 +675,14 @@ export default function App() {
               waitAttempts++;
             }
           } else {
-            syncError = res.message || "高驰同步未正常完成";
+            syncError = res.message || (isZh ? "高驰同步未正常完成" : "COROS sync did not complete normally");
           }
         } catch (e: any) {
           if (corosPoller) {
             clearInterval(corosPoller);
             corosPoller = null;
           }
-          syncError = `高驰同步失败：${e?.message || "网络异常"}`;
+          syncError = isZh ? `高驰同步失败：${e?.message || "网络异常"}` : `COROS sync failed: ${e?.message || "Network error"}`;
         }
       }
 
@@ -711,7 +704,7 @@ export default function App() {
           current: 0,
           total: 100,
           percent: 15,
-          message: "正在连接 Garmin 佳明检查增量训练...",
+          message: isZh ? "正在连接 Garmin 佳明检查增量训练..." : "Connecting to Garmin Connect to check workouts...",
           startedAt: Date.now(),
         });
 
@@ -752,8 +745,8 @@ export default function App() {
             clearInterval(garminPoller);
             garminPoller = null;
           }
-          const msg = e?.message || "网络异常";
-          syncError = syncError ? `${syncError}；佳明同步失败：${msg}` : `佳明同步失败：${msg}`;
+          const msg = e?.message || (isZh ? "网络异常" : "Network error");
+          syncError = syncError ? `${syncError}；${isZh ? `佳明同步失败：${msg}` : `Garmin sync failed: ${msg}`}` : (isZh ? `佳明同步失败：${msg}` : `Garmin sync failed: ${msg}`);
         }
       }
 
@@ -770,13 +763,15 @@ export default function App() {
       setSyncSummary(summaryData);
 
       const totalNew = (corosSummary?.newCount ?? 0) + (garminSummary?.newCount ?? 0);
-      const dedupNote = totalConflictsResolved > 0 ? `，识别并去重 ${totalConflictsResolved} 笔同场重叠记录` : "";
+      const dedupNote = totalConflictsResolved > 0 ? (isZh ? `，识别并去重 ${totalConflictsResolved} 笔同场重叠记录` : `, resolved ${totalConflictsResolved} concurrent duplicate recordings`) : "";
 
       if (syncError) {
-        setSyncMsg({ text: `同步提示：${syncError}`, kind: "err" });
+        setSyncMsg({ text: isZh ? `同步提示：${syncError}` : `Sync Notice: ${syncError}`, kind: "err" });
       } else {
         setSyncMsg({
-          text: totalNew > 0 ? `同步完成：新增 ${totalNew} 笔训练${dedupNote}` : `同步完成：所有设备已是最新${dedupNote}`,
+          text: totalNew > 0
+            ? (isZh ? `同步完成：新增 ${totalNew} 笔训练${dedupNote}` : `Sync Complete: ${totalNew} new workouts added${dedupNote}`)
+            : (isZh ? `同步完成：所有设备已是最新${dedupNote}` : `Sync Complete: All devices up to date${dedupNote}`),
           kind: "ok",
         });
       }
@@ -784,7 +779,7 @@ export default function App() {
       setDataVersion((v) => v + 1);
       refresh();
     } catch (e) {
-      setSyncMsg({ text: `同步失败：${(e as Error).message}`, kind: "err" });
+      setSyncMsg({ text: isZh ? `同步失败：${(e as Error).message}` : `Sync failed: ${(e as Error).message}`, kind: "err" });
     } finally {
       setSyncing(false);
       setTimeout(() => setSyncMsg(null), 6000);
@@ -1040,7 +1035,7 @@ export default function App() {
           {status ? (
             <>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 3 }}>
-                <span>数据截至 {status.latestActivityDate ?? "—"}</span>
+                <span>{isZh ? `数据截至 ${status.latestActivityDate ?? "—"}` : `Data as of ${status.latestActivityDate ?? "—"}`}</span>
                 {/* 版本号 */}
                 <span
                   className="version-tag"
@@ -1055,36 +1050,36 @@ export default function App() {
                     fontWeight: hasNewUpdate ? 600 : 400,
                   }}
                   onClick={() => setShowUpdateModal(true)}
-                  title={`当前版本：${appVersion}（${hasNewUpdate ? "发现新版本，点击查看与升级" : "点击检查更新"}）`}
+                  title={isZh ? `当前版本：${appVersion}（${hasNewUpdate ? "发现新版本，点击查看与升级" : "点击检查更新"}）` : `Version: ${appVersion} (${hasNewUpdate ? "New version available, click to update" : "Click to check updates"})`}
                 >
                   <span className="dot" style={{ width: 4, height: 4, background: hasNewUpdate ? "var(--accent)" : undefined }} />
-                  <span>{hasNewUpdate ? `${appVersion} (新版本)` : appVersion}</span>
+                  <span>{hasNewUpdate ? `${appVersion} (${isZh ? "新版本" : "New"})` : appVersion}</span>
                 </span>
               </div>
               <div style={{ color: "var(--text-dim)", fontSize: 11 }}>
-                {status.counts.activities} 次活动 · {status.counts.laps} 行分圈
+                {isZh ? `${status.counts.activities} 次活动 · ${status.counts.laps} 行分圈` : `${status.counts.activities} activities · ${status.counts.laps} laps`}
               </div>
 
               {/* 设备来源徽标列表：独立行横向平铺，间距整齐 */}
               <div style={{ marginTop: 8, display: "flex", alignItems: "center", gap: 5, flexWrap: "wrap" }}>
                 {status.auth?.connected && (
-                  <span className="pill good" style={{ cursor: "pointer", fontSize: 11, padding: "2px 8px" }} onClick={() => setShowConnectModal(true)} title="点击管理高驰连接">
-                    高驰 ●
+                  <span className="pill good" style={{ cursor: "pointer", fontSize: 11, padding: "2px 8px" }} onClick={() => setShowConnectModal(true)} title={isZh ? "点击管理高驰连接" : "Click to manage COROS connection"}>
+                    {isZh ? "高驰 ●" : "COROS ●"}
                   </span>
                 )}
                 {garminAuth?.cn?.connected && (
-                  <span className="pill good" style={{ cursor: "pointer", fontSize: 11, padding: "2px 8px" }} onClick={() => setShowConnectModal(true)} title="点击管理佳明中国区连接">
-                    佳明(中国区) ●
+                  <span className="pill good" style={{ cursor: "pointer", fontSize: 11, padding: "2px 8px" }} onClick={() => setShowConnectModal(true)} title={isZh ? "点击管理佳明中国区连接" : "Click to manage Garmin China connection"}>
+                    {isZh ? "佳明(中国区) ●" : "Garmin (CN) ●"}
                   </span>
                 )}
                 {garminAuth?.global?.connected && (
-                  <span className="pill good" style={{ cursor: "pointer", fontSize: 11, padding: "2px 8px" }} onClick={() => setShowConnectModal(true)} title="点击管理佳明国际区连接">
-                    佳明(国际区) ●
+                  <span className="pill good" style={{ cursor: "pointer", fontSize: 11, padding: "2px 8px" }} onClick={() => setShowConnectModal(true)} title={isZh ? "点击管理佳明国际区连接" : "Click to manage Garmin Global connection"}>
+                    {isZh ? "佳明(国际区) ●" : "Garmin (Global) ●"}
                   </span>
                 )}
                 {!status.auth?.connected && !garminAuth?.connected && (
-                  <span className="pill warn" style={{ cursor: "pointer", fontSize: 11, padding: "2px 8px" }} onClick={() => setShowConnectModal(true)} title="点击连接手表设备">
-                    + 连接设备
+                  <span className="pill warn" style={{ cursor: "pointer", fontSize: 11, padding: "2px 8px" }} onClick={() => setShowConnectModal(true)} title={isZh ? "点击连接手表设备" : "Click to connect watch"}>
+                    {isZh ? "+ 连接设备" : "+ Connect Watch"}
                   </span>
                 )}
               </div>
@@ -1294,13 +1289,13 @@ export default function App() {
               </button>
             ) : (
               <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-                <span style={{ fontSize: 12, color: "#93c5fd" }}>正在等待浏览器授权…</span>
+                <span style={{ fontSize: 12, color: "#93c5fd" }}>{isZh ? "正在等待浏览器授权…" : "Waiting for browser authorization…"}</span>
                 <button
                   type="button"
                   onClick={openCorosBrowser}
                   style={{ fontSize: 12, padding: "5px 10px", background: "#2563eb", color: "#fff", border: "none", borderRadius: 6, cursor: "pointer" }}
                 >
-                  🌐 打开页面
+                  {isZh ? "🌐 打开页面" : "🌐 Open Browser"}
                 </button>
                 {authUrl && (
                   <button
@@ -1308,7 +1303,7 @@ export default function App() {
                     onClick={() => copyAuthUrl(authUrl)}
                     style={{ fontSize: 12, padding: "5px 10px", background: "rgba(255,255,255,0.1)", color: "#fff", border: "1px solid rgba(255,255,255,0.2)", borderRadius: 6, cursor: "pointer" }}
                   >
-                    {copiedAuthUrl ? "✓ 已复制" : "📋 复制链接"}
+                    {copiedAuthUrl ? (isZh ? "✓ 已复制" : "✓ Copied") : (isZh ? "📋 复制链接" : "📋 Copy Link")}
                   </button>
                 )}
                 <button
@@ -1316,7 +1311,7 @@ export default function App() {
                   onClick={cancelCoros}
                   style={{ fontSize: 12, padding: "5px 10px", background: "transparent", color: "var(--text-dim)", border: "1px solid var(--border)", borderRadius: 6, cursor: "pointer" }}
                 >
-                  取消
+                  {t("common.cancel")}
                 </button>
               </div>
             )}
@@ -1327,8 +1322,8 @@ export default function App() {
           <>
             <div className="page-head">
               <div>
-                <h2>训练</h2>
-                <div className="sub">周跑量、训练负荷与负荷比趋势</div>
+                <h2>{t("nav.training")}</h2>
+                <div className="sub">{t("nav.trainingSub")}</div>
               </div>
             </div>
             <Training
@@ -1436,8 +1431,8 @@ export default function App() {
           <>
             <div className="page-head">
               <div>
-                <h2>设置</h2>
-                <div className="sub">配置 AI 模型、同步数据</div>
+                <h2>{t("nav.settings")}</h2>
+                <div className="sub">{t("nav.settingsSub")}</div>
               </div>
             </div>
             <Settings
@@ -1474,15 +1469,25 @@ export default function App() {
             <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12 }}>
               <span style={{ fontSize: 24 }}>⚠️</span>
               <h3 style={{ margin: 0, fontSize: 18, fontWeight: 600, color: "var(--text)" }}>
-                检测到高驰账号变更
+                {isZh ? "检测到高驰账号变更" : "COROS Account Change Detected"}
               </h3>
             </div>
             
             <p style={{ fontSize: 13, color: "var(--text-dim)", lineHeight: 1.6, margin: "0 0 16px 0" }}>
-              当前档案已有「<strong style={{ color: "#60a5fa" }}>{auth.mismatch.existingNickname}</strong>」的{" "}
-              <strong>{auth.mismatch.activityCount}</strong> 条训练数据，但刚刚在浏览器中授权登录的高驰官方账号是「<strong style={{ color: "#34d399" }}>{auth.mismatch.incomingNickname}</strong>」。
-              <br /><br />
-              为防止不同跑友的运动记录、分圈配速与体能负荷模型发生混淆与交叉污染，请选择如何处置：
+              {isZh ? (
+                <>
+                  当前档案已有「<strong style={{ color: "#60a5fa" }}>{auth.mismatch.existingNickname}</strong>」的{" "}
+                  <strong>{auth.mismatch.activityCount}</strong> 条训练数据，但刚刚在浏览器中授权登录的高驰官方账号是「<strong style={{ color: "#34d399" }}>{auth.mismatch.incomingNickname}</strong>」。
+                  <br /><br />
+                  为防止不同跑友的运动记录、分圈配速与体能负荷模型发生混淆与交叉污染，请选择如何处置：
+                </>
+              ) : (
+                <>
+                  Current profile contains <strong>{auth.mismatch.activityCount}</strong> workouts from &quot;<strong style={{ color: "#60a5fa" }}>{auth.mismatch.existingNickname}</strong>&quot;, but the newly authorized COROS account is &quot;<strong style={{ color: "#34d399" }}>{auth.mismatch.incomingNickname}</strong>&quot;.
+                  <br /><br />
+                  To prevent data overlap and preserve distinct training models across different athletes, please choose an action:
+                </>
+              )}
             </p>
 
             <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 18 }}>
@@ -1503,14 +1508,16 @@ export default function App() {
               >
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 4 }}>
                   <span style={{ fontWeight: 600, fontSize: 13.5, color: "#10b981" }}>
-                    ① 为「{auth.mismatch.incomingNickname}」创建新档案并切换
+                    {isZh ? `① 为「${auth.mismatch.incomingNickname}」创建新档案并切换` : `① Create new profile for &quot;${auth.mismatch.incomingNickname}&quot; & switch`}
                   </span>
                   <span style={{ fontSize: 11, background: "#10b981", color: "#fff", padding: "2px 6px", borderRadius: 4, fontWeight: 600 }}>
-                    强烈推荐
+                    {isZh ? "强烈推荐" : "Recommended"}
                   </span>
                 </div>
                 <div style={{ fontSize: 12, color: "var(--text-dim)", lineHeight: 1.4 }}>
-                  保留当前档案内「{auth.mismatch.existingNickname}」的所有数据不动，自动建立新档案并立即拉取「{auth.mismatch.incomingNickname}」的数据。
+                  {isZh
+                    ? `保留当前档案内「${auth.mismatch.existingNickname}」的所有数据不动，自动建立新档案并立即拉取「${auth.mismatch.incomingNickname}」的数据。`
+                    : `Keep existing data for &quot;${auth.mismatch.existingNickname}&quot; intact, create a separate profile and sync workouts for &quot;${auth.mismatch.incomingNickname}&quot;.`}
                 </div>
               </button>
 
@@ -1530,10 +1537,12 @@ export default function App() {
                 }}
               >
                 <div style={{ fontWeight: 600, fontSize: 13.5, color: "#ef4444", marginBottom: 4 }}>
-                  ② 清空当前档案旧数据，仅保留「{auth.mismatch.incomingNickname}」
+                  {isZh ? `② 清空当前档案旧数据，仅保留「${auth.mismatch.incomingNickname}」` : `② Reset profile and bind to &quot;${auth.mismatch.incomingNickname}&quot;`}
                 </div>
                 <div style={{ fontSize: 12, color: "var(--text-dim)", lineHeight: 1.4 }}>
-                  彻底清空当前档案已有的 {auth.mismatch.activityCount} 条历史训练，换绑为新账号并重新开始拉取。
+                  {isZh
+                    ? `彻底清空当前档案已有的 ${auth.mismatch.activityCount} 条历史训练，换绑为新账号并重新开始拉取。`
+                    : `Clear all ${auth.mismatch.activityCount} workouts in this profile, re-bind account to &quot;${auth.mismatch.incomingNickname}&quot; and fetch afresh.`}
                 </div>
               </button>
 
@@ -1553,17 +1562,19 @@ export default function App() {
                 }}
               >
                 <div style={{ fontWeight: 600, fontSize: 13.5, color: "var(--text)", marginBottom: 4 }}>
-                  ③ 确认为同一人（如改名或大小号），合并导入
+                  {isZh ? "③ 确认为同一人（如改名或大小号），合并导入" : "③ Same athlete (alias / alternate account), merge into profile"}
                 </div>
                 <div style={{ fontSize: 12, color: "var(--text-dim)", lineHeight: 1.4 }}>
-                  已知晓数据将混入当前档案，将「{auth.mismatch.incomingNickname}」的数据直接合入现有数据库。
+                  {isZh
+                    ? `已知晓数据将混入当前档案，将「${auth.mismatch.incomingNickname}」的数据直接合入现有数据库。`
+                    : `Merge incoming records from &quot;${auth.mismatch.incomingNickname}&quot; directly into the existing database.`}
                 </div>
               </button>
             </div>
 
             {mismatchError && (
               <div style={{ color: "#ef4444", fontSize: 12.5, marginBottom: 12 }}>
-                处理失败：{mismatchError}
+                {isZh ? "处理失败：" : "Operation failed: "}{mismatchError}
               </div>
             )}
 
@@ -1578,7 +1589,7 @@ export default function App() {
                 }}
                 style={{ fontSize: 12 }}
               >
-                取消本次授权绑定
+                {isZh ? "取消本次授权绑定" : "Cancel Authorization"}
               </button>
             </div>
           </div>
@@ -1586,8 +1597,8 @@ export default function App() {
       )}
 
       {/* 移动端常驻底部导航 TabBar */}
-      <nav className="mobile-tabbar" aria-label="移动端主导航">
-        {NAV.map((n) => {
+      <nav className="mobile-tabbar" aria-label={isZh ? "移动端主导航" : "Mobile navigation"}>
+        {navItems.map((n) => {
           const Icon = n.icon;
           const isActive =
             route.page === n.key ||

@@ -320,3 +320,14 @@ export function IconTarget({ size = 18, className }: P) {
     </svg>
   );
 }
+
+/** 地球仪 / 国际化 */
+export function IconGlobe({ size = 18, className }: P) {
+  return (
+    <svg {...base(size)} className={className} aria-hidden>
+      <circle cx="12" cy="12" r="9.5" />
+      <path d="M12 2.5a14 14 0 0 1 3.8 9.5 14 14 0 0 1-3.8 9.5 14 14 0 0 1-3.8-9.5 14 14 0 0 1 3.8-9.5z" />
+      <path d="M2.5 12h19" />
+    </svg>
+  );
+}
