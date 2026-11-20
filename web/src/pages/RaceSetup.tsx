@@ -4,6 +4,7 @@ import { api, type RaceDetail, type RouteFilePreview, type Race } from "../api";
 import RouteProfileCard from "./RaceRouteProfile";
 import RaceBriefingCard, { type RaceBriefing } from "./RaceBriefing";
 import { fmtPace, formatDuration as fmtDurInput } from "../utils/format";
+import { useI18n } from "../i18n";
 
 /**
  * 距离预设。
@@ -155,6 +156,7 @@ export default function RaceSetup({
 }: {
   onChanged?: () => void;
 }) {
+  const { isZh } = useI18n();
   const [open, setOpen] = useState(false);
   const [formMode, setFormMode] = useState<"create" | "edit">("create");
   const [busy, setBusy] = useState(false);
@@ -958,8 +960,8 @@ export default function RaceSetup({
     // 否则用户看到的是一片空白，会以为功能坏了
     return (
       <div className="card" style={{ marginBottom: 14 }}>
-        <h3 className="card-title">目标赛事</h3>
-        <div className="hint" style={{ marginTop: 8 }}>正在载入赛事与路线数据…</div>
+        <h3 className="card-title">{isZh ? "目标赛事" : "Target Race"}</h3>
+        <div className="hint" style={{ marginTop: 8 }}>{isZh ? "正在载入赛事与路线数据…" : "Loading race and course profile…"}</div>
         <div className="skeleton" style={{ marginTop: 12, height: 22, width: "55%" }} />
         <div className="skeleton" style={{ marginTop: 10, height: 14, width: "35%" }} />
       </div>
@@ -969,11 +971,11 @@ export default function RaceSetup({
   if (!detail) {
     return (
       <div className="card" style={{ marginBottom: 14 }}>
-        <h3 className="card-title">目标赛事</h3>
-        <p className="card-sub">设置你要参加的比赛，系统会自动分析赛道爬升并给出配速方案。</p>
+        <h3 className="card-title">{isZh ? "目标赛事" : "Target Race"}</h3>
+        <p className="card-sub">{isZh ? "设置你要参加的比赛，系统会自动分析赛道爬升并给出配速方案。" : "Register your target race to automatically analyze elevation profile and pace strategy."}</p>
         {err && <div className="banner error" style={{ marginTop: 10 }}>{err}</div>}
         <button className="sync-btn" style={{ marginTop: 10, maxWidth: 200 }} onClick={openCreateForm}>
-          + 添加赛事
+          {isZh ? "+ 添加赛事" : "+ Add Race"}
         </button>
         {open && renderForm()}
       </div>
@@ -986,14 +988,14 @@ export default function RaceSetup({
       <div className="race-selector-bar">
         <div className="race-selector-left">
           <div className="race-selector-header">
-            <span style={{ fontSize: 13, color: "var(--text-dim)", whiteSpace: "nowrap" }}>目标赛事：</span>
+            <span style={{ fontSize: 13, color: "var(--text-dim)", whiteSpace: "nowrap" }}>{isZh ? "目标赛事：" : "Target Race:"}</span>
             <button
               type="button"
               className="pill accent mobile-only-btn"
               onClick={openCreateForm}
               style={{ cursor: "pointer", border: "none", fontWeight: 600 }}
             >
-              + 添加赛事
+              {isZh ? "+ 添加赛事" : "+ Add Race"}
             </button>
           </div>
           <select
@@ -1006,7 +1008,7 @@ export default function RaceSetup({
               const isPast = r.date < todayBeijing();
               return (
                 <option key={r.id} value={r.id}>
-                  {r.date} · {r.name} ({r.distanceKm}km){isPast ? " (往期)" : ""}
+                  {r.date} · {r.name} ({r.distanceKm}km){isPast ? (isZh ? " (往期)" : " (Past)") : ""}
                 </option>
               );
             })}
@@ -1018,7 +1020,7 @@ export default function RaceSetup({
           onClick={openCreateForm}
           style={{ cursor: "pointer", border: "none", fontWeight: 600, flexShrink: 0 }}
         >
-          + 添加赛事
+          {isZh ? "+ 添加赛事" : "+ Add Race"}
         </button>
       </div>
 
@@ -1028,18 +1030,18 @@ export default function RaceSetup({
           <h3 className="card-title" style={{ marginBottom: 2, wordBreak: "break-word" }}>{detail.race.name}</h3>
           <p className="card-sub" style={{ margin: 0 }}>
             {detail.race.date} · {detail.race.distanceKm} km
-            {detail.race.goalSec ? ` · 目标 ${fmtDurInput(detail.race.goalSec)}` : ""}
+            {detail.race.goalSec ? (isZh ? ` · 目标 ${fmtDurInput(detail.race.goalSec)}` : ` · Goal ${fmtDurInput(detail.race.goalSec)}`) : ""}
           </p>
           {/* 未填路线要显式标出来：不标的话用户看到"没有剖面图"会以为功能坏了 */}
           {detail.race.routeSource === "none" && (
             <span className="pill" style={{ display: "inline-block", marginTop: 6, fontSize: 11 }}>
-              未填路线 · 爬升还没算
+              {isZh ? "未填路线 · 爬升还没算" : "No route uploaded · Elevation pending"}
             </span>
           )}
         </div>
         <div style={{ display: "flex", gap: 8, flexShrink: 0 }}>
           <button className="pill" onClick={openEditForm} style={{ cursor: "pointer", border: "none", background: "none" }}>
-            修改
+            {isZh ? "修改" : "Edit"}
           </button>
           {!confirmDelete ? (
             <button
@@ -1047,24 +1049,24 @@ export default function RaceSetup({
               onClick={() => setConfirmDelete(true)}
               style={{ cursor: "pointer", border: "none", background: "none", color: "var(--warn)" }}
             >
-              删除
+              {isZh ? "删除" : "Delete"}
             </button>
           ) : (
             <span style={{ display: "inline-flex", gap: 6, alignItems: "center" }}>
-              <span style={{ fontSize: 12, color: "var(--warn)", fontWeight: 500 }}>确定删除？</span>
+              <span style={{ fontSize: 12, color: "var(--warn)", fontWeight: 500 }}>{isZh ? "确定删除？" : "Confirm delete?"}</span>
               <button
                 className="pill"
                 onClick={() => { setConfirmDelete(false); void remove(); }}
                 style={{ cursor: "pointer", background: "var(--warn)", color: "#fff", border: "none" }}
               >
-                确定
+                {isZh ? "确定" : "Confirm"}
               </button>
               <button
                 className="pill"
                 onClick={() => setConfirmDelete(false)}
                 style={{ cursor: "pointer", border: "none", background: "none" }}
               >
-                取消
+                {isZh ? "取消" : "Cancel"}
               </button>
             </span>
           )}

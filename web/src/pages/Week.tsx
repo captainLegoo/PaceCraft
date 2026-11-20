@@ -2,20 +2,10 @@ import { useEffect, useMemo, useState } from "react";
 import { api, type LoadPoint, type Session, type Weekly, type WeekReport } from "../api";
 import { AiDisclaimerNotice, BarChart, Markdown, fmtDate, fmtDur, fmtPace, paceColor } from "../charts";
 import { IconBack, IconCalendar, IconLoad, IconRoute, IconRun } from "../icons";
+import { useI18n } from "../i18n";
 
 /**
  * 周汇总视图。
- *
- * 周跑量柱状图点进来的是「这一周」，不是某一场训练 ——
- * 所以这里展示的是周内聚合（总里程、总时长、场均配速/心率、
- * 每场明细），而不是跳到某一条记录。
- *
- * 周级 AI 分析与场次级的口径是**相反**的，这里刻意保留这个差异：
- * 场次分析不带任何其它日期的数据（避免跨场次结论混进当天复盘），
- * 周级分析则必须带前 6 周趋势（"这周比上周是多是少"正是周汇总要回答的问题）。
- * 另外场次分析会下发全部逐圈数据（一场最多 43 段），
- * 周级绝不能这么发（一周 70～150 段且大部分是热身和普通有氧跑的分圈），
- * 改成只发按主/次课表切好的训练块，且只对主课表块展开内部结构。
  */
 export default function Week({
   weekStart, onBack, onOpenSession, onOpenActivity, aiConfigured,
@@ -26,6 +16,7 @@ export default function Week({
   onOpenActivity: (labelId: string) => void;
   aiConfigured: boolean;
 }) {
+  const { t, isZh } = useI18n();
   const [weekly, setWeekly] = useState<Weekly[]>([]);
   const [load, setLoad] = useState<LoadPoint[]>([]);
   const [sessions, setSessions] = useState<Session[]>([]);
@@ -85,10 +76,10 @@ export default function Week({
     return (
       <>
         <div className="page-head">
-          <div><h2>{fmtDate(weekStart)} 起这一周</h2></div>
-          <button className="btn" onClick={onBack} title="返回上一级（快捷键：Esc 或鼠标后退键）"><IconBack size={15} />返回</button>
+          <div><h2>{isZh ? `${fmtDate(weekStart)} 起这一周` : `Week of ${fmtDate(weekStart)}`}</h2></div>
+          <button className="btn" onClick={onBack} title={isZh ? "返回上一级（快捷键：Esc 或鼠标后退键）" : "Back (Esc or Back button)"}><IconBack size={15} />{t("common.back")}</button>
         </div>
-        <div className="banner info">这一周没有训练记录。</div>
+        <div className="banner info">{isZh ? "这一周没有训练记录。" : "No workout records found for this week."}</div>
       </>
     );
   }
@@ -137,11 +128,11 @@ export default function Week({
     value: s.totals.distanceKm,
     extra: s.totals.avgHr ?? 0,
     tip: [
-      [`${s.totals.distanceKm} km`, "距离"],
-      [fmtDur(s.totals.durationSec), "时长"],
-      [fmtPace(s.totals.durationSec / s.totals.distanceKm) + " /km", "配速"],
-      [`${s.totals.avgHr ?? "—"} bpm`, "平均心率"],
-      [s.classification, "类型"],
+      [`${s.totals.distanceKm} km`, isZh ? "距离" : "Distance"],
+      [fmtDur(s.totals.durationSec), isZh ? "时长" : "Duration"],
+      [fmtPace(s.totals.durationSec / s.totals.distanceKm) + " /km", isZh ? "配速" : "Pace"],
+      [`${s.totals.avgHr ?? "—"} bpm`, isZh ? "平均心率" : "Avg HR"],
+      [s.classification, isZh ? "类型" : "Type"],
     ] as [string, string][],
   }));
 
@@ -149,47 +140,49 @@ export default function Week({
     <>
       <div className="page-head">
         <div>
-          <h2>{fmtDate(weekStart)} — {fmtDate(weekEndLabel)} 周汇总</h2>
+          <h2>{fmtDate(weekStart)} — {fmtDate(weekEndLabel)} {isZh ? "周汇总" : "Weekly Summary"}</h2>
           <div className="sub">
-            周一至周日 · {week.count} 条记录 · {weekSessions.length} 场训练
+            {isZh
+              ? `周一至周日 · ${week.count} 条记录 · ${weekSessions.length} 场训练`
+              : `Mon - Sun · ${week.count} activities · ${weekSessions.length} sessions`}
           </div>
         </div>
-        <button className="btn" onClick={onBack} title="返回上一级（快捷键：Esc 或鼠标后退键）"><IconBack size={15} />返回</button>
+        <button className="btn" onClick={onBack} title={isZh ? "返回上一级（快捷键：Esc 或鼠标后退键）" : "Back (Esc or Back button)"}><IconBack size={15} />{t("common.back")}</button>
       </div>
 
       <div className="grid g4" style={{ marginBottom: 14 }}>
         <div className="card stat-card">
           <div className="stat">
-            <span className="label"><IconRoute size={15} />周总跑量</span>
+            <span className="label"><IconRoute size={15} />{isZh ? "周总跑量" : "Weekly Mileage"}</span>
             <span className="value num">{week.distanceKm}<span className="unit">km</span></span>
-            <span className="hint">场均配速 {fmtPace(week.avgPaceSec)} /km</span>
+            <span className="hint">{isZh ? `场均配速 ${fmtPace(week.avgPaceSec)} /km` : `Avg Pace ${fmtPace(week.avgPaceSec)} /km`}</span>
           </div>
         </div>
         <div className="card stat-card">
           <div className="stat">
-            <span className="label"><IconCalendar size={15} />场次 / 最长单次</span>
-            <span className="value num">{weekSessions.length}<span className="unit">场 · {week.longestRunKm}km</span></span>
+            <span className="label"><IconCalendar size={15} />{isZh ? "场次 / 最长单次" : "Sessions / Longest"}</span>
+            <span className="value num">{weekSessions.length}<span className="unit">{isZh ? `场 · ${week.longestRunKm}km` : ` sessions · ${week.longestRunKm}km`}</span></span>
             <span className="hint">
-              {longSessions > 0 ? `${longSessions} 场长距离` : "无长距离"}
-              {intervalSessions > 0 && ` · ${intervalSessions} 场间歇`}
+              {longSessions > 0 ? (isZh ? `${longSessions} 场长距离` : `${longSessions} long runs`) : (isZh ? "无长距离" : "No long run")}
+              {intervalSessions > 0 && (isZh ? ` · ${intervalSessions} 场间歇` : ` · ${intervalSessions} intervals`)}
             </span>
           </div>
         </div>
         <div className="card stat-card">
           <div className="stat">
-            <span className="label"><IconRun size={15} />总时长 / 消耗</span>
+            <span className="label"><IconRun size={15} />{isZh ? "总时长 / 消耗" : "Duration / Burn"}</span>
             <span className="value num">{fmtDur(totals.durationSec)}</span>
-            <span className="hint">{week.calories} kcal · 爬升 {weekSessions.reduce((n, s) => n + (s.totals.elevGain || 0), 0)} m</span>
+            <span className="hint">{week.calories} kcal {isZh ? `· 爬升 ${weekSessions.reduce((n, s) => n + (s.totals.elevGain || 0), 0)} m` : `· Gain ${weekSessions.reduce((n, s) => n + (s.totals.elevGain || 0), 0)} m`}</span>
           </div>
         </div>
         <div className="card stat-card">
           <div className="stat">
-            <span className="label"><IconLoad size={15} />周均心率 / 负荷</span>
+            <span className="label"><IconLoad size={15} />{isZh ? "周均心率 / 负荷" : "Avg HR / Load"}</span>
             <span className="value num">{weightedHr ?? "—"}<span className="unit">bpm</span></span>
             <span className="hint">
               {weekLoad
-                ? <>负荷合计 {totals.trainingLoad}｜比 {weekLoad.ratio ?? "—"}（{weekLoad.comment ?? "—"}）</>
-                : `负荷合计 ${totals.trainingLoad}`}
+                ? (isZh ? <>负荷合计 {totals.trainingLoad}｜比 {weekLoad.ratio ?? "—"}（{weekLoad.comment ?? "—"}）</> : <>Load {totals.trainingLoad} | ACWR {weekLoad.ratio ?? "—"} ({weekLoad.comment ?? "—"})</>)
+                : (isZh ? `负荷合计 ${totals.trainingLoad}` : `Load Total ${totals.trainingLoad}`)}
             </span>
           </div>
         </div>
@@ -197,12 +190,12 @@ export default function Week({
 
       {weekSessions.length > 1 && (
         <div className="card" style={{ marginBottom: 14 }}>
-          <h3 className="card-title">逐场跑量</h3>
-          <p className="card-sub">柱高为该场距离，折线为平均心率。点柱子进入该场次详情</p>
+          <h3 className="card-title">{isZh ? "逐场跑量" : "Mileage per Session"}</h3>
+          <p className="card-sub">{isZh ? "柱高为该场距离，折线为平均心率。点柱子进入该场次详情" : "Bar height indicates distance; line shows average HR. Click a bar for session details."}</p>
           <BarChart
             data={perSession}
             overlayColor="var(--hr)"
-            overlayLabel="平均心率"
+            overlayLabel={isZh ? "平均心率" : "Avg HR"}
             height={200}
             onSelect={(i) => onOpenSession(weekSessions[i].key)}
           />
@@ -210,15 +203,21 @@ export default function Week({
       )}
 
       <div className="card" style={{ marginBottom: 14 }}>
-        <h3 className="card-title">本周每日分布</h3>
-        <p className="card-sub">看训练是怎么分布在这一周里的，堆得匀比堆在同一天更重要</p>
+        <h3 className="card-title">{isZh ? "本周每日分布" : "Weekly Schedule Distribution"}</h3>
+        <p className="card-sub">{isZh ? "看训练是怎么分布在这一周里的，堆得匀比堆在同一天更重要" : "Observe workout distribution across the week — steady consistency outperforms clustering."}</p>
         <div className="table-scroll-wrap">
           <div className="table-scroll">
             <table>
               <thead>
                 <tr>
-                  <th>日期</th><th>星期</th><th>距离</th><th>时长</th>
-                  <th>配速</th><th>心率</th><th>负荷</th><th>类型</th>
+                  <th>{isZh ? "日期" : "Date"}</th>
+                  <th>{isZh ? "星期" : "Day"}</th>
+                  <th>{isZh ? "距离" : "Dist (km)"}</th>
+                  <th>{isZh ? "时长" : "Duration"}</th>
+                  <th>{isZh ? "配速" : "Pace"}</th>
+                  <th>{isZh ? "心率" : "HR"}</th>
+                  <th>{isZh ? "负荷" : "Load"}</th>
+                  <th>{isZh ? "类型" : "Type"}</th>
                 </tr>
               </thead>
               <tbody>
@@ -226,14 +225,16 @@ export default function Week({
                   const d = new Date(`${weekStart}T00:00:00Z`);
                   d.setUTCDate(d.getUTCDate() + i);
                   const label = d.toISOString().slice(0, 10);
-                  const dow = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"][i];
+                  const dow = isZh 
+                    ? ["周一", "周二", "周三", "周四", "周五", "周六", "周日"][i]
+                    : ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"][i];
                   const daySessions = weekSessions.filter((s) => s.date === label);
                   if (daySessions.length === 0) {
                     return (
                       <tr key={label}>
                         <td>{label.slice(5)}</td>
                         <td style={{ color: "var(--text-faint)" }}>{dow}</td>
-                        <td colSpan={6} style={{ color: "var(--text-faint)" }}>休息</td>
+                        <td colSpan={6} style={{ color: "var(--text-faint)" }}>{isZh ? "休息" : "Rest"}</td>
                       </tr>
                     );
                   }
@@ -263,18 +264,25 @@ export default function Week({
       </div>
 
       <div className="card">
-        <h3 className="card-title">本周全部场次（{weekSessions.length}）</h3>
-        <p className="card-sub">点任意一行进入场次详情，可让 AI 分析那一场</p>
+        <h3 className="card-title">{isZh ? `本周全部场次（${weekSessions.length}）` : `All Sessions This Week (${weekSessions.length})`}</h3>
+        <p className="card-sub">{isZh ? "点任意一行进入场次详情，可让 AI 分析那一场" : "Click any row for session details and AI coach deep-dive analysis."}</p>
         {weekSessions.length === 0 ? (
-          <div className="empty-run"><IconRun size={40} /><span>这一周没有训练</span></div>
+          <div className="empty-run"><IconRun size={40} /><span>{isZh ? "这一周没有训练" : "No workouts this week"}</span></div>
         ) : (
           <div className="table-scroll-wrap">
             <div className="table-scroll">
               <table>
                 <thead>
                   <tr>
-                    <th>日期</th><th>类型</th><th>记录数</th><th>距离</th><th>时长</th>
-                    <th>配速</th><th>心率</th><th>负荷</th><th>组结构</th>
+                    <th>{isZh ? "日期" : "Date"}</th>
+                    <th>{isZh ? "类型" : "Type"}</th>
+                    <th>{isZh ? "记录数" : "Records"}</th>
+                    <th>{isZh ? "距离" : "Dist (km)"}</th>
+                    <th>{isZh ? "时长" : "Duration"}</th>
+                    <th>{isZh ? "配速" : "Pace"}</th>
+                    <th>{isZh ? "心率" : "HR"}</th>
+                    <th>{isZh ? "负荷" : "Load"}</th>
+                    <th>{isZh ? "组结构" : "Sets"}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -305,42 +313,41 @@ export default function Week({
       </div>
 
       <div className="card" style={{ marginTop: 14 }}>
-        <h3 className="card-title">AI 周度分析</h3>
+        <h3 className="card-title">{isZh ? "AI 周度分析" : "AI Weekly Review"}</h3>
         <p className="card-sub">
-          把这一周按<strong>主课表 / 次课表</strong>切好再送进模型：
-          长距离与间歇块标为主课表（并展开组结构与四分位），
-          普通有氧与热身标为次课表只给完成度，
-          <strong>不会把一周的全部分段数据丢给模型</strong>。
+          {isZh
+            ? "把这一周按主课表 / 次课表切好再送进模型：长距离与间歇块标为主课表（并展开组结构与四分位），普通有氧与热身标为次课表只给完成度，不会把一周的全部分段数据丢给模型。"
+            : "Structures the week into Key and Supporting workouts: Long runs and intervals are treated as Key workouts with detailed sets analysis, while easy runs provide volume completion context."}
         </p>
 
         {!aiConfigured && (
-          <div className="banner info">还没有配置 AI 模型，请到「设置」页填写模型地址、API Key 和模型名。</div>
+          <div className="banner info">{isZh ? "还没有配置 AI 模型，请到「设置」页填写模型地址、API Key 和模型名。" : "AI model not configured. Please configure your API key in Settings."}</div>
         )}
         {aiErr && <div className="banner error">{aiErr}</div>}
 
         <div style={{ display: "flex", gap: 8, marginBottom: 14, minWidth: 0, width: "100%" }}>
           <input
             style={{ flex: 1, minWidth: 0 }}
-            placeholder="关注点（可选），例如：这周强度刺激够不够？两个主课表隔了几天？"
+            placeholder={isZh ? "关注点（可选），例如：这周强度刺激够不够？两个主课表隔了几天？" : "Focus area (optional), e.g., Was the stimulus sufficient? Recovery between key workouts?"}
             value={focus}
             onChange={(e) => setFocus(e.target.value)}
             onKeyDown={(e) => { if (e.key === "Enter" && aiConfigured && !busy) runAnalyze(); }}
           />
           <button className="btn primary" style={{ flexShrink: 0, whiteSpace: "nowrap" }} disabled={!aiConfigured || busy} onClick={runAnalyze}>
-            {busy ? <><span className="spin" /> 分析中…</> : reports.length > 0 ? "重新分析" : "开始分析"}
+            {busy ? <><span className="spin" /> {isZh ? "分析中…" : "Analyzing…"}</> : reports.length > 0 ? (isZh ? "重新分析" : "Re-analyze") : (isZh ? "开始分析" : "Analyze")}
           </button>
         </div>
 
         {reports.length === 0 ? (
-          <div className="empty">还没有分析记录</div>
+          <div className="empty">{isZh ? "还没有分析记录" : "No analysis history yet"}</div>
         ) : (
           reports.map((r) => (
             <div key={r.id} style={{ borderTop: "1px solid var(--border)", paddingTop: 14, marginTop: 14 }}>
               <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 10, flexWrap: "wrap", minWidth: 0, maxWidth: "100%" }}>
                 <span className="pill accent">{r.model}</span>
-                <span className="hint">{new Date(r.createdAt * 1000).toLocaleString("zh-CN")}</span>
-                <span className="pill">{r.sessionCount} 场 / {r.blockCount} 个训练块</span>
-                {r.focus && <span className="pill pill-focus">关注：{r.focus}</span>}
+                <span className="hint">{new Date(r.createdAt * 1000).toLocaleString(isZh ? "zh-CN" : "en-US")}</span>
+                <span className="pill">{isZh ? `${r.sessionCount} 场 / ${r.blockCount} 个训练块` : `${r.sessionCount} sessions / ${r.blockCount} blocks`}</span>
+                {r.focus && <span className="pill pill-focus">{isZh ? `关注：${r.focus}` : `Focus: ${r.focus}`}</span>}
               </div>
               <Markdown text={r.report} />
               <AiDisclaimerNotice />

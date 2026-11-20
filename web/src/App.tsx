@@ -21,6 +21,7 @@ import UpdateModal, { isTauriEnv } from "./components/UpdateModal";
 import { check } from "@tauri-apps/plugin-updater";
 import { formatElapsed } from "./utils/format";
 import { useClipboard } from "./utils/clipboard";
+import { useI18n, LanguageToggle } from "./i18n";
 
 export { formatElapsed };
 
@@ -132,21 +133,22 @@ function isSameRoute(a: Route, b: Route): boolean {
   return routeToHash(a) === routeToHash(b);
 }
 
-function getSyncBrandTitle(p: SyncProgress): string {
+function getSyncBrandTitle(p: SyncProgress, t?: (k: string) => string): string {
   const msg = p.message || "";
   if (p.phase === "list" || p.phase === "fit" || msg.includes("Garmin") || msg.includes("佳明")) {
-    return "佳明 Garmin 训练数据同步中";
+    return t ? t("sync.progressGarmin") : "佳明 Garmin 训练数据同步中";
   }
   if (p.phase === "workflow") {
-    return "疲劳负荷与智能模型分析中";
+    return t ? t("sync.progressWorkflow") : "疲劳负荷与智能模型分析中";
   }
-  if (msg.includes("高驰") || p.phase === "records" || p.phase === "details" || p.phase === "health") {
-    return "高驰 COROS 训练数据同步中";
+  if (msg.includes("高驰") || msg.includes("COROS") || p.phase === "records" || p.phase === "details" || p.phase === "health") {
+    return t ? t("sync.progressCoros") : "高驰 COROS 训练数据同步中";
   }
-  return "运动手表数据增量同步中";
+  return t ? t("sync.progressDefault") : "运动手表数据增量同步中";
 }
 
 export default function App() {
+  const { t, isZh } = useI18n();
   const [route, setRoute] = useState<Route>(() => {
     const initial = hashToRoute(typeof window !== "undefined" ? window.location.hash : "");
     if (typeof window !== "undefined") {
@@ -796,13 +798,25 @@ export default function App() {
   // 周跑量柱状图点进来的是「这一周」，不是某一条记录
   const openWeek = (weekStart: string) => weekStart && navigate({ page: "week", weekStart });
 
+  const navItems = [
+    { key: "training" as const, label: t("nav.training"), shortLabel: t("nav.trainingShort"), sub: t("nav.trainingSub"), icon: IconShoe },
+    { key: "coach" as const, label: t("nav.coach"), shortLabel: t("nav.coachShort"), sub: t("nav.coachSub"), icon: IconTarget },
+    { key: "race" as const, label: t("nav.race"), shortLabel: t("nav.raceShort"), sub: t("nav.raceSub"), icon: IconFlag },
+    { key: "readiness" as const, label: t("nav.readiness"), shortLabel: t("nav.readinessShort"), sub: t("nav.readinessSub"), icon: IconPulse },
+    { key: "settings" as const, label: t("nav.settings"), shortLabel: t("nav.settingsShort"), sub: t("nav.settingsSub"), icon: IconDatabase },
+  ];
+
   // 顶栏标题：详情页（某次活动/某次训练）在 NAV 里没有条目，用副标题兜底
   const currentLabel =
-    (NAV.find((n) => n.key === route.page)?.label)
-    ?? (route.page === "prediction" || route.page === "prep" ? "赛事中心" : undefined)
-    ?? (route.page === "fitness" || route.page === "health" ? "身体状态" : undefined)
-    ?? ({ activity: "活动详情", session: "训练详情", week: "本周" } as Record<string, string>)[route.page]
-    ?? "看板";
+    (navItems.find((n) => n.key === route.page)?.label)
+    ?? (route.page === "prediction" || route.page === "prep" ? t("nav.race") : undefined)
+    ?? (route.page === "fitness" || route.page === "health" ? t("nav.readiness") : undefined)
+    ?? ({
+      activity: isZh ? "活动详情" : "Activity Details",
+      session: isZh ? "训练详情" : "Session Details",
+      week: isZh ? "本周" : "Weekly Summary",
+    } as Record<string, string>)[route.page]
+    ?? t("nav.training");
 
   return (
     <div className="app">
@@ -810,7 +824,7 @@ export default function App() {
       {navOpen && <div className="nav-scrim" onClick={() => setNavOpen(false)} />}
 
       <aside className={`sidebar ${navOpen ? "open" : ""}`}>
-        <div className="brand">
+        <div className="brand" onClick={() => go("training")} style={{ cursor: "pointer" }}>
           <div className="brand-mark" aria-hidden>
             <svg viewBox="0 0 120 120" fill="none">
               {/* PaceCraft 品牌标志：外层 P (Pace 配速突破) + 内嵌 C (Craft 隐私数据锁扣) */}
@@ -831,7 +845,7 @@ export default function App() {
             </svg>
           </div>
           <h1>PaceCraft</h1>
-          <p>跑者 AI 训练中心 · 数据仅存本机</p>
+          <p>{isZh ? "跑者 AI 训练中心 · 数据仅存本机" : "AI Endurance Hub · 100% Local"}</p>
         </div>
         <ProfileSwitcher
           onProfileChanged={() => {
@@ -840,8 +854,11 @@ export default function App() {
           }}
           onRequireAuth={() => setShowConnectModal(true)}
         />
-        <ThemeToggle theme={theme} onToggle={toggle} />
-        {NAV.map((n) => {
+        <div className="sidebar-ctrl-group">
+          <ThemeToggle theme={theme} onToggle={toggle} isEn={!isZh} />
+          <LanguageToggle />
+        </div>
+        {navItems.map((n) => {
           const Icon = n.icon;
           const isActive =
             route.page === n.key ||
@@ -867,7 +884,7 @@ export default function App() {
                         background: "var(--accent)",
                         flexShrink: 0,
                       }}
-                      title="有新版本可用"
+                      title={t("header.newVersionDesc")}
                     />
                   )}
                 </span>
@@ -882,10 +899,10 @@ export default function App() {
             className="sync-btn"
             onClick={handleRefreshPage}
             disabled={isRefreshing}
-            title="刷新页面（快捷键 Cmd+R / Ctrl+R）"
+            title={t("header.refreshPageTooltip")}
           >
             <IconRefresh size={14} />
-            <span>刷新页面</span>
+            <span>{t("header.refreshPage")}</span>
           </button>
           {syncProgress?.active && (
             <div
@@ -900,7 +917,7 @@ export default function App() {
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 11.5, marginBottom: 4 }}>
                 <span
                   style={{ fontWeight: 600, color: "var(--text)", display: "inline-flex", alignItems: "center", gap: 5, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
-                  title={syncProgress.startedAt ? `${syncProgress.message}（已用时 ${formatElapsed(syncProgress.startedAt)}）` : syncProgress.message}
+                  title={syncProgress.startedAt ? `${syncProgress.message}（${t("sync.elapsed")} ${formatElapsed(syncProgress.startedAt)}）` : syncProgress.message}
                 >
                   <span className="spin" style={{ width: 10, height: 10, borderColor: "var(--accent)" }} />
                   {syncProgress.message}
@@ -924,17 +941,17 @@ export default function App() {
                 }}
                 disabled={syncing}
                 style={{ flex: 1, borderTopRightRadius: 0, borderBottomRightRadius: 0 }}
-                title="立即增量同步所有已连接设备的训练数据"
+                title={t("header.syncNow")}
               >
                 <IconCloudSync size={14} />
-                <span>{syncProgress?.active ? `同步中 ${syncProgress.percent}%` : syncing ? "同步中…" : "立即同步"}</span>
+                <span>{syncProgress?.active ? `${t("header.syncProgress")} ${syncProgress.percent}%` : syncing ? `${t("header.syncing")}` : t("header.syncNow")}</span>
               </button>
               <button
                 className="sync-btn"
                 onClick={() => setShowSyncDropdown((prev) => !prev)}
                 disabled={syncing}
                 style={{ width: 28, padding: 0, justifyContent: "center", borderTopLeftRadius: 0, borderBottomLeftRadius: 0 }}
-                title="选择仅同步特定品牌手表"
+                title={t("header.syncAllDevices")}
               >
                 <span style={{ fontSize: 9 }}>▼</span>
               </button>
@@ -963,7 +980,7 @@ export default function App() {
                       doSync("all");
                     }}
                   >
-                    <span>🔄</span> <strong>全部已连设备</strong>
+                    <span>🔄</span> <strong>{t("header.syncAllDevices")}</strong>
                   </div>
                   {status?.auth?.connected && (
                     <div
@@ -973,7 +990,7 @@ export default function App() {
                         doSync("coros");
                       }}
                     >
-                      <span>🏃</span> 仅同步高驰 (COROS)
+                      <span>🏃</span> {t("header.syncCorosOnly")}
                     </div>
                   )}
                   {garminAuth?.cn?.connected && (
@@ -984,7 +1001,7 @@ export default function App() {
                         doSync("garmin_cn");
                       }}
                     >
-                      <span>🇨🇳</span> 仅同步佳明 (中国区)
+                      <span>🇨🇳</span> {t("header.syncGarminCnOnly")}
                     </div>
                   )}
                   {garminAuth?.global?.connected && (
@@ -995,7 +1012,7 @@ export default function App() {
                         doSync("garmin_global");
                       }}
                     >
-                      <span>🌐</span> 仅同步佳明 (国际区)
+                      <span>🌐</span> {t("header.syncGarminGlobalOnly")}
                     </div>
                   )}
                 </div>
@@ -1012,9 +1029,9 @@ export default function App() {
                 borderColor: "rgba(59, 130, 246, 0.35)",
                 fontWeight: 600,
               }}
-              title="当前尚未连接手表设备，点击立即连接"
+              title={t("header.connectWatchTooltip")}
             >
-              <span>{authConnecting ? "正在等待授权…" : "➕ 连接运动手表"}</span>
+              <span>{authConnecting ? (isZh ? "正在等待授权…" : "Authorizing...") : `➕ ${t("header.connectWatchBtn")}`}</span>
             </button>
           )}
           {syncMsg && (
@@ -1084,23 +1101,26 @@ export default function App() {
           <button
             className="menu-btn"
             onClick={() => isDetailPage ? handleBack() : setNavOpen((v) => !v)}
-            aria-label={isDetailPage ? "返回" : navOpen ? "关闭菜单" : "打开菜单"}
+            aria-label={isDetailPage ? t("common.back") : navOpen ? t("common.close") : t("common.refresh")}
             aria-expanded={navOpen}
-            title={isDetailPage ? "返回上一级（可手势侧滑返回）" : undefined}
+            title={isDetailPage ? t("common.back") : undefined}
           >
             {isDetailPage ? <IconBack size={20} /> : <IconMenu size={20} />}
           </button>
           <span className="mobile-bar-title">{currentLabel}</span>
           {/* 同步按钮同时常驻这里：桌面版它在侧边栏底部，手机上侧边栏是收起的 */}
-          <button
-            className="mobile-sync"
-            onClick={isConnected ? () => doSync() : () => setShowConnectModal(true)}
-            disabled={syncing || authConnecting}
-            title={isConnected ? "增量同步训练数据" : "点击连接运动手表"}
-          >
-            <IconCloudSync size={15} />
-            <span>{syncProgress?.active ? `${syncProgress.percent}%` : syncing ? "同步中" : isConnected ? "同步" : "连接"}</span>
-          </button>
+          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            <LanguageToggle />
+            <button
+              className="mobile-sync"
+              onClick={isConnected ? () => doSync() : () => setShowConnectModal(true)}
+              disabled={syncing || authConnecting}
+              title={isConnected ? t("header.syncNow") : t("header.connectWatchBtn")}
+            >
+              <IconCloudSync size={15} />
+              <span>{syncProgress?.active ? `${syncProgress.percent}%` : syncing ? t("header.syncing") : isConnected ? t("header.syncNow") : (isZh ? "连接" : "Connect")}</span>
+            </button>
+          </div>
         </div>
 
         {/* 全局实时同步进度条（浮动提示条） */}
@@ -1125,11 +1145,11 @@ export default function App() {
               <span className="spin" style={{ width: 15, height: 15, borderColor: "var(--accent)" }} />
               <div>
                 <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text)" }}>
-                  {getSyncBrandTitle(syncProgress)} · {syncProgress.percent}%
+                  {getSyncBrandTitle(syncProgress, t)} · {syncProgress.percent}%
                 </div>
                 <div style={{ fontSize: 12, color: "var(--text-dim)", marginTop: 2, wordBreak: "break-all" }}>
                   {syncProgress.message}
-                  {syncProgress.startedAt && `（已用时 ${formatElapsed(syncProgress.startedAt)}）`}
+                  {syncProgress.startedAt && `（${t("sync.elapsed")} ${formatElapsed(syncProgress.startedAt)}）`}
                 </div>
               </div>
             </div>
@@ -1158,13 +1178,13 @@ export default function App() {
               <div className="sync-summary-title">
                 <span style={{ fontSize: 16 }}>{syncSummary.hasErrors ? "⚠️" : "🎉"}</span>
                 <span>
-                  {syncSummary.hasErrors ? "同步完成（部分有提示）" : "运动数据同步结算"}
+                  {syncSummary.hasErrors ? t("sync.summaryTitleWarn") : t("sync.summaryTitle")}
                 </span>
               </div>
               <button
                 className="sync-summary-close"
                 onClick={() => setSyncSummary(null)}
-                title="关闭通知"
+                title={t("sync.closeSummary")}
               >
                 ×
               </button>
@@ -1173,16 +1193,16 @@ export default function App() {
             <div className="sync-summary-body">
               {syncSummary.coros?.synced && (
                 <div className="sync-summary-item coros">
-                  <span className="sync-summary-tag coros">高驰 COROS</span>
+                  <span className="sync-summary-tag coros">{t("sync.corosBrand")}</span>
                   <div className="sync-summary-item-content">
                     {syncSummary.coros.newCount > 0 ? (
-                      <span>新增 <strong>{syncSummary.coros.newCount}</strong> 笔训练记录</span>
+                      <span>{t("sync.corosNewRecords", { count: syncSummary.coros.newCount })}</span>
                     ) : (
-                      <span style={{ color: "var(--text-dim)" }}>已是最新，无新增训练</span>
+                      <span style={{ color: "var(--text-dim)" }}>{t("sync.corosNoNew")}</span>
                     )}
                     {syncSummary.coros.errorCount > 0 && (
                       <div style={{ fontSize: 11, color: "var(--warn)", marginTop: 2 }}>
-                        {syncSummary.coros.errorCount} 项网络请求超时已跳过
+                        {t("sync.corosSkippedTimeout", { count: syncSummary.coros.errorCount })}
                       </div>
                     )}
                   </div>
@@ -1191,12 +1211,12 @@ export default function App() {
 
               {syncSummary.garmin?.synced && (
                 <div className="sync-summary-item garmin">
-                  <span className="sync-summary-tag garmin">佳明 Garmin</span>
+                  <span className="sync-summary-tag garmin">{t("sync.garminBrand")}</span>
                   <div className="sync-summary-item-content">
                     <span>
-                      扫描 <strong>{syncSummary.garmin.scannedCount}</strong> 条
-                      {syncSummary.garmin.newCount > 0 ? <> · 新增 <strong>{syncSummary.garmin.newCount}</strong> 笔训练</> : <> · 无新记录</>}
-                      {syncSummary.garmin.fitCount > 0 && <> · 解析 FIT <strong>{syncSummary.garmin.fitCount}</strong> 份</>}
+                      {t("sync.garminScanned", { count: syncSummary.garmin.scannedCount })}
+                      {syncSummary.garmin.newCount > 0 ? ` · ${t("sync.garminNewRecords", { count: syncSummary.garmin.newCount })}` : ` · ${t("sync.garminNoNew")}`}
+                      {syncSummary.garmin.fitCount > 0 && ` · ${t("sync.garminParsedFit", { count: syncSummary.garmin.fitCount })}`}
                     </span>
                   </div>
                 </div>
@@ -1204,23 +1224,23 @@ export default function App() {
 
               {syncSummary.conflicts && syncSummary.conflicts.resolved > 0 && (
                 <div className="sync-summary-item dedup">
-                  <span className="sync-summary-tag dedup">智能去重</span>
+                  <span className="sync-summary-tag dedup">{t("sync.dedupBrand")}</span>
                   <div className="sync-summary-item-content">
-                    自动识别并归档 <strong>{syncSummary.conflicts.resolved}</strong> 对同场双表重叠训练（主力有效成绩计入周跑量）
+                    {t("sync.dedupDesc", { count: syncSummary.conflicts.resolved })}
                   </div>
                 </div>
               )}
 
               {syncSummary.errorMessage && (
                 <div className="sync-summary-error">
-                  提示：{syncSummary.errorMessage}
+                  {t("common.error")}：{syncSummary.errorMessage}
                 </div>
               )}
             </div>
 
             <div className="sync-summary-footer">
-              <span>{new Date(syncSummary.timestamp).toLocaleTimeString("zh-CN", { hour12: false })} 完成同步</span>
-              <span>可随时在设置页重新全量拉取</span>
+              <span>{t("sync.completedAt", { time: new Date(syncSummary.timestamp).toLocaleTimeString(isZh ? "zh-CN" : "en-US", { hour12: false }) })}</span>
+              <span>{t("sync.resyncHint")}</span>
             </div>
           </div>
         )}
@@ -1244,10 +1264,10 @@ export default function App() {
           }}>
             <div>
               <div style={{ fontWeight: 600, fontSize: 14, color: "#60a5fa", display: "flex", alignItems: "center", gap: 6, marginBottom: 4 }}>
-                👋 欢迎使用 PaceCraft 跑者训练中心！
+                {t("welcome.bannerTitle")}
               </div>
               <div style={{ fontSize: 13, color: "var(--text-dim)", lineHeight: 1.5 }}>
-                当前尚未连接运动手表。支持一键接入 COROS 高驰或 Garmin 佳明（中国区 / 国际区），自动拉取跑步记录与心率负荷。
+                {t("welcome.bannerDesc")}
               </div>
               {authMsg && (
                 <div style={{ fontSize: 12.5, color: authMsg.kind === "err" ? "#ef4444" : "#10b981", marginTop: 6, fontWeight: 500 }}>
@@ -1270,7 +1290,7 @@ export default function App() {
                   boxShadow: "0 2px 8px rgba(37, 99, 235, 0.35)",
                 }}
               >
-                ⌚ 连接运动手表设备
+                ⌚ {t("welcome.connectNow")}
               </button>
             ) : (
               <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>

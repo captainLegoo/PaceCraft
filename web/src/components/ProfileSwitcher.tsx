@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { api, type ProfileItem } from "../api";
+import { useI18n } from "../i18n";
 
 export default function ProfileSwitcher({
   onProfileChanged,
@@ -8,6 +9,7 @@ export default function ProfileSwitcher({
   onProfileChanged: () => void;
   onRequireAuth?: () => void;
 }) {
+  const { t, isZh } = useI18n();
   const [data, setData] = useState<{ activeId: string; profiles: ProfileItem[] } | null>(null);
   const [open, setOpen] = useState(false);
   const [creating, setCreating] = useState(false);
@@ -109,13 +111,18 @@ export default function ProfileSwitcher({
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
 
   const formatProfileName = (p?: { name?: string; nickname?: string | null } | null) => {
-    if (!p) return "默认跑友";
-    const name = p.name?.trim() || "默认跑友";
+    if (!p) return isZh ? "默认跑友" : "Default Athlete";
+    let name = p.name?.trim() || (isZh ? "默认跑友" : "Default Athlete");
+    if (!isZh && name === "主跑友档案") {
+      name = "Primary Profile";
+    } else if (!isZh && name === "默认跑友") {
+      name = "Default Athlete";
+    }
     const nick = p.nickname?.trim();
     if (nick && nick !== name) {
-      return `${name}（${nick}）`;
+      return `${name} (${nick})`;
     }
-    return name || nick || "默认跑友";
+    return name || nick || (isZh ? "默认跑友" : "Default Athlete");
   };
 
   const displayName = formatProfileName(activeProfile);
@@ -128,7 +135,7 @@ export default function ProfileSwitcher({
         type="button"
         className="profile-switcher-btn"
         onClick={() => setOpen((v) => !v)}
-        title="点击切换跑友档案"
+        title={t("profile.switchHint")}
       >
         <div style={{ display: "flex", alignItems: "center", gap: 9, minWidth: 0, flex: 1 }}>
           <div
@@ -163,9 +170,9 @@ export default function ProfileSwitcher({
               {displayName}
             </div>
             <div style={{ fontSize: 10.5, color: "var(--text-dim)", display: "flex", alignItems: "center", gap: 4 }}>
-              <span>跑友档案</span>
+              <span>{t("profile.title")}</span>
               <span style={{ opacity: 0.5 }}>·</span>
-              <span style={{ color: "var(--accent)" }}>切换 ▾</span>
+              <span style={{ color: "var(--accent)" }}>{t("profile.switch")} ▾</span>
             </div>
           </div>
         </div>
@@ -186,8 +193,10 @@ export default function ProfileSwitcher({
               alignItems: "center",
             }}
           >
-            <span>跑友档案库（独立隔离）</span>
-            <span style={{ fontSize: 10.5, color: "var(--text-faint)" }}>{data?.profiles.length} 个账号</span>
+            <span>{isZh ? "跑友档案库（独立隔离）" : "Athlete Profiles (Isolated)"}</span>
+            <span style={{ fontSize: 10.5, color: "var(--text-faint)" }}>
+              {data?.profiles.length} {isZh ? "个账号" : "profiles"}
+            </span>
           </div>
 
           <div style={{ maxHeight: 240, overflowY: "auto", margin: "6px 0", display: "flex", flexDirection: "column", gap: 3 }}>
@@ -260,7 +269,7 @@ export default function ProfileSwitcher({
                                 borderRadius: 4,
                               }}
                             >
-                              当前
+                              {isZh ? "当前" : "Active"}
                             </span>
                           )}
                         </div>
@@ -284,7 +293,7 @@ export default function ProfileSwitcher({
                           cursor: "pointer",
                         }}
                       >
-                        保存
+                        {t("common.save")}
                       </button>
                     ) : confirmDeleteId === p.id ? (
                       <div style={{ display: "flex", alignItems: "center", gap: 3 }}>
@@ -402,7 +411,7 @@ export default function ProfileSwitcher({
                     cursor: "pointer",
                   }}
                 >
-                  创建
+                  {isZh ? "创建" : "Create"}
                 </button>
                 <button
                   type="button"
@@ -441,7 +450,7 @@ export default function ProfileSwitcher({
                 }}
               >
                 <span>➕</span>
-                <span>添加新跑友档案</span>
+                <span>{isZh ? "添加新跑友档案" : "Add Athlete Profile"}</span>
               </button>
             )}
           </div>

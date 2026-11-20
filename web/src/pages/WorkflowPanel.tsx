@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { api } from "../api";
 import { IconLayers } from "../icons";
+import { useI18n } from "../i18n";
 
 type StepMeta = {
   name: string;
@@ -32,6 +33,7 @@ type WorkflowLastRun = {
  * 并支持查看最近一次运行状态与一键重跑分析。
  */
 export default function WorkflowPanel() {
+  const { isZh } = useI18n();
   const [steps, setSteps] = useState<StepMeta[]>([]);
   const [lastRun, setLastRun] = useState<WorkflowLastRun | null>(null);
   const [running, setRunning] = useState(false);
@@ -61,9 +63,9 @@ export default function WorkflowPanel() {
     try {
       const res = await api.runWorkflow();
       setLastRun(res);
-      setMsg(`工作流执行完成：${res.summary}`);
+      setMsg(isZh ? `工作流执行完成：${res.summary}` : `Workflow completed: ${res.summary}`);
     } catch (e: any) {
-      setErr(e?.message || "执行工作流失败");
+      setErr(e?.message || (isZh ? "执行工作流失败" : "Failed to run workflow"));
     } finally {
       setRunning(false);
     }
@@ -81,10 +83,12 @@ export default function WorkflowPanel() {
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 6 }}>
         <div>
           <h3 className="card-title" style={{ marginBottom: 2 }}>
-            <IconLayers size={14} /> 自动化工作流
+            <IconLayers size={14} /> {isZh ? "自动化工作流" : "Automated Workflows"}
           </h3>
           <p className="card-sub" style={{ margin: 0 }}>
-            数据同步完成后，系统在后台默认自动依次执行以下分析与计算：
+            {isZh
+              ? "数据同步完成后，系统在后台默认自动依次执行以下分析与计算："
+              : "After data sync completes, the background pipeline executes these analysis steps:"}
           </p>
         </div>
         <button
@@ -93,7 +97,13 @@ export default function WorkflowPanel() {
           disabled={running}
           style={{ flexShrink: 0, padding: "5px 12px", fontSize: 12 }}
         >
-          {running ? "正在分析计算..." : "立即执行自动化分析"}
+          {running
+            ? isZh
+              ? "正在分析计算..."
+              : "Analyzing..."
+            : isZh
+              ? "立即执行自动化分析"
+              : "Run Analysis Now"}
         </button>
       </div>
 
@@ -112,9 +122,9 @@ export default function WorkflowPanel() {
           }}
         >
           <span style={{ color: "var(--text-dim)" }}>
-            上次分析：
+            {isZh ? "上次分析：" : "Last run: "}
             <strong style={{ color: "var(--text)" }}>
-              {new Date(lastRun.finishedAt * 1000).toLocaleString("zh-CN")}
+              {new Date(lastRun.finishedAt * 1000).toLocaleString(isZh ? "zh-CN" : "en-US")}
             </strong>
             <span style={{ marginLeft: 8 }}>({lastRun.durationMs}ms)</span>
           </span>
@@ -157,7 +167,7 @@ export default function WorkflowPanel() {
                     flexShrink: 0,
                   }}
                 >
-                  步骤 {idx + 1} · {s.label}
+                  {isZh ? `步骤 ${idx + 1} · ${s.label}` : `Step ${idx + 1} · ${s.label}`}
                 </span>
                 {run && (
                   <span
@@ -173,12 +183,12 @@ export default function WorkflowPanel() {
                     style={{ fontSize: 10 }}
                   >
                     {run.status === "ok"
-                      ? "✓ 已完成"
+                      ? isZh ? "✓ 已完成" : "✓ Done"
                       : run.status === "skipped"
-                      ? "⏭ 跳过"
+                      ? isZh ? "⏭ 跳过" : "⏭ Skipped"
                       : run.status === "disabled"
-                      ? "⏹ 未启用"
-                      : "❌ 失败"}
+                      ? isZh ? "⏹ 未启用" : "⏹ Disabled"
+                      : isZh ? "❌ 失败" : "❌ Failed"}
                     {run.durationMs > 0 ? ` (${run.durationMs}ms)` : ""}
                   </span>
                 )}
@@ -198,7 +208,8 @@ export default function WorkflowPanel() {
                     lineHeight: 1.4,
                   }}
                 >
-                  分析结论：{run.message}
+                  {isZh ? "分析结论：" : "Result: "}
+                  {run.message}
                 </div>
               )}
             </div>

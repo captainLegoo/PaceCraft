@@ -2,8 +2,10 @@ import { useEffect, useState } from "react";
 import { api } from "../api";
 import { fmtDur, fmtPace } from "../charts";
 import { IconGauge, IconHeart, IconTrophy } from "../icons";
+import { useI18n } from "../i18n";
 
 export default function Fitness() {
+  const { isZh } = useI18n();
   const [f, setF] = useState<any>(null);
   const [p, setP] = useState<any>(null);
   const [err, setErr] = useState<string | null>(null);
@@ -21,7 +23,7 @@ export default function Fitness() {
   }, []);
 
   if (err) return <div className="banner error">{err}</div>;
-  if (!f && !p) return <div className="empty">加载中…</div>;
+  if (!f && !p) return <div className="empty">{isZh ? "加载中…" : "Loading…"}</div>;
 
   // 全马预测配速
   const marPredSec = p?.predictions?.find((item: any) => item.distanceKm > 42)?.seconds ?? f?.predMarathonSec;
@@ -33,10 +35,10 @@ export default function Fitness() {
   const thresholdHr = p?.threshold?.hr ? Math.round(p.threshold.hr) : null;
 
   const distTargets = [
-    { name: "5 公里", km: 5 },
-    { name: "10 公里", km: 10 },
-    { name: "半程马拉松", km: 21.0975 },
-    { name: "全程马拉松", km: 42.195 },
+    { name: isZh ? "5 公里" : "5 km", km: 5 },
+    { name: isZh ? "10 公里" : "10 km", km: 10 },
+    { name: isZh ? "半程马拉松" : "Half Marathon", km: 21.0975 },
+    { name: isZh ? "全程马拉松" : "Marathon", km: 42.195 },
   ];
 
   const preds = distTargets.map((d) => {
@@ -63,10 +65,10 @@ export default function Fitness() {
   // 备战配速区间
   const zones = marPace
     ? [
-        { label: "马拉松目标配速 (MP)", sec: marPace, note: "比赛日目标巡航强度，长距离配速跑核心区间", color: "var(--accent)" },
-        { label: "半马强度 (HMP)", sec: marPace * 0.95, note: "节奏跑用，比 MP 略快 5–8 秒，增强乳酸耐受", color: "var(--z2)" },
-        { label: "乳酸阈值配速 (T)", sec: thresholdPace ?? marPace * 0.92, note: "无氧阈值临界点，约等于 30~60 分钟全力比赛强度", color: "var(--warn)" },
-        { label: "轻松跑区间 (E)", sec: (thresholdPace ?? marPace) * 1.18, note: "有氧基础与恢复跑，心率在 Z1-Z2，能顺畅说话", color: "var(--hr)" },
+        { label: isZh ? "马拉松目标配速 (MP)" : "Marathon Pace (MP)", sec: marPace, note: isZh ? "比赛日目标巡航强度，长距离配速跑核心区间" : "Goal cruising speed on race day for steady marathon simulations", color: "var(--accent)" },
+        { label: isZh ? "半马强度 (HMP)" : "Half Marathon Pace (HMP)", sec: marPace * 0.95, note: isZh ? "节奏跑用，比 MP 略快 5–8 秒，增强乳酸耐受" : "Tempo pacing; 5-8s faster than MP to build lactate clearance buffer", color: "var(--z2)" },
+        { label: isZh ? "乳酸阈值配速 (T)" : "Threshold Pace (T)", sec: thresholdPace ?? marPace * 0.92, note: isZh ? "无氧阈值临界点，约等于 30~60 分钟全力比赛强度" : "Anaerobic threshold boundary (~30-60 min sustained effort)", color: "var(--warn)" },
+        { label: isZh ? "轻松跑区间 (E)" : "Easy Aerobic (E)", sec: (thresholdPace ?? marPace) * 1.18, note: isZh ? "有氧基础与恢复跑，心率在 Z1-Z2，能顺畅说话" : "Base building and recovery; conversational pace within Zone 1-2", color: "var(--hr)" },
       ]
     : [];
 
@@ -76,13 +78,13 @@ export default function Fitness() {
       <div className="grid g3" style={{ marginBottom: 14 }}>
         <div className="card stat-card">
           <div className="stat">
-            <span className="label"><IconGauge size={15} />乳酸阈值配速</span>
+            <span className="label"><IconGauge size={15} />{isZh ? "乳酸阈值配速" : "Threshold Pace"}</span>
             <span className="value num" style={{ color: "var(--accent)" }}>
               {fmtPace(thresholdPace)}<span className="unit">/km</span>
             </span>
             <span className="hint">
-              {thresholdHr ? `阈值心率约 ${thresholdHr} bpm` : "基于实际训练数据稳健回归"}
-              {thresholdPct != null && ` · 全马目标配速慢 ${Math.round(thresholdPct - 100)}%`}
+              {thresholdHr ? (isZh ? `阈值心率约 ${thresholdHr} bpm` : `Threshold HR ~${thresholdHr} bpm`) : (isZh ? "基于实际训练数据稳健回归" : "Robust regression from real workouts")}
+              {thresholdPct != null && (isZh ? ` · 全马目标配速慢 ${Math.round(thresholdPct - 100)}%` : ` · MP is ~${Math.round(thresholdPct - 100)}% slower`)}
             </span>
           </div>
         </div>
@@ -94,24 +96,24 @@ export default function Fitness() {
               <span className="value num">{f?.vo2max ?? "—"}</span>
               {f?.runningLevel && (
                 <span style={{ fontSize: 13, color: "var(--text-dim)" }}>
-                  跑步等级 <strong style={{ color: "var(--strong)" }}>{f.runningLevel}</strong>
+                  {isZh ? "跑步等级" : "Running Level"} <strong style={{ color: "var(--strong)" }}>{f.runningLevel}</strong>
                 </span>
               )}
             </div>
-            <span className="hint">最大有氧摄氧能力评估</span>
+            <span className="hint">{isZh ? "最大有氧摄氧能力评估" : "Aerobic capacity estimate"}</span>
           </div>
         </div>
 
         <div className="card stat-card">
           <div className="stat">
-            <span className="label"><IconTrophy size={15} />最长实测实战锚点</span>
+            <span className="label"><IconTrophy size={15} />{isZh ? "最长实测实战锚点" : "Longest Effort Anchor"}</span>
             <span className="value num">
               {p?.longestActual ? `${p.longestActual.km} km` : "—"}
             </span>
             <span className="hint">
               {p?.longestActual
-                ? `${p.longestActual.date} 完成 · 均速 ${fmtPace(p.longestActual.paceSec)}/km (${fmtDur(p.longestActual.sec)})`
-                : "基于历史最长连续长距离训练"}
+                ? (isZh ? `${p.longestActual.date} 完成 · 均速 ${fmtPace(p.longestActual.paceSec)}/km (${fmtDur(p.longestActual.sec)})` : `${p.longestActual.date} · Avg ${fmtPace(p.longestActual.paceSec)}/km (${fmtDur(p.longestActual.sec)})`)
+                : (isZh ? "基于历史最长连续长距离训练" : "Longest single continuous workout")}
             </span>
           </div>
         </div>
@@ -120,9 +122,11 @@ export default function Fitness() {
       {/* 比赛成绩预测卡片组 */}
       <div className="card" style={{ marginBottom: 14 }}>
         <div style={{ marginBottom: 12 }}>
-          <h3 className="card-title" style={{ margin: 0 }}>比赛成绩预测</h3>
+          <h3 className="card-title" style={{ margin: 0 }}>{isZh ? "比赛成绩预测" : "Race Performance Predictions"}</h3>
           <p className="card-sub" style={{ margin: "4px 0 0" }}>
-            基于你的全部实际跑步记录，提取最佳连续成绩段（Best Efforts）并结合 Riegel 幂律有氧模型综合推算：
+            {isZh
+              ? "基于你的全部实际跑步记录，提取最佳连续成绩段（Best Efforts）并结合 Riegel 幂律有氧模型综合推算："
+              : "Calibrated from continuous best efforts across your activity logs and modeled via Riegel aerobic power law:"}
           </p>
         </div>
 
@@ -134,11 +138,11 @@ export default function Fitness() {
                 {fmtDur(item.sec)}
               </span>
               <span className="hint" style={{ fontSize: 12 }}>
-                目标配速 <strong>{fmtPace(item.paceSec)}</strong> /km
+                {isZh ? "目标配速" : "Target Pace"} <strong>{fmtPace(item.paceSec)}</strong> /km
               </span>
               {item.low && item.high && (
                 <div style={{ fontSize: 11, color: "var(--text-faint)", marginTop: 4 }}>
-                  参考区间: {fmtDur(item.low)} ~ {fmtDur(item.high)}
+                  {isZh ? "参考区间:" : "Range:"} {fmtDur(item.low)} ~ {fmtDur(item.high)}
                 </div>
               )}
             </div>
@@ -149,9 +153,11 @@ export default function Fitness() {
       {/* 成绩预测与配速参考明细表 */}
       <div className="card" style={{ marginBottom: 14 }}>
         <div style={{ marginBottom: 10 }}>
-          <h3 className="card-title" style={{ margin: 0 }}>成绩预测与配速参考明细</h3>
+          <h3 className="card-title" style={{ margin: 0 }}>{isZh ? "成绩预测与配速参考明细" : "Performance Predictions & Pace Details"}</h3>
           <p className="card-sub" style={{ margin: "4px 0 0" }}>
-            各项目完赛时间预期与等效比赛配速，适合作为比赛配速制定与训练目标参考：
+            {isZh
+              ? "各项目完赛时间预期与等效比赛配速，适合作为比赛配速制定与训练目标参考："
+              : "Expected finish times and equivalent race paces for training calibration and race strategy:"}
           </p>
         </div>
 
@@ -159,11 +165,11 @@ export default function Fitness() {
           <table>
             <thead>
               <tr>
-                <th>比赛项目</th>
-                <th style={{ color: "var(--accent)" }}>预测完赛时间</th>
-                <th>建议比赛配速</th>
-                <th>表现参考区间</th>
-                <th>推算依据</th>
+                <th>{isZh ? "比赛项目" : "Event"}</th>
+                <th style={{ color: "var(--accent)" }}>{isZh ? "预测完赛时间" : "Predicted Time"}</th>
+                <th>{isZh ? "建议比赛配速" : "Target Pace"}</th>
+                <th>{isZh ? "表现参考区间" : "Estimated Range"}</th>
+                <th>{isZh ? "推算依据" : "Model Basis"}</th>
               </tr>
             </thead>
             <tbody>
@@ -180,7 +186,7 @@ export default function Fitness() {
                     {item.low && item.high ? `${fmtDur(item.low)} ~ ${fmtDur(item.high)}` : "—"}
                   </td>
                   <td style={{ fontSize: 12, color: "var(--text-dim)" }}>
-                    {item.confidenceNote ? item.confidenceNote.slice(0, 48) + "..." : "历史训练段最佳表现回归"}
+                    {item.confidenceNote ? item.confidenceNote.slice(0, 48) + "..." : (isZh ? "历史训练段最佳表现回归" : "Robust regression from best effort segments")}
                   </td>
                 </tr>
               ))}
@@ -192,17 +198,19 @@ export default function Fitness() {
       {/* 备赛配速区间建议 */}
       {zones.length > 0 && (
         <div className="card">
-          <h3 className="card-title">备赛配速区间建议</h3>
+          <h3 className="card-title">{isZh ? "备赛配速区间建议" : "Training Pace Zones"}</h3>
           <p className="card-sub">
-            以全马预测配速 <strong style={{ color: "var(--accent)" }}>{fmtPace(marPace)}/km</strong> 与乳酸阈值配速为基准推算的训练强度带：
+            {isZh
+              ? <>以全马预测配速 <strong style={{ color: "var(--accent)" }}>{fmtPace(marPace)}/km</strong> 与乳酸阈值配速为基准推算的训练强度带：</>
+              : <>Calibrated from predicted marathon pace <strong style={{ color: "var(--accent)" }}>{fmtPace(marPace)}/km</strong> and threshold pace:</>}
           </p>
           <div style={{ maxHeight: 400, overflowY: "auto", marginTop: 10 }}>
             <table>
               <thead>
                 <tr>
-                  <th>训练类型</th>
-                  <th>配速区间</th>
-                  <th>训练目的与生理刺激</th>
+                  <th>{isZh ? "训练类型" : "Zone"}</th>
+                  <th>{isZh ? "配速区间" : "Pace Range"}</th>
+                  <th>{isZh ? "训练目的与生理刺激" : "Purpose & Physiological Stimulus"}</th>
                 </tr>
               </thead>
               <tbody>

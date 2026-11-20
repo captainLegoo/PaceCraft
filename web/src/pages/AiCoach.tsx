@@ -22,6 +22,7 @@ import {
   IconChevron,
 } from "../icons";
 import { fmtPace, fmtDur, Markdown } from "../charts";
+import { useI18n } from "../i18n";
 
 const WEEKDAYS = ["周日", "周一", "周二", "周三", "周四", "周五", "周六"];
 
@@ -118,6 +119,7 @@ export default function AiCoach({
   onOpenActivity: (labelId: string) => void;
   onOpenConnect?: () => void;
 }) {
+  const { isZh } = useI18n();
   const [profile, setProfile] = useState<CoachProfile | null>(null);
   const [baseline, setBaseline] = useState<CoachBaseline | null>(null);
   const [plan, setPlan] = useState<CoachPlan | null>(null);
@@ -548,9 +550,11 @@ export default function AiCoach({
       {/* 顶部 Page Head */}
       <div className="page-head coach-page-head" style={{ marginBottom: 16 }}>
         <div>
-          <h2>AI 科学课表</h2>
+          <h2>{isZh ? "AI 科学课表" : "Adaptive AI Coach"}</h2>
           <div className="sub">
-            Banister 冲动响应模型 · 80/20 极化与 Canova 专项收敛 · 双周滚动自适应闭环
+            {isZh
+              ? "Banister 冲动响应模型 · 80/20 极化与 Canova 专项收敛 · 双周滚动自适应闭环"
+              : "Banister Impulse-Response Model · 80/20 Polarized & Canova Periodization · Bi-weekly Rolling Adaptive Loop"}
           </div>
         </div>
         <div className="coach-head-actions" style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
@@ -574,10 +578,10 @@ export default function AiCoach({
                 setTravelUntil(travelMode.untilDate || "");
                 setShowTravelModal(true);
               }}
-              title="点击调整出差模式"
+              title={isZh ? "点击调整出差模式" : "Click to adjust travel mode"}
             >
-              <span>✈️ 出差模式: {travelMode.city}</span>
-              <span style={{ opacity: 0.7, fontSize: 11 }}>({travelMode.untilDate}止)</span>
+              <span>{isZh ? `✈️ 出差模式: ${travelMode.city}` : `✈️ Travel: ${travelMode.city}`}</span>
+              <span style={{ opacity: 0.7, fontSize: 11 }}>({isZh ? `${travelMode.untilDate}止` : `until ${travelMode.untilDate}`})</span>
             </button>
           ) : (
             <button
@@ -597,10 +601,10 @@ export default function AiCoach({
                 setTravelUntil("");
                 setShowTravelModal(true);
               }}
-              title="点击切换出差/异地环境"
+              title={isZh ? "点击切换出差/异地环境" : "Click to set travel/climate mode"}
             >
-              <span>📍 常态气候: {baseline?.detectedClimate.avgTempC ? `${baseline.detectedClimate.avgTempC}℃` : "气温适宜"}</span>
-              <span style={{ fontSize: 11, opacity: 0.6 }}>· 切换出差</span>
+              <span>{isZh ? `📍 常态气候: ${baseline?.detectedClimate.avgTempC ? `${baseline.detectedClimate.avgTempC}℃` : "气温适宜"}` : `📍 Climate: ${baseline?.detectedClimate.avgTempC ? `${baseline.detectedClimate.avgTempC}°C` : "Temperate"}`}</span>
+              <span style={{ fontSize: 11, opacity: 0.6 }}>{isZh ? "· 切换出差" : "· Set Travel"}</span>
             </button>
           ))}
 
@@ -610,17 +614,17 @@ export default function AiCoach({
                 className="btn"
                 onClick={() => setShowAdjustDaysModal(true)}
                 style={{ fontSize: 13, padding: "7px 13px", display: "inline-flex", alignItems: "center", gap: 6 }}
-                title="快捷调整后续训练日安排，不影响历史打卡与周次"
+                title={isZh ? "快捷调整后续训练日安排，不影响历史打卡与周次" : "Adjust preferred training days without affecting workout history"}
               >
-                🗓️ 调整跑步日 ({preferredDays.length}天)
+                {isZh ? `🗓️ 调整跑步日 (${preferredDays.length}天)` : `🗓️ Running Days (${preferredDays.length}d)`}
               </button>
               <button
                 className="btn"
                 onClick={() => setShowStrengthLibraryModal(true)}
                 style={{ fontSize: 13, padding: "7px 13px", display: "inline-flex", alignItems: "center", gap: 6 }}
-                title="查看跑后核心与抗阻力量动作库与执行标准"
+                title={isZh ? "查看跑后核心与抗阻力量动作库与执行标准" : "View post-run core and strength exercises"}
               >
-                🏋️ 跑后核心力量课表
+                {isZh ? "🏋️ 跑后核心力量课表" : "🏋️ Post-Run Strength Library"}
               </button>
               <button
                 className="btn"
@@ -628,7 +632,7 @@ export default function AiCoach({
                 style={{ fontSize: 13, padding: "7px 14px", display: "inline-flex", alignItems: "center", gap: 6 }}
               >
                 <IconGear size={15} />
-                课表与偏好定制
+                {isZh ? "课表与偏好定制" : "Plan Preferences & Tuning"}
               </button>
               <button
                 className="btn"
@@ -640,9 +644,9 @@ export default function AiCoach({
                   borderColor: "var(--border)",
                   color: "var(--text-dim)",
                 }}
-                title="完赛结营或计划中断时点击，归档当前课表"
+                title={isZh ? "完赛结营或计划中断时点击，归档当前课表" : "Archive and finish current plan"}
               >
-                🏁 结束课表
+                {isZh ? "🏁 结束课表" : "🏁 End Plan"}
               </button>
             </div>
           ) : (
@@ -653,19 +657,19 @@ export default function AiCoach({
                   onClick={onOpenConnect}
                   style={{ fontSize: 13, padding: "7px 14px", display: "inline-flex", alignItems: "center", gap: 6 }}
                 >
-                  ⌚ 连接运动手表
+                  {isZh ? "⌚ 连接运动手表" : "⌚ Connect Watch"}
                 </button>
               )}
               <button
                 className="btn"
                 onClick={() => setShowStrengthLibraryModal(true)}
                 style={{ fontSize: 13, padding: "7px 13px", display: "inline-flex", alignItems: "center", gap: 6 }}
-                title="查看跑后核心与抗阻力量动作库与执行标准"
+                title={isZh ? "查看跑后核心与抗阻力量动作库与执行标准" : "View post-run core and strength exercises"}
               >
-                🏋️ 跑后核心力量课表
+                {isZh ? "🏋️ 跑后核心力量课表" : "🏋️ Post-Run Strength Library"}
               </button>
               <span
-                title={!hasAthleteData ? "当前跑友档案暂无跑步记录，请先连接手表同步数据后再排课" : undefined}
+                title={!hasAthleteData ? (isZh ? "当前跑友档案暂无跑步记录，请先连接手表同步数据后再排课" : "No runs found. Connect watch and sync data before generating plan.") : undefined}
                 style={{ display: "inline-flex", cursor: !hasAthleteData ? "not-allowed" : undefined }}
               >
                 <button
@@ -675,7 +679,7 @@ export default function AiCoach({
                   style={{ fontSize: 13, padding: "7px 16px", display: "inline-flex", alignItems: "center", gap: 6 }}
                 >
                   <IconGear size={15} />
-                  个性化定制并生成课表
+                  {isZh ? "个性化定制并生成课表" : "Customize & Generate Plan"}
                 </button>
               </span>
             </div>
@@ -694,74 +698,76 @@ export default function AiCoach({
             label="Daniels VDOT"
             value={baseline.hasData && baseline.vdot > 0 ? baseline.vdot : "--"}
             valueColor="var(--accent)"
-            hint={baseline.hasData && baseline.vdot > 0 ? "能力锚点基准 · 动态推演" : "需同步跑步数据自动推演"}
+            hint={baseline.hasData && baseline.vdot > 0 ? (isZh ? "能力锚点基准 · 动态推演" : "Fitness Anchor · Dynamic") : (isZh ? "需同步跑步数据自动推演" : "Sync runs to calculate")}
             detail={{
-              title: "Daniels VDOT (丹尼尔斯跑力)",
-              definition: "综合衡量最大摄氧量 (VO2max) 与跑步经济性的综合跑力战力值。数值越高，跑速越快、耐力越强。",
+              title: isZh ? "Daniels VDOT (丹尼尔斯跑力)" : "Daniels VDOT Running Formula",
+              definition: isZh ? "综合衡量最大摄氧量 (VO2max) 与跑步经济性的综合跑力战力值。数值越高，跑速越快、耐力越强。" : "Pseudo-VO2max metric combining aerobic power and running economy. Higher values indicate faster pace capacity.",
               currentLevel: baseline.hasData && baseline.vdot > 0
-                ? (baseline.vdot >= 54 ? "破三精英" : baseline.vdot >= 47 ? "严肃高阶" : baseline.vdot >= 39 ? "大众进阶" : "健康起步")
-                : "等待首次同步",
+                ? (baseline.vdot >= 54 ? (isZh ? "破三精英" : "Sub-3 Elite") : baseline.vdot >= 47 ? (isZh ? "严肃高阶" : "Advanced") : baseline.vdot >= 39 ? (isZh ? "大众进阶" : "Intermediate") : (isZh ? "健康起步" : "Foundation"))
+                : (isZh ? "等待首次同步" : "Pending Sync"),
               levelColor: "var(--accent)",
               ranges: [
-                { label: "健康起步 (全马 > 4:15)", range: "< 39", isCurrent: Boolean(baseline.hasData && baseline.vdot > 0 && baseline.vdot < 39) },
-                { label: "大众进阶 (全马 3:30 ~ 4:15)", range: "39 ~ 46", isCurrent: Boolean(baseline.hasData && baseline.vdot >= 39 && baseline.vdot < 47) },
-                { label: "严肃高阶 (全马 3:00 ~ 3:30)", range: "47 ~ 53", isCurrent: Boolean(baseline.hasData && baseline.vdot >= 47 && baseline.vdot < 54) },
-                { label: "破三精英 (全马 < 3:00)", range: "≥ 54", isCurrent: Boolean(baseline.hasData && baseline.vdot >= 54) },
+                { label: isZh ? "健康起步 (全马 > 4:15)" : "Foundation (> 4:15)", range: "< 39", isCurrent: Boolean(baseline.hasData && baseline.vdot > 0 && baseline.vdot < 39) },
+                { label: isZh ? "大众进阶 (全马 3:30 ~ 4:15)" : "Intermediate (3:30 ~ 4:15)", range: "39 ~ 46", isCurrent: Boolean(baseline.hasData && baseline.vdot >= 39 && baseline.vdot < 47) },
+                { label: isZh ? "严肃高阶 (全马 3:00 ~ 3:30)" : "Advanced (3:00 ~ 3:30)", range: "47 ~ 53", isCurrent: Boolean(baseline.hasData && baseline.vdot >= 47 && baseline.vdot < 54) },
+                { label: isZh ? "破三精英 (全马 < 3:00)" : "Elite (< 3:00)", range: "≥ 54", isCurrent: Boolean(baseline.hasData && baseline.vdot >= 54) },
               ],
               coachAdvice: baseline.hasData && baseline.vdot > 0
-                ? `当前跑力 ${baseline.vdot}，等效全马约 3小时05分水平。AI 课表已基于此精确锁定 E/M/T/I 各区间配速。`
-                : "当前档案暂无跑步记录。请先在顶部连接手表同步历史训练，系统将自动基于您的真实分圈推演跑力。",
+                ? (isZh ? `当前跑力 ${baseline.vdot}，等效全马约 3小时05分水平。AI 课表已基于此精确锁定 E/M/T/I 各区间配速。` : `VDOT estimated at ${baseline.vdot}. AI Coach calibrated E/M/T/I pacing zones accordingly.`)
+                : (isZh ? "当前档案暂无跑步记录。请先在顶部连接手表同步历史训练，系统将自动基于您的真实分圈推演跑力。" : "No runs recorded yet. Connect your watch above to calibrate your Daniels VDOT score."),
             }}
           />
 
           {/* CTL */}
           <HeroStatCard
             icon={<IconHeart size={14} />}
-            label="长期体能 (CTL)"
+            label={isZh ? "长期体能 (CTL)" : "Fitness (CTL)"}
             value={baseline.hasData && baseline.ctl > 0 ? baseline.ctl : "--"}
             valueColor="var(--good)"
-            hint={baseline.hasData && baseline.ctl > 0 ? "42天加权积蓄 · Fitness" : "需同步跑步数据计算负荷"}
+            hint={baseline.hasData && baseline.ctl > 0 ? (isZh ? "42天加权积蓄 · Fitness" : "42-Day EWMA · Fitness") : (isZh ? "需同步跑步数据计算负荷" : "Sync runs to calculate")}
             detail={{
-              title: "长期体能 (CTL · Fitness)",
-              definition: "过去 42 天（6 周）每日训练负荷的加权积蓄值，代表有氧体能底座与承受跑量的耐受底子（蓄水池）。",
+              title: isZh ? "长期体能 (CTL · Fitness)" : "Chronic Training Load (CTL · Fitness)",
+              definition: isZh ? "过去 42 天（6 周）每日训练负荷的加权积蓄值，代表有氧体能底座与承受跑量的耐受底子（蓄水池）。" : "42-day exponentially weighted training load representing chronic aerobic endurance and mileage durability.",
               currentLevel: baseline.hasData && baseline.ctl > 0
-                ? (baseline.ctl >= 80 ? "体能底座极厚" : baseline.ctl >= 50 ? "备赛进阶储备" : "基础体能维持")
-                : "等待首次同步",
+                ? (baseline.ctl >= 80 ? (isZh ? "体能底座极厚" : "Deep Aerobic Base") : baseline.ctl >= 50 ? (isZh ? "备赛进阶储备" : "Solid Race Fitness") : (isZh ? "基础体能维持" : "Baseline Fitness"))
+                : (isZh ? "等待首次同步" : "Pending Sync"),
               levelColor: "var(--good)",
               ranges: [
-                { label: "基础维持 (周跑量 20~35km)", range: "< 45", isCurrent: Boolean(baseline.hasData && baseline.ctl > 0 && baseline.ctl < 45) },
-                { label: "大众进阶备赛 (周跑量 40~60km)", range: "45 ~ 75", isCurrent: Boolean(baseline.hasData && baseline.ctl >= 45 && baseline.ctl < 75) },
-                { label: "严肃高负荷备赛 (周跑量 60~85km)", range: "75 ~ 100", isCurrent: Boolean(baseline.hasData && baseline.ctl >= 75 && baseline.ctl < 100) },
-                { label: "精英耐力储备 (体能底子雄厚)", range: "≥ 100", isCurrent: Boolean(baseline.hasData && baseline.ctl >= 100) },
+                { label: isZh ? "基础维持 (周跑量 20~35km)" : "Base Maintenance (20~35km/wk)", range: "< 45", isCurrent: Boolean(baseline.hasData && baseline.ctl > 0 && baseline.ctl < 45) },
+                { label: isZh ? "大众进阶备赛 (周跑量 40~60km)" : "Race Prep (40~60km/wk)", range: "45 ~ 75", isCurrent: Boolean(baseline.hasData && baseline.ctl >= 45 && baseline.ctl < 75) },
+                { label: isZh ? "严肃高负荷备赛 (周跑量 60~85km)" : "High Volume Prep (60~85km/wk)", range: "75 ~ 100", isCurrent: Boolean(baseline.hasData && baseline.ctl >= 75 && baseline.ctl < 100) },
+                { label: isZh ? "精英耐力储备 (体能底子雄厚)" : "Elite Durability", range: "≥ 100", isCurrent: Boolean(baseline.hasData && baseline.ctl >= 100) },
               ],
               coachAdvice: baseline.hasData && baseline.ctl > 0
-                ? `CTL 达到 ${baseline.ctl}，体能底座极厚，具备冲击大跑量和高强度长跑的坚实生理底座。`
-                : "当前档案暂无历史负荷。同步手表后，系统将自动按 42 天 EWMA 滑动窗口累积长期体能 (Fitness)。",
+                ? (isZh ? `CTL 达到 ${baseline.ctl}，体能底座极厚，具备冲击大跑量和高强度长跑的坚实生理底座。` : `CTL is ${baseline.ctl}, indicating strong aerobic durability for higher volume.`)
+                : (isZh ? "当前档案暂无历史负荷。同步手表后，系统将自动按 42 天 EWMA 滑动窗口累积长期体能 (Fitness)。" : "Sync watch activities to begin calculating 42-day rolling fitness."),
             }}
           />
 
           {/* ATL */}
           <HeroStatCard
             icon={<IconPulse size={14} />}
-            label="急性疲劳 (ATL)"
+            label={isZh ? "急性疲劳 (ATL)" : "Fatigue (ATL)"}
             value={baseline.hasData ? baseline.atl : "--"}
             valueColor="var(--warn)"
-            hint={baseline.hasData ? "7天短期负荷 · Fatigue" : "需同步跑步数据计算疲劳"}
+            hint={baseline.hasData ? (isZh ? "7天短期负荷 · Fatigue" : "7-Day Short Load · Fatigue") : (isZh ? "需同步跑步数据计算疲劳" : "Sync runs to calculate")}
             detail={{
-              title: "急性疲劳 (ATL · Fatigue)",
-              definition: "过去 7 天短期训练负荷的加权值，代表身体近一周刚承受的即刻身体冲击与疲劳程度。",
+              title: isZh ? "急性疲劳 (ATL · Fatigue)" : "Acute Training Load (ATL · Fatigue)",
+              definition: isZh ? "过去 7 天短期训练负荷的加权值，代表身体近一周刚承受的即刻身体冲击与疲劳程度。" : "7-day weighted moving average training load reflecting immediate physiological fatigue.",
               currentLevel: baseline.hasData
-                ? (baseline.atl < baseline.ctl ? "疲劳已释放 (恢复良好)" : "短期疲劳累积期")
-                : "等待首次同步",
+                ? (baseline.atl < baseline.ctl ? (isZh ? "疲劳已释放 (恢复良好)" : "Well Recovered") : (isZh ? "短期疲劳累积期" : "Fatigue Accumulating"))
+                : (isZh ? "等待首次同步" : "Pending Sync"),
               levelColor: "var(--warn)",
               ranges: [
-                { label: "疲劳释放超补偿 (ATL < CTL)", range: "恢复良好", isCurrent: Boolean(baseline.hasData && baseline.atl < baseline.ctl) },
-                { label: "日常负荷平衡 (ATL ≈ CTL)", range: "平稳推进", isCurrent: Boolean(baseline.hasData && Math.abs(baseline.atl - baseline.ctl) <= 5) },
-                { label: "高负荷冲击 (ATL > CTL × 1.25)", range: "深度疲劳期", isCurrent: Boolean(baseline.hasData && baseline.atl >= baseline.ctl * 1.25) },
+                { label: isZh ? "疲劳释放超补偿 (ATL < CTL)" : "Supercompensation (ATL < CTL)", range: isZh ? "恢复良好" : "Recovered", isCurrent: Boolean(baseline.hasData && baseline.atl < baseline.ctl) },
+                { label: isZh ? "日常负荷平衡 (ATL ≈ CTL)" : "Balanced Load (ATL ≈ CTL)", range: isZh ? "平稳推进" : "Steady", isCurrent: Boolean(baseline.hasData && Math.abs(baseline.atl - baseline.ctl) <= 5) },
+                { label: isZh ? "高负荷冲击 (ATL > CTL × 1.25)" : "High Overload (ATL > CTL × 1.25)", range: isZh ? "深度疲劳期" : "Fatigued", isCurrent: Boolean(baseline.hasData && baseline.atl >= baseline.ctl * 1.25) },
               ],
               coachAdvice: baseline.hasData
-                ? `近期疲劳值 ${baseline.atl} 低于体能底座 ${baseline.ctl}，疲劳正在稳步出清，身体处于良性恢复节奏。`
-                : "当前档案暂无短期疲劳。同步手表后，系统将自动追踪近 7 天运动产生的急性冲击 (Fatigue)。",
+                ? (baseline.atl < baseline.ctl
+                  ? (isZh ? "短期疲劳低于长期体能，身体正处在良好的恢复与代偿窗口。" : "Short-term fatigue is below fitness baseline, favorable for quality sessions.")
+                  : (isZh ? "近期负荷略高于常态，注意保证充足睡眠与补水以促进肌纤维修复。" : "Recent training stress is elevated; ensure adequate rest and hydration."))
+                : (isZh ? "同步手表后系统将自动追踪 7 天短期疲劳负荷。" : "Sync runs to track 7-day acute training load."),
             }}
           />
 
@@ -797,58 +803,58 @@ export default function AiCoach({
           {/* ACWR */}
           <HeroStatCard
             icon={<IconPulse size={14} />}
-            label="负荷比率 (ACWR)"
+            label={isZh ? "负荷比率 (ACWR)" : "Workload Ratio (ACWR)"}
             value={baseline.hasData && baseline.acwr > 0 ? baseline.acwr : "--"}
             valueColor={baseline.hasData && baseline.acwr > 1.4 ? "var(--hr)" : "var(--good)"}
-            hint={baseline.hasData && baseline.acwr > 0 ? (baseline.acwr <= 1.3 ? "安全甜区 (0.8 ~ 1.3)" : "需警惕过度疲劳") : "需积累训练数据"}
+            hint={baseline.hasData && baseline.acwr > 0 ? (baseline.acwr <= 1.3 ? (isZh ? "安全甜区 (0.8 ~ 1.3)" : "Sweet Spot (0.8 ~ 1.3)") : (isZh ? "需警惕过度疲劳" : "Caution: Fatigue Spike")) : (isZh ? "需积累训练数据" : "Accumulating data")}
             alignRight
             detail={{
-              title: "急慢性负荷比 (ACWR)",
-              definition: "短期疲劳 (ATL) ÷ 长期体能 (CTL)。国际运动医学顶级金指标，用于精确监控加量速度并预警伤病风险。",
+              title: isZh ? "急慢性负荷比 (ACWR)" : "Acute:Chronic Workload Ratio (ACWR)",
+              definition: isZh ? "短期疲劳 (ATL) ÷ 长期体能 (CTL)。国际运动医学顶级金指标，用于精确监控加量速度并预警伤病风险。" : "Acute fatigue divided by chronic fitness (Tim Gabbett model). Gold standard for injury risk prevention.",
               currentLevel: baseline.hasData && baseline.acwr > 0
-                ? (baseline.acwr <= 1.3 && baseline.acwr >= 0.8 ? "安全黄金甜区 (Sweet Spot)" : baseline.acwr > 1.3 && baseline.acwr <= 1.5 ? "需警惕疲劳" : baseline.acwr > 1.5 ? "高伤病危险区" : "负荷不足")
-                : "等待首次同步",
+                ? (baseline.acwr <= 1.3 && baseline.acwr >= 0.8 ? (isZh ? "安全黄金甜区 (Sweet Spot)" : "Optimal Sweet Spot") : baseline.acwr > 1.3 && baseline.acwr <= 1.5 ? (isZh ? "需警惕疲劳" : "Elevated Risk") : baseline.acwr > 1.5 ? (isZh ? "高伤病危险区" : "High Injury Risk") : (isZh ? "负荷不足" : "Under-training"))
+                : (isZh ? "等待首次同步" : "Pending Sync"),
               levelColor: baseline.hasData && baseline.acwr > 1.4 ? "var(--hr)" : "var(--good)",
               ranges: [
-                { label: "负荷不足 (体能下滑)", range: "< 0.80", isCurrent: Boolean(baseline.hasData && baseline.acwr > 0 && baseline.acwr < 0.8) },
-                { label: "安全黄金甜区 (伤病率最低)", range: "0.80 ~ 1.30", isCurrent: Boolean(baseline.hasData && baseline.acwr >= 0.8 && baseline.acwr <= 1.3) },
-                { label: "需警惕疲劳 (加量稍快)", range: "1.31 ~ 1.50", isCurrent: Boolean(baseline.hasData && baseline.acwr > 1.3 && baseline.acwr <= 1.5) },
-                { label: "危险区 (受伤率激增 2~4倍)", range: "> 1.50", isCurrent: Boolean(baseline.hasData && baseline.acwr > 1.5) },
+                { label: isZh ? "负荷不足 (体能下滑)" : "Under-training (< 0.8)", range: "< 0.80", isCurrent: Boolean(baseline.hasData && baseline.acwr > 0 && baseline.acwr < 0.8) },
+                { label: isZh ? "安全黄金甜区 (伤病率最低)" : "Sweet Spot (0.80 ~ 1.30)", range: "0.80 ~ 1.30", isCurrent: Boolean(baseline.hasData && baseline.acwr >= 0.8 && baseline.acwr <= 1.3) },
+                { label: isZh ? "需警惕疲劳 (加量稍快)" : "Caution (1.31 ~ 1.50)", range: "1.31 ~ 1.50", isCurrent: Boolean(baseline.hasData && baseline.acwr > 1.3 && baseline.acwr <= 1.5) },
+                { label: isZh ? "危险区 (受伤率激增 2~4倍)" : "Danger Zone (> 1.50)", range: "> 1.50", isCurrent: Boolean(baseline.hasData && baseline.acwr > 1.5) },
               ],
               coachAdvice: baseline.hasData && baseline.acwr > 0
                 ? (baseline.acwr <= 1.3 && baseline.acwr >= 0.8
-                  ? "负荷比处于 0.8~1.3 黄金安全区间，加量节奏科学稳健，跟腱与滑囊炎风险极低。"
-                  : "加量稍急，需密切关注下肢肌腱与关节酸痛体感，适当安排减量恢复。")
-                : "急慢性负荷比（ACWR）需在积累有效训练后开始监控，帮助您精准防伤避险。",
+                  ? (isZh ? "负荷比处于 0.8~1.3 黄金安全区间，加量节奏科学稳健，跟腱与滑囊炎风险极低。" : "ACWR is inside the 0.8-1.3 sweet spot; training load progression is safe and sustainable.")
+                  : (isZh ? "加量稍急，需密切关注下肢肌腱与关节酸痛体感，适当安排减量恢复。" : "Load increase is steep; pay close attention to lower extremity joints and tendons."))
+                : (isZh ? "急慢性负荷比（ACWR）需在积累有效训练后开始监控，帮助您精准防伤避险。" : "ACWR monitors progression safely once sufficient workout history is recorded."),
             }}
           />
 
           {/* Pw:Hr 心率漂移 */}
           <HeroStatCard
             icon={<IconRun size={14} />}
-            label="心率漂移 (Pw:Hr)"
-            value={baseline.hasData && baseline.cardiacDecoupling?.tested && baseline.cardiacDecoupling.driftPct != null ? `${baseline.cardiacDecoupling.driftPct}%` : "数据积累中"}
+            label={isZh ? "心率漂移 (Pw:Hr)" : "Aerobic Decoupling (Pw:Hr)"}
+            value={baseline.hasData && baseline.cardiacDecoupling?.tested && baseline.cardiacDecoupling.driftPct != null ? `${baseline.cardiacDecoupling.driftPct}%` : (isZh ? "数据积累中" : "Calibrating")}
             valueColor={baseline.cardiacDecoupling?.status === "healthy" ? "var(--good)" : "var(--warn)"}
-            hint={baseline.cardiacDecoupling?.tested ? (baseline.cardiacDecoupling.status === "healthy" ? "有氧基础稳固 · 脱偶率<5%" : "后半程脱偶代偿") : "需至少一次≥10km长跑"}
+            hint={baseline.cardiacDecoupling?.tested ? (baseline.cardiacDecoupling.status === "healthy" ? (isZh ? "有氧基础稳固 · 脱偶率<5%" : "Rock-Solid Base · Drift < 5%") : (isZh ? "后半程脱偶代偿" : "Second-half Drift")) : (isZh ? "需至少一次≥10km长跑" : "Requires >= 10km run")}
             hintTitle={baseline.cardiacDecoupling?.summary}
             alignRight
             detail={{
-              title: "心率漂移 (Pw:Hr · 有氧脱偶率)",
-              definition: "长跑后半程相比前半程的【心率与配速比值漂移量】。衡量纯有氧耐力底座与脂肪氧化供能比例。",
+              title: isZh ? "心率漂移 (Pw:Hr · 有氧脱偶率)" : "Aerobic Decoupling (Pw:Hr)",
+              definition: isZh ? "长跑后半程相比前半程的【心率与配速比值漂移量】。衡量纯有氧耐力底座与脂肪氧化供能比例。" : "Comparison of pace-to-heart rate ratio between the first and second half of long runs (Friel model).",
               currentLevel: baseline.cardiacDecoupling?.tested
-                ? (baseline.cardiacDecoupling.status === "healthy" ? "有氧底座稳如磐石" : "后半程心率代偿漂移")
-                : "数据积累中",
+                ? (baseline.cardiacDecoupling.status === "healthy" ? (isZh ? "有氧底座稳如磐石" : "Rock-Solid Base") : (isZh ? "后半程心率代偿漂移" : "Second-half Cardiac Drift"))
+                : (isZh ? "数据积累中" : "Calibrating"),
               levelColor: baseline.cardiacDecoupling?.status === "healthy" ? "var(--good)" : "var(--warn)",
               ranges: [
-                { label: "有氧底座极其稳固 (无代偿)", range: "< 5.0%", isCurrent: Boolean(baseline.cardiacDecoupling?.tested && (baseline.cardiacDecoupling.driftPct ?? 0) < 5) },
-                { label: "轻度漂移 (后半程轻微代偿)", range: "5.0% ~ 8.0%", isCurrent: Boolean(baseline.cardiacDecoupling?.tested && (baseline.cardiacDecoupling.driftPct ?? 0) >= 5 && (baseline.cardiacDecoupling.driftPct ?? 0) <= 8) },
-                { label: "显著脱偶 (心率飙升/跑姿塌陷)", range: "> 8.0%", isCurrent: Boolean(baseline.cardiacDecoupling?.tested && (baseline.cardiacDecoupling.driftPct ?? 0) > 8) },
+                { label: isZh ? "有氧底座极其稳固 (无代偿)" : "Rock-Solid Base (< 5%)", range: "< 5.0%", isCurrent: Boolean(baseline.cardiacDecoupling?.tested && (baseline.cardiacDecoupling.driftPct ?? 0) < 5) },
+                { label: isZh ? "轻度漂移 (后半程轻微代偿)" : "Mild Drift (5% ~ 8%)", range: "5.0% ~ 8.0%", isCurrent: Boolean(baseline.cardiacDecoupling?.tested && (baseline.cardiacDecoupling.driftPct ?? 0) >= 5 && (baseline.cardiacDecoupling.driftPct ?? 0) <= 8) },
+                { label: isZh ? "显著脱偶 (心率飙升/跑姿塌陷)" : "Significant Drift (> 8%)", range: "> 8.0%", isCurrent: Boolean(baseline.cardiacDecoupling?.tested && (baseline.cardiacDecoupling.driftPct ?? 0) > 8) },
               ],
               coachAdvice: baseline.cardiacDecoupling?.tested
                 ? (baseline.cardiacDecoupling.status === "healthy"
-                  ? "长跑后半程无心血管漂移，说明心室泵血效率稳定、脂肪氧化供能扎实，后半程抗掉速能力出众！"
-                  : "后半程出现心率漂移，说明纯有氧基础仍需夯实，需多安排 Zone 2 纯有氧跑，并注意跑步补水与电解质。")
-                : (baseline.cardiacDecoupling?.summary || "需至少完成一次 10km 以上的长距离稳定配速跑步，系统将自动对比前后半程心率脱偶比率。"),
+                  ? (isZh ? "长跑后半程无心血管漂移，说明心室泵血效率稳定、脂肪氧化供能扎实，后半程抗掉速能力出众！" : "No cardiovascular drift observed; ventricular stroke volume and fat metabolism are rock solid.")
+                  : (isZh ? "后半程出现心率漂移，说明纯有氧基础仍需夯实，需多安排 Zone 2 纯有氧跑，并注意跑步补水与电解质。" : "Cardiovascular drift detected in second half; build more low-intensity Zone 2 volume."))
+                : (baseline.cardiacDecoupling?.summary || (isZh ? "需至少完成一次 10km 以上的长距离稳定配速跑步，系统将自动对比前后半程心率脱偶比率。" : "Requires at least one steady 10km+ run to calibrate your decoupling ratio.")),
             }}
           />
 
@@ -871,7 +877,9 @@ export default function AiCoach({
               <div className="stat">
                 <span className="label">
                   <IconTarget size={14} />
-                  期望目标 ({profile.targetDistance === "marathon" || profile.targetDistance === "general" ? "全马" : profile.targetDistance === "half_marathon" ? "半马" : profile.targetDistance})
+                  {isZh
+                    ? `期望目标 (${profile.targetDistance === "marathon" || profile.targetDistance === "general" ? "全马" : profile.targetDistance === "half_marathon" ? "半马" : profile.targetDistance})`
+                    : `Target Goal (${profile.targetDistance === "marathon" || profile.targetDistance === "general" ? "Marathon" : profile.targetDistance === "half_marathon" ? "Half Marathon" : profile.targetDistance})`}
                 </span>
                 <span className="value num" style={{ fontSize: 18, color: "var(--text)" }}>
                   {fmtDur(profile.targetTimeSec)}
@@ -883,7 +891,7 @@ export default function AiCoach({
                     fontWeight: 600,
                   }}
                 >
-                  {activeGoalEval?.badgeText ?? "阶梯超补偿进阶中"}
+                  {activeGoalEval?.badgeText ?? (isZh ? "阶梯超补偿进阶中" : "In Progress")}
                 </span>
               </div>
             </div>
@@ -916,10 +924,12 @@ export default function AiCoach({
           />
           <div>
             <h3 style={{ margin: "0 0 8px", fontSize: 16, color: "var(--text)" }}>
-              AI 科学教练正在为您量身编排双周课表...
+              {isZh ? "AI 科学教练正在为您量身编排双周课表..." : "AI Coach is generating your bi-weekly periodized training plan..."}
             </h3>
             <p style={{ margin: 0, fontSize: 13, color: "var(--text-dim)", maxWidth: 520, lineHeight: 1.5 }}>
-              正在基于 {baseline?.hasData && baseline.vdot > 0 ? `Daniels 跑力（VDOT ${baseline.vdot}）` : "生理基准模型"}、储备心率区间与所选偏好进行生理负荷推演与排课，预计需要 30~60 秒，请稍候。
+              {isZh
+                ? `正在基于 ${baseline?.hasData && baseline.vdot > 0 ? `Daniels 跑力（VDOT ${baseline.vdot}）` : "生理基准模型"}、储备心率区间与所选偏好进行生理负荷推演与排课，预计需要 30~60 秒，请稍候。`
+                : `Periodizing aerobic and neuromuscular stimulus based on ${baseline?.hasData && baseline.vdot > 0 ? `Daniels VDOT (${baseline.vdot})` : "physiological baseline"}, heart rate reserve zones, and selected targets. Please wait 30-60s.`}
             </p>
           </div>
         </div>
@@ -952,11 +962,13 @@ export default function AiCoach({
             <IconTarget size={28} />
           </div>
           <div>
-            <h3 style={{ margin: "0 0 6px", fontSize: 17, color: "var(--text)" }}>开始您的 AI 科学进阶之旅</h3>
+            <h3 style={{ margin: "0 0 6px", fontSize: 17, color: "var(--text)" }}>
+              {isZh ? "开始您的 AI 科学进阶之旅" : "Begin Your Adaptive Scientific Training Journey"}
+            </h3>
             <p style={{ margin: 0, fontSize: 13, color: "var(--text-dim)", maxWidth: 540, lineHeight: 1.6 }}>
               {baseline && !baseline.hasData
-                ? "💡 当前跑友档案尚未同步任何跑步记录。建议先在顶部连接手表（高驰 COROS / 佳明 Garmin）同步历史数据，AI 即可根据您的真实生理负荷底座精准排课。"
-                : "根据您的历史跑步生理数据、所选训练天数、气候与目标比赛日期，自动制定符合 80/20 极化与 3:1 阶梯超补偿的专业双周滚动课表。"}
+                ? (isZh ? "💡 当前跑友档案尚未同步任何跑步记录。建议先在顶部连接手表（高驰 COROS / 佳明 Garmin）同步历史数据，AI 即可根据您的真实生理负荷底座精准排课。" : "💡 No runs found for current profile. Connect your watch (COROS / Garmin) to calibrate your aerobic baseline for training prescription.")
+                : (isZh ? "根据您的历史跑步生理数据、所选训练天数、气候与目标比赛日期，自动制定符合 80/20 极化与 3:1 阶梯超补偿的专业双周滚动课表。" : "Automatically crafts an 80/20 polarized, 3:1 step-loading training schedule customized to your physiological capacity, preferred schedule, and target race.")}
             </p>
           </div>
           <div style={{ display: "inline-flex", gap: 10, alignItems: "center", flexWrap: "wrap", justifyContent: "center", marginTop: 6 }}>
@@ -966,11 +978,11 @@ export default function AiCoach({
                 className="btn primary"
                 style={{ fontSize: 13, padding: "8px 20px", display: "inline-flex", alignItems: "center", gap: 6 }}
               >
-                ⌚ 连接运动手表设备
+                {isZh ? "⌚ 连接运动手表设备" : "⌚ Connect Watch Device"}
               </button>
             )}
             <span
-              title={!hasAthleteData ? "当前跑友档案暂无跑步记录，请先连接手表同步数据后再排课" : undefined}
+              title={!hasAthleteData ? (isZh ? "当前跑友档案暂无跑步记录，请先连接手表同步数据后再排课" : "No runs recorded. Sync data before generating plan.") : undefined}
               style={{ display: "inline-flex", cursor: !hasAthleteData ? "not-allowed" : undefined }}
             >
               <button
@@ -980,7 +992,7 @@ export default function AiCoach({
                 style={{ fontSize: 13, padding: "8px 20px", display: "inline-flex", alignItems: "center", gap: 6 }}
               >
                 <IconGear size={15} />
-                个性化定制并生成课表
+                {isZh ? "个性化定制并生成课表" : "Customize & Generate Plan"}
               </button>
             </span>
           </div>
@@ -1021,7 +1033,9 @@ export default function AiCoach({
               </div>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 4 }}>
-                  <span style={{ fontSize: 13, fontWeight: 700, color: "var(--text)" }}>AI 教练备战分析与训练指导</span>
+                  <span style={{ fontSize: 13, fontWeight: 700, color: "var(--text)" }}>
+                    {isZh ? "AI 教练备战分析与训练指导" : "AI Coach Analysis & Guidance"}
+                  </span>
                   {baseline.phenotype && (
                     <span
                       className="pill"
@@ -1089,9 +1103,9 @@ export default function AiCoach({
             >
               <div className="card-title" style={{ fontSize: 14, margin: 0, display: "flex", alignItems: "center", gap: 6 }}>
                 <IconCalendar size={16} />
-                <span>AI 教练周度闭环复盘与自适应调整记录</span>
+                <span>{isZh ? "AI 教练周度闭环复盘与自适应调整记录" : "AI Coach Weekly Reviews & Adaptive Adjustments"}</span>
                 <span className="pill" style={{ fontSize: 10.5, padding: "1px 6px" }}>
-                  累计 {reviews.length} 周
+                  {isZh ? `累计 ${reviews.length} 周` : `${reviews.length} weeks total`}
                 </span>
               </div>
 
@@ -1108,7 +1122,7 @@ export default function AiCoach({
                   }}
                   style={{ fontSize: 11, padding: "2px 8px" }}
                 >
-                  {expandedReviewIds.size > 0 ? "全部折叠" : "全部展开"}
+                  {expandedReviewIds.size > 0 ? (isZh ? "全部折叠" : "Collapse All") : (isZh ? "全部展开" : "Expand All")}
                 </button>
               )}
             </div>
@@ -2703,9 +2717,11 @@ function WeekScheduleSection({
   onReview?: () => void;
   isUpcoming?: boolean;
 }) {
+  const { t, isZh } = useI18n();
   const [activeDayIdx, setActiveDayIdx] = useState(0);
   const trackRef = useRef<HTMLDivElement>(null);
   const todayStr = useMemo(() => new Date().toISOString().slice(0, 10), []);
+  const weekdays = isZh ? WEEKDAYS : ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
   useEffect(() => {
     const tIdx = workouts.findIndex((w) => w.date === todayStr);
@@ -2764,13 +2780,13 @@ function WeekScheduleSection({
       >
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           <span className={`pill ${isUpcoming ? "" : "accent"}`} style={{ fontSize: 12, padding: "3px 10px", fontWeight: 700 }}>
-            {isUpcoming ? `第 ${weekIndex} 周 (滚动预告)` : `第 ${weekIndex} 周 (执行中)`}
+            {isUpcoming ? t("coach.weekPreview", { week: weekIndex }) : t("coach.weekInProgress", { week: weekIndex })}
           </span>
           <span style={{ fontSize: 13, color: "var(--text-dim)" }}>
-            计划总跑量: <strong style={{ color: "var(--text)" }}>{totalKm} km</strong>
+            {t("coach.plannedVolume")}: <strong style={{ color: "var(--text)" }}>{totalKm} km</strong>
             {isUpcoming && (
               <span style={{ fontSize: 11, color: "var(--text-faint)", marginLeft: 6 }}>
-                (将根据第 {weekIndex - 1} 周实操数据自适应微调)
+                ({isZh ? `将根据第 ${weekIndex - 1} 周实操数据自适应微调` : `Will adapt based on Week ${weekIndex - 1}`})
               </span>
             )}
           </span>
@@ -2789,7 +2805,7 @@ function WeekScheduleSection({
               background: "var(--good-bg)",
             }}
           >
-            {reviewing ? "结算复盘中..." : "✅ 结算本周完成情况并微调"}
+            {reviewing ? t("coach.reviewingWeek") : `✅ ${t("coach.reviewWeekBtn")}`}
           </button>
         )}
       </div>
@@ -2807,11 +2823,11 @@ function WeekScheduleSection({
               className={`coach-mobile-day-btn ${isSelected ? "active" : ""} ${isToday ? "today" : ""}`}
               onClick={() => scrollToDay(idx)}
             >
-              <span>{WEEKDAYS[w.dayOfWeek]}</span>
+              <span>{weekdays[w.dayOfWeek]}</span>
               <span style={{ fontSize: 9.5, opacity: 0.85, marginTop: 1 }}>{w.date.slice(5)}</span>
               {isToday && (
                 <span style={{ fontSize: 8.5, background: "rgba(255,255,255,0.28)", padding: "0 3px", borderRadius: 2, marginTop: 1 }}>
-                  今日
+                  {isZh ? "今日" : "Today"}
                 </span>
               )}
               <span
@@ -2851,6 +2867,7 @@ function WorkoutCard({
   onOpenActivity: (labelId: string) => void;
   isUpcoming?: boolean;
 }) {
+  const { t, isZh } = useI18n();
   const [showAlt, setShowAlt] = useState(false);
   const [expandedDesc, setExpandedDesc] = useState(false);
   const alt = workout.alternativeJson ? JSON.parse(workout.alternativeJson) : null;
@@ -2858,18 +2875,20 @@ function WorkoutCard({
 
   // 状态颜色
   let badgeStyle = { background: "var(--surface-2)", color: "var(--text-faint)", border: "1px solid var(--border)" };
-  let badgeText = "待完成";
+  let badgeText = isZh ? "待完成" : "Upcoming";
   if (workout.status === "completed") {
     badgeStyle = { background: "var(--good-bg)", color: "var(--good)", border: "1px solid var(--good-border)" };
-    badgeText = workout.complianceScore ? `已完成 ${workout.complianceScore}%` : "已完成";
+    badgeText = workout.complianceScore
+      ? (isZh ? `已完成 ${workout.complianceScore}%` : `Done ${workout.complianceScore}%`)
+      : (isZh ? "已完成" : "Done");
   } else if (workout.status === "missed") {
     badgeStyle = { background: "var(--warn-bg)", color: "var(--warn)", border: "1px solid var(--warn-border)" };
-    badgeText = "未完成";
+    badgeText = isZh ? "未完成" : "Missed";
   }
 
   // 训练类型标签与色彩标记
   let typeColor = "var(--pace)";
-  let typeLabel = "低心率轻松跑 (E)";
+  let typeLabel = isZh ? "低心率轻松跑 (E)" : "Easy Aerobic (E)";
   const isRace = workout.workoutType === "race";
   const todayStr = new Date().toISOString().slice(0, 10);
   const isToday = workout.date === todayStr;
@@ -2879,19 +2898,19 @@ function WorkoutCard({
 
   if (wType === "race" || titleLow.includes("比赛")) {
     typeColor = "#d97706";
-    typeLabel = "🎯 目标赛事";
+    typeLabel = isZh ? "🎯 目标赛事" : "🎯 Target Race";
   } else if (wType === "interval" || titleLow.includes("间歇")) {
     typeColor = "#8b5cf6";
-    typeLabel = "间歇跑 (I)";
+    typeLabel = isZh ? "间歇跑 (I)" : "Intervals (I)";
   } else if (wType === "threshold" || titleLow.includes("门槛") || titleLow.includes("乳酸")) {
     typeColor = "#f59e0b";
-    typeLabel = "乳酸阈值跑 (T)";
+    typeLabel = isZh ? "乳酸阈值跑 (T)" : "Threshold (T)";
   } else if (wType === "marathon" || titleLow.includes("马拉松") || titleLow.includes("稳态") || titleLow.includes("动力")) {
     typeColor = "#06b6d4";
-    typeLabel = "马拉松配速跑 (M)";
+    typeLabel = isZh ? "马拉松配速跑 (M)" : "Marathon Pace (M)";
   } else if (wType === "tempo") {
     typeColor = "#f59e0b";
-    typeLabel = "节奏跑";
+    typeLabel = isZh ? "节奏跑" : "Tempo";
   } else if (wType === "long" || titleLow.includes("长距离") || titleLow.includes("lsd")) {
     typeColor = "#10b981";
     typeLabel = "长距离耐力 (LSD)";

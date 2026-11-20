@@ -1,0 +1,17 @@
+{
+  "training": "Training Hub",
+  "trainingShort": "Training",
+  "trainingSub": "Mileage · Sessions · Load",
+  "coach": "Adaptive AI Coach",
+  "coachShort": "AI Coach",
+  "coachSub": "Bi-weekly Rolling · Periodized",
+  "race": "Race Hub",
+  "raceShort": "Races",
+  "raceSub": "Elevation · VDOT · Checkup",
+  "readiness": "Readiness & Recovery",
+  "readinessShort": "Readiness",
+  "readinessSub": "Sleep · HRV · Fatigue",
+  "settings": "Settings",
+  "settingsShort": "Settings",
+  "settingsSub": "AI · Sync · Workflows"
+}

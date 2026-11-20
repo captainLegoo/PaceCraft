@@ -1,4 +1,5 @@
 import { useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useI18n } from "./i18n";
 import {
   formatPace,
   formatDuration,
@@ -1147,15 +1148,16 @@ export function AerobicDecouplingCard({
   laps: { distanceM: number; timeSec: number; avgPaceSec?: number | null; avgHr?: number | null; elevGain?: number | null }[];
   options?: { distanceKm?: number; durationSec?: number; isInterval?: boolean; isCombo?: boolean };
 }) {
+  const { isZh, t } = useI18n();
   const result = calculateAerobicDecoupling(laps, options);
 
   if (!result.eligible) {
     return (
       <div className="card" style={{ marginBottom: 14 }}>
-        <h3 className="card-title">有氧脱钩率分析（Aerobic Decoupling）</h3>
-        <p className="card-sub">基于 Joe Friel 有氧模型（EF = 配速 / 心率）评估心血管漂移与有氧耐力储备。</p>
+        <h3 className="card-title">{t("aerobic.title")}</h3>
+        <p className="card-sub">{isZh ? "基于 Joe Friel 有氧模型（EF = 配速 / 心率）评估心血管漂移与有氧耐力储备。" : "Joe Friel Aerobic Decoupling model (EF = Speed / HR) evaluating cardiovascular drift."}</p>
         <div className="banner info" style={{ marginTop: 10, marginBottom: 0, fontSize: 12.5 }}>
-          {result.reason ?? "当前训练暂不适用有氧脱钩评估"}
+          {isZh ? (result.reason ?? "当前训练暂不适用有氧脱钩评估") : t("aerobic.notEligible")}
         </div>
       </div>
     );
@@ -1165,27 +1167,54 @@ export function AerobicDecouplingCard({
   const pillClass = badge?.level === "good" ? "good" : badge?.level === "bad" ? "bad" : badge?.level === "warn" ? "warn" : "accent";
   const numColor = badge?.level === "good" ? "var(--good)" : badge?.level === "bad" ? "var(--bad)" : badge?.level === "warn" ? "var(--warn)" : "var(--accent)";
 
+  const badgeLabelEn =
+    decouplingPct! < 0
+      ? "Negative Decoupling (<0%)"
+      : decouplingPct! <= 5.0
+      ? "Excellent Stability (<5%)"
+      : decouplingPct! <= 8.0
+      ? "Mild Decoupling (5%–8%)"
+      : "High Decoupling (>8%)";
+
+  const subTextEn =
+    decouplingPct! < 0
+      ? "Acceleration with high stamina"
+      : decouplingPct! <= 5.0
+      ? "Rock-solid aerobic endurance"
+      : decouplingPct! <= 8.0
+      ? "Mild fatigue in 2nd half"
+      : "Significant cardiovascular drift";
+
+  const conclusionEn =
+    decouplingPct! < 0
+      ? "Second-half efficiency was slightly higher than the first half, confirming adequate warm-up and strong fatigue resistance."
+      : decouplingPct! <= 5.0
+      ? "Heart rate and pace remained highly parallel throughout the entire run. Outstanding aerobic base and energy economy."
+      : decouplingPct! <= 8.0
+      ? "Minor cardiac drift observed in the second half. Normal thermal strain and cumulative fatigue during a long run."
+      : "Noticeable cardiac drift or pace drop. Indicates running above true aerobic ceiling, dehydration, or energy depletion.";
+
   return (
     <div className="card" style={{ marginBottom: 14 }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 10 }}>
         <div style={{ flex: 1, minWidth: 260 }}>
           <h3 className="card-title" style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-            有氧脱钩率分析（Aerobic Decoupling）
+            {t("aerobic.title")}
             <span className={`pill ${pillClass}`} style={{ fontSize: 12, fontWeight: 600 }}>
-              {badge?.label}
+              {isZh ? badge?.label : badgeLabelEn}
             </span>
           </h3>
           <p className="card-sub" style={{ margin: "4px 0 0", lineHeight: 1.5 }}>
-            对比前后半程效率因子（配速/心率）：<strong>负值（-）</strong>代表越跑越顺、动能充沛；<strong>正值（+）</strong>代表后程开始有点累或动能下降。脱钩率 ≤ 5% 证明有氧底子极扎实。
+            {t("aerobic.subtitle")}
           </p>
         </div>
         <div style={{ textAlign: "right", alignSelf: "center" }}>
           <div className="num" style={{ fontSize: 26, fontWeight: 700, color: numColor, lineHeight: 1.1 }}>
             {decouplingPct! > 0 ? `+${decouplingPct}%` : `${decouplingPct}%`}
           </div>
-          {subText && (
+          {(subText || subTextEn) && (
             <div style={{ fontSize: 11.5, color: "var(--text-dim)", marginTop: 4 }}>
-              {subText}
+              {isZh ? subText : subTextEn}
             </div>
           )}
         </div>
@@ -1193,57 +1222,59 @@ export function AerobicDecouplingCard({
 
       <div className="grid g3" style={{ marginTop: 14 }}>
         <div className="stat" style={{ background: "var(--surface-2)", padding: "12px 14px", borderRadius: 8 }}>
-          <span className="label" style={{ fontWeight: 600, color: "var(--text)" }}>前半程（前 50% 时间）</span>
+          <span className="label" style={{ fontWeight: 600, color: "var(--text)" }}>{t("aerobic.firstHalf")}</span>
           <span className="value num" style={{ fontSize: 20 }}>
             {fmtPace(half1?.paceSec)}
             <span className="unit" style={{ fontSize: 13, marginRight: 8 }}>/km</span>
             <span style={{ fontSize: 16, color: "var(--chart-hr)" }}>{half1?.avgHr}</span>
             <span className="unit" style={{ fontSize: 13 }}>bpm</span>
           </span>
-          <span className="hint">耗时 {fmtDur(half1?.durationSec)} · {half1?.distKm} km</span>
+          <span className="hint">{t("aerobic.elapsed")} {fmtDur(half1?.durationSec)} · {half1?.distKm} km</span>
         </div>
 
         <div className="stat" style={{ background: "var(--surface-2)", padding: "12px 14px", borderRadius: 8 }}>
-          <span className="label" style={{ fontWeight: 600, color: "var(--text)" }}>后半程（后 50% 时间）</span>
+          <span className="label" style={{ fontWeight: 600, color: "var(--text)" }}>{t("aerobic.secondHalf")}</span>
           <span className="value num" style={{ fontSize: 20 }}>
             {fmtPace(half2?.paceSec)}
             <span className="unit" style={{ fontSize: 13, marginRight: 8 }}>/km</span>
             <span style={{ fontSize: 16, color: "var(--chart-hr)" }}>{half2?.avgHr}</span>
             <span className="unit" style={{ fontSize: 13 }}>bpm</span>
           </span>
-          <span className="hint">耗时 {fmtDur(half2?.durationSec)} · {half2?.distKm} km</span>
+          <span className="hint">{t("aerobic.elapsed")} {fmtDur(half2?.durationSec)} · {half2?.distKm} km</span>
         </div>
 
         <div className="stat" style={{ background: "var(--surface-2)", padding: "12px 14px", borderRadius: 8 }}>
-          <span className="label" style={{ fontWeight: 600, color: "var(--text)" }}>后程体感变化</span>
+          <span className="label" style={{ fontWeight: 600, color: "var(--text)" }}>{t("aerobic.sensation")}</span>
           <span className="value num" style={{ fontSize: 18, display: "flex", gap: 10, flexWrap: "wrap", alignItems: "baseline" }}>
             <span>
-              心率 <strong style={{ color: deltaHr! > 3 ? "var(--warn)" : deltaHr! < -2 ? "var(--accent)" : "inherit" }}>
-                {deltaHr! > 0 ? `↑ ${deltaHr}` : deltaHr! < 0 ? `↓ ${Math.abs(deltaHr!)}` : "持平"}
+              {isZh ? "心率" : "HR"}{" "}
+              <strong style={{ color: deltaHr! > 3 ? "var(--warn)" : deltaHr! < -2 ? "var(--accent)" : "inherit" }}>
+                {deltaHr! > 0 ? `↑ ${deltaHr}` : deltaHr! < 0 ? `↓ ${Math.abs(deltaHr!)}` : isZh ? "持平" : "Steady"}
               </strong>
               {deltaHr !== 0 && <span className="unit" style={{ fontSize: 12, marginLeft: 2 }}>bpm</span>}
             </span>
             <span>
-              配速 <strong style={{ color: deltaPaceSec! > 2 ? "var(--warn)" : deltaPaceSec! < -2 ? "var(--good)" : "inherit" }}>
-                {deltaPaceSec! > 1 ? `慢 ${deltaPaceSec}s` : deltaPaceSec! < -1 ? `快 ${Math.abs(deltaPaceSec!)}s` : "持平"}
+              {isZh ? "配速" : "Pace"}{" "}
+              <strong style={{ color: deltaPaceSec! > 2 ? "var(--warn)" : deltaPaceSec! < -2 ? "var(--good)" : "inherit" }}>
+                {deltaPaceSec! > 1 ? (isZh ? `慢 ${deltaPaceSec}s` : `+${deltaPaceSec}s slower`) : deltaPaceSec! < -1 ? (isZh ? `快 ${Math.abs(deltaPaceSec!)}s` : `-${Math.abs(deltaPaceSec!)}s faster`) : isZh ? "持平" : "Steady"}
               </strong>
               {Math.abs(deltaPaceSec!) > 1 && <span className="unit" style={{ fontSize: 12, marginLeft: 2 }}>/km</span>}
             </span>
           </span>
           <span className="hint">
             {deltaHr! > 5
-              ? "后程有点累，心率明显上浮"
+              ? (isZh ? "后程有点累，心率明显上浮" : "Noticeable cardiac drift in the 2nd half")
               : deltaPaceSec! < -2
-              ? "后程越跑越顺，体能充沛自然提速"
+              ? (isZh ? "后程越跑越顺，体能充沛自然提速" : "Accelerated smoothly with energy to spare")
               : deltaPaceSec! > 4
-              ? "后程动能有所下降，出现微掉速"
-              : "前后半程心率与配速高度平稳"}
+              ? (isZh ? "后程动能有所下降，出现微掉速" : "Minor pace drop in the second half")
+              : (isZh ? "前后半程心率与配速高度平稳" : "Heart rate and pace remained highly steady")}
           </span>
         </div>
       </div>
 
       <div className={`banner ${badge?.level === "good" ? "info" : badge?.level === "warn" ? "warn" : badge?.level === "bad" ? "error" : "info"}`} style={{ marginTop: 12, marginBottom: 0, fontSize: 12.5 }}>
-        <strong>诊断结论</strong>：{badge?.text}
+        <strong>{t("aerobic.conclusion")}</strong>：{isZh ? badge?.text : conclusionEn}
       </div>
     </div>
   );
@@ -1251,10 +1282,9 @@ export function AerobicDecouplingCard({
 
 /**
  * AI 生成内容标识与免责声明组件
- * 符合《生成式人工智能服务管理暂行办法》第十二条关于生成内容显著标识的要求，
- * 并提供运动健康与训练决策免责提示。
  */
 export function AiDisclaimerNotice() {
+  const { isZh } = useI18n();
   return (
     <div
       style={{
@@ -1273,7 +1303,7 @@ export function AiDisclaimerNotice() {
     >
       <span style={{ fontSize: 14, flexShrink: 0 }}>🤖</span>
       <span>
-        <strong>AI 生成内容提示</strong>：本分析由大语言模型自动生成，仅供科学训练量化参考，不构成医疗诊断或强制运动处方。请结合实际体感与专业教练/医生建议科学训练。
+        <strong>{isZh ? "AI 生成内容提示" : "AI Notice"}</strong>：{isZh ? "本分析由大语言模型自动生成，仅供科学训练量化参考，不构成医疗诊断或强制运动处方。请结合实际体感与专业教练/医生建议科学训练。" : "Generated by AI for quantitative training reference only. Not medical advice. Always listen to your body and consult qualified coaches."}
       </span>
     </div>
   );

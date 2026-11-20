@@ -1,0 +1,21 @@
+{
+  "workoutSession": "训练场次",
+  "totalDistance": "全场总距离",
+  "totalDuration": "全场总时长",
+  "avgHeartRate": "平均心率",
+  "totalTrainingLoad": "训练负荷合计",
+  "continuousCurve": "整场连贯曲线",
+  "continuousCurveDesc": "包含组间休息、配速起伏、心率漂移与逐圈表现",
+  "paceLeftAxis": "配速（左轴）",
+  "hrRightAxis": "平均心率（右轴）",
+  "activitiesList": "本次场次包含的活动记录",
+  "splitsBreakdown": "分段与分圈明细",
+  "aerobicDecoupling": "有氧脱钩率分析 (Aerobic Decoupling)",
+  "rockSolidBase": "优秀稳态 (漂移<5%)",
+  "moderateDrift": "轻度漂移 (5%~8%)",
+  "severeDrift": "显著脱钩 (>8%)",
+  "firstHalf": "前半程 (前 50% 时间)",
+  "secondHalf": "后半程 (后 50% 时间)",
+  "secondHalfSensations": "后程体感变化",
+  "diagnosis": "诊断结论"
+}

@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import Health from "./Health";
 import Fitness from "./Fitness";
 import { IconPulse, IconTrophy } from "../icons";
+import { useI18n } from "../i18n";
 
 export type ReadinessTab = "recovery" | "fitness";
 
@@ -14,6 +15,7 @@ export default function Readiness({
   initialTab = "recovery",
   dataVersion,
 }: ReadinessProps) {
+  const { isZh } = useI18n();
   const [tab, setTab] = useState<ReadinessTab>(initialTab);
 
   useEffect(() => {
@@ -26,8 +28,12 @@ export default function Readiness({
     <div className="hub-container">
       <div className="hub-header">
         <div className="page-head-title">
-          <h2>身体状态</h2>
-          <div className="sub">恢复度、心率变异性、睡眠质量与体能评估</div>
+          <h2>{isZh ? "身体状态" : "Readiness & Recovery"}</h2>
+          <div className="sub">
+            {isZh
+              ? "恢复度、心率变异性、睡眠质量与体能评估"
+              : "Recovery, HRV (Heart Rate Variability), sleep quality & physiological fitness tracking"}
+          </div>
         </div>
 
         <div className="hub-tabs" role="tablist">
@@ -39,7 +45,7 @@ export default function Readiness({
             onClick={() => setTab("recovery")}
           >
             <IconPulse size={15} />
-            <span>日常恢复与睡眠</span>
+            <span>{isZh ? "日常恢复与睡眠" : "Daily Recovery & Sleep"}</span>
           </button>
           <button
             type="button"
@@ -49,7 +55,7 @@ export default function Readiness({
             onClick={() => setTab("fitness")}
           >
             <IconTrophy size={15} />
-            <span>体能与能力评估</span>
+            <span>{isZh ? "体能与能力评估" : "Fitness & Physiological Assessment"}</span>
           </button>
         </div>
       </div>

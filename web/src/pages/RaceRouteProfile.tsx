@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import type { RaceDetail, RouteSegment } from "../api";
 import { formatDuration as fmtDur, formatPace as fmtP } from "../utils/format";
+import { useI18n } from "../i18n";
 
 /**
  * 爬升剖面图。
@@ -134,6 +135,7 @@ function Segments({ segs }: { segs: RouteSegment[] }) {
 
 /** 路线画像卡片 —— 有路线就画剖面，没路线就说明缺什么 */
 export default function RouteProfileCard({ d }: { d: RaceDetail }) {
+  const { t, isZh } = useI18n();
   const p = d.profile;
   const isGpx = p?.source === "gpx";
   /** dem=实测，city=降级估算。标注必须与底部的 caveat 一致，不能各说各话 */
@@ -142,11 +144,12 @@ export default function RouteProfileCard({ d }: { d: RaceDetail }) {
   if (!p) {
     return (
       <div className="banner warn" style={{ marginTop: 12 }}>
-        <strong>路线画像暂不可用</strong>
-        <div style={{ marginTop: 4 }}>{d.missingRoute ?? "尚未设置路线"}</div>
+        <strong>{isZh ? "路线画像暂不可用" : "Route Profile Unavailable"}</strong>
+        <div style={{ marginTop: 4 }}>{d.missingRoute ?? (isZh ? "尚未设置路线" : "No course route configured")}</div>
         <div style={{ marginTop: 8, fontSize: 12 }}>
-          可行做法：上传 GPX（Strava / 高驰 / Garmin 导出）—— GPX 自带实测海拔，
-          不依赖在线高程接口，是最可靠的来源。
+          {isZh
+            ? "可行做法：上传 GPX（Strava / 高驰 / Garmin 导出）—— GPX 自带实测海拔，不依赖在线高程接口，是最可靠的来源。"
+            : "Tip: Upload GPX files (exported from Strava / COROS / Garmin) which include verified elevation profiles without third-party DEM dependencies."}
         </div>
       </div>
     );
@@ -161,22 +164,22 @@ export default function RouteProfileCard({ d }: { d: RaceDetail }) {
     <div style={{ marginTop: 14 }}>
       <div className="grid g4" style={{ marginBottom: 12 }}>
         <div className="stat">
-          <span className="label">估算爬升</span>
+          <span className="label">{t("race.estClimb")}</span>
           <span className="value num" style={{ color: "var(--warn)" }}>{gain}<span className="unit">m</span></span>
-          <span className="hint">{isGpx ? "GPX 实测" : isEstimated ? "城市基准估算" : "DEM 估算"}</span>
+          <span className="hint">{isGpx ? t("race.gpxMeasured") : isEstimated ? (isZh ? "城市基准估算" : "City estimate") : (isZh ? "DEM 估算" : "DEM estimate")}</span>
         </div>
         <div className="stat">
-          <span className="label">爬升率</span>
+          <span className="label">{t("race.climbRate")}</span>
           <span className="value num">{perKm}<span className="unit">m/km</span></span>
-          <span className="hint">{perKm < 3 ? "极平缓" : perKm < 8 ? "轻微起伏" : perKm < 15 ? "有实质爬升" : "越野级"}</span>
+          <span className="hint">{perKm < 3 ? (isZh ? "极平缓" : "Flat") : perKm < 8 ? t("race.slightUndulation") : perKm < 15 ? (isZh ? "有实质爬升" : "Substantial climb") : (isZh ? "越野级" : "Trail grade")}</span>
         </div>
         <div className="stat">
-          <span className="label">累计下降</span>
+          <span className="label">{t("race.totalDescent")}</span>
           <span className="value num" style={{ color: "var(--z2)" }}>{p.lossM}<span className="unit">m</span></span>
-          <span className="hint">净变化 {p.netChange >= 0 ? "+" : ""}{p.netChange}m</span>
+          <span className="hint">{t("race.netChange")} {p.netChange >= 0 ? "+" : ""}{p.netChange}m</span>
         </div>
         <div className="stat">
-          <span className="label">高程范围</span>
+          <span className="label">{t("race.elevRange")}</span>
           <span className="value num" style={{ fontSize: 20 }}>{Math.round(eleLo)}–{Math.round(eleHi)}<span className="unit">m</span></span>
           <span className="hint">{d.race.city ?? "—"}</span>
         </div>
@@ -186,8 +189,10 @@ export default function RouteProfileCard({ d }: { d: RaceDetail }) {
         {p.verdict}
         {d.plan && (
           <div style={{ marginTop: 6, color: "var(--text-dim)" }}>
-            目标 <strong>{d.plan.targetLabel}</strong> → 全程配速 <strong>{fmtP(d.plan.fullPaceSec)}/km</strong>
-            （地形折算 {d.plan.costSecPerKm} s/km；半程 {fmtP(d.plan.halfPaceSec)}/km）
+            {isZh ? "目标" : "Target"} <strong>{d.plan.targetLabel}</strong> → {isZh ? "全程配速" : "Target pace"}{" "}
+            <strong>{fmtP(d.plan.fullPaceSec)}/km</strong>
+            （{isZh ? "地形折算" : "Terrain cost"} {d.plan.costSecPerKm} s/km；{isZh ? "半程" : "Halfway"}{" "}
+            {fmtP(d.plan.halfPaceSec)}/km）
           </div>
         )}
       </div>

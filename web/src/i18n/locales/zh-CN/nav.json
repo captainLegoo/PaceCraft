@@ -1,0 +1,17 @@
+{
+  "training": "训练看板",
+  "trainingShort": "训练",
+  "trainingSub": "跑量 · 场次 · 负荷",
+  "coach": "AI 科学课表",
+  "coachShort": "AI 课表",
+  "coachSub": "双周滚动 · 科学自适应",
+  "race": "赛事中心",
+  "raceShort": "赛事",
+  "raceSub": "赛道 · 预测 · 备赛",
+  "readiness": "身体状态",
+  "readinessShort": "状态",
+  "readinessSub": "恢复 · 睡眠 · 体能",
+  "settings": "系统设置",
+  "settingsShort": "设置",
+  "settingsSub": "AI · 同步 · 工作流"
+}

@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { api, type RaceDetail } from "../api";
 import { formatDuration as fDur, formatPace as fPace } from "../utils/format";
+import { useI18n } from "../i18n";
 
 export type RaceAnchor = {
   /** 训练 id —— 人工排除/纳入时用它定位这一场 */
@@ -96,12 +97,13 @@ const TONE_COLOR: Record<string, string> = {
  * 两者之间的差值就是「差距」，是需要靠训练补的部分 —— 也不是判你失败。
  */
 function PredictionCard({ b, goalSec }: { b: Briefing; goalSec: number | null }) {
+  const { t, isZh } = useI18n();
   const p = b.prediction;
   if (!p) {
     return (
       <div className="banner warn">
-        还没有可用的比赛锚点 —— 预测需要至少一场 ≥42km 的真实成绩。
-        <div style={{ marginTop: 6, fontSize: 12 }}>等完成一场全马后，这页会自动给出成绩预测。</div>
+        {isZh ? "还没有可用的比赛锚点 —— 预测需要至少一场 ≥42km 的真实成绩。" : "No race anchors available yet — Prediction requires at least one verified ≥42km marathon effort."}
+        <div style={{ marginTop: 6, fontSize: 12 }}>{isZh ? "等完成一场全马后，这页会自动给出成绩预测。" : "After completing a full marathon, race performance predictions will automatically appear here."}</div>
       </div>
     );
   }
@@ -115,21 +117,21 @@ function PredictionCard({ b, goalSec }: { b: Briefing; goalSec: number | null })
     <>
       <div className="grid g3" style={{ marginBottom: 12 }}>
         <div className="stat">
-          <span className="label">你的目标</span>
+          <span className="label">{t("race.yourGoal")}</span>
           <span className="value num" style={{ fontSize: 24, color: "var(--text)" }}>
-            {goalSec != null ? fDur(goalSec) : <span style={{ color: "var(--text-faint)" }}>未设定</span>}
+            {goalSec != null ? fDur(goalSec) : <span style={{ color: "var(--text-faint)" }}>{isZh ? "未设定" : "Unset"}</span>}
           </span>
-          <span className="hint">手动设定目标用时</span>
+          <span className="hint">{isZh ? "手动设定目标用时" : "Manual goal time"}</span>
         </div>
         <div className="stat">
-          <span className="label">当前实战预测</span>
+          <span className="label">{t("race.currentPrediction")}</span>
           <span className="value num" style={{ color: "var(--accent)", fontSize: 24 }}>{fDur(p.bestSec)}</span>
-          <span className="hint">赛事专项 · 已折算地形与海拔</span>
+          <span className="hint">{t("race.terrainAdjusted")}</span>
         </div>
         <div className="stat">
-          <span className="label">距比赛</span>
-          <span className="value num" style={{ fontSize: 24 }}>{b.daysToRace ?? "—"}<span className="unit">天</span></span>
-          <span className="hint">置信度：{p.confidence} 级</span>
+          <span className="label">{t("race.daysToRace")}</span>
+          <span className="value num" style={{ fontSize: 24 }}>{b.daysToRace ?? "—"}<span className="unit">{t("race.daysUnit")}</span></span>
+          <span className="hint">{isZh ? `置信度：${p.confidence} 级` : `Confidence: Tier ${p.confidence}`}</span>
         </div>
       </div>
 
@@ -192,45 +194,50 @@ function PredictionCard({ b, goalSec }: { b: Briefing; goalSec: number | null })
 }
 
 function TrainingStateCard({ training: t }: { training: Briefing["training"] }) {
+  const { t: tr, isZh } = useI18n();
   return (
     <>
       <div className="grid g2" style={{ marginBottom: 12 }}>
         <div className="stat">
-          <span className="label">近 4 周周均</span>
+          <span className="label">{tr("race.recent4WeeksAvg")}</span>
           <span className="value num">{t.weeklyKm4}<span className="unit">km</span></span>
           <span className="hint">
             {t.trendPct != null
-              ? `较前4周 ${t.trendPct > 0 ? "+" : ""}${t.trendPct}%`
-              : `8周均 ${t.weeklyKm8} km`}
+              ? (isZh ? `较前4周 ${t.trendPct > 0 ? "+" : ""}${t.trendPct}%` : `vs prev 4w ${t.trendPct > 0 ? "+" : ""}${t.trendPct}%`)
+              : (isZh ? `8周均 ${t.weeklyKm8} km` : `8w avg ${t.weeklyKm8} km`)}
           </span>
         </div>
         <div className="stat">
-          <span className="label">当前负荷比</span>
+          <span className="label">{tr("race.currentAcwr")}</span>
           <span className="value num" style={{ color: (t.loadRatio ?? 1) > 1.4 ? "var(--warn)" : "var(--good)" }}>
             {t.loadRatio ?? "—"}
           </span>
           <span className="hint">
-            {(t.loadRatio ?? 1) > 1.4 ? "偏高 · 需防疲劳" : (t.loadRatio ?? 1) < 0.75 ? "偏低 · 刺激不足" : "负荷处于安全区间"}
+            {(t.loadRatio ?? 1) > 1.4
+              ? (isZh ? "偏高 · 需防疲劳" : "High · Guard Fatigue")
+              : (t.loadRatio ?? 1) < 0.75
+              ? (isZh ? "偏低 · 刺激不足" : "Low · Sub-stimulus")
+              : (isZh ? "负荷处于安全区间" : "Optimal Sweet Spot")}
           </span>
         </div>
         <div className="stat">
-          <span className="label">基础有氧占比</span>
+          <span className="label">{isZh ? "基础有氧占比" : "Base Aerobic Ratio"}</span>
           <span className="value num" style={{ color: (t.easyPct ?? 100) < 75 ? "var(--warn)" : "var(--good)" }}>
             {t.easyPct ?? "—"}<span className="unit">%</span>
           </span>
-          <span className="hint">合理基准 75%–80%</span>
+          <span className="hint">{isZh ? "合理基准 75%–80%" : "Target: 75%–80%"}</span>
         </div>
         <div className="stat">
-          <span className="label">长距离储备</span>
+          <span className="label">{isZh ? "长距离储备" : "Long Run Stamina"}</span>
           <span className="value num" style={{ color: t.longRun.ready ? "var(--good)" : "var(--warn)" }}>
             {(t.longRun.ready?.km ?? t.longRun.max?.km) ?? "—"}<span className="unit">km</span>
           </span>
           <span className="hint">
             {t.longRun.ready
-              ? `近4周有 ≥28km 实测`
+              ? (isZh ? `近4周有 ≥28km 实测` : "≥28km logged in 4w")
               : t.longRun.max
-                ? `最长单次 ${t.longRun.max.km} km`
-                : "近4周无 ≥25km 训练"}
+                ? (isZh ? `最长单次 ${t.longRun.max.km} km` : `Longest ${t.longRun.max.km} km`)
+                : (isZh ? "近4周无 ≥25km 训练" : "No ≥25km in 4w")}
           </span>
         </div>
       </div>
@@ -482,6 +489,7 @@ function AnchorTable({ anchors, onChanged }: { anchors: RaceAnchor[]; onChanged?
  *   本组件            = 你现在能不能跑到（动态，每次同步重算）
  */
 export default function RaceBriefingCard({ d, onChanged }: { d: RaceBriefing; onChanged?: () => void }) {
+  const { t, isZh } = useI18n();
   const b = d.briefing;
 
   const [pacingOpen, setPacingOpen] = useState(() => {
@@ -523,28 +531,28 @@ export default function RaceBriefingCard({ d, onChanged }: { d: RaceBriefing; on
       {/* 头部标题与定位 */}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, marginBottom: 14, flexWrap: "wrap" }}>
         <div>
-          <h3 className="card-title" style={{ margin: 0 }}>备赛简报</h3>
+          <h3 className="card-title" style={{ margin: 0 }}>{t("race.briefingTitle")}</h3>
           <p className="card-sub" style={{ margin: "3px 0 0" }}>
-            数据驱动的赛前状态客观推导，战术策略供备赛参考，实际执行以教练方案为准
+            {t("race.briefingSub")}
           </p>
         </div>
-        <span className="pill" style={{ fontSize: 11 }}>随训练数据自动重算</span>
+        <span className="pill" style={{ fontSize: 11 }}>{t("race.autoRecalc")}</span>
       </div>
 
       {/* 第一层：双列指标看板（左右完全对称） */}
       <div className="grid g2" style={{ alignItems: "stretch", marginBottom: 18 }}>
         <div className="card" style={{ background: "var(--surface-2)", border: "1px solid var(--border)", margin: 0, padding: 14 }}>
           <h4 style={{ margin: "0 0 12px", fontSize: 13, color: "var(--text-dim)", display: "flex", justifyContent: "space-between" }}>
-            <span>成绩预测与目标</span>
-            <span style={{ fontSize: 11, fontWeight: "normal" }}>折算地形与海拔</span>
+            <span>{t("race.predAndGoal")}</span>
+            <span style={{ fontSize: 11, fontWeight: "normal" }}>{t("race.terrainAdjusted")}</span>
           </h4>
           <PredictionCard b={b} goalSec={d.race.goalSec} />
         </div>
 
         <div className="card" style={{ background: "var(--surface-2)", border: "1px solid var(--border)", margin: 0, padding: 14 }}>
           <h4 style={{ margin: "0 0 12px", fontSize: 13, color: "var(--text-dim)", display: "flex", justifyContent: "space-between" }}>
-            <span>备赛体能状态</span>
-            <span style={{ fontSize: 11, fontWeight: "normal" }}>近 4 周动态窗口</span>
+            <span>{t("race.readinessStatus")}</span>
+            <span style={{ fontSize: 11, fontWeight: "normal" }}>{isZh ? "近 4 周动态窗口" : "Rolling 4w Window"}</span>
           </h4>
           <TrainingStateCard training={b.training} />
         </div>

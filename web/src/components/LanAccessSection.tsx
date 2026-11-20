@@ -2,8 +2,10 @@ import { useEffect, useState } from "react";
 import { api, type LanStatus } from "../api";
 import { useClipboard } from "../utils/clipboard";
 import QrCode from "./QrCode";
+import { useI18n } from "../i18n";
 
 export default function LanAccessSection() {
+  const { isZh } = useI18n();
   const [status, setStatus] = useState<LanStatus | null>(null);
   const [loading, setLoading] = useState(true);
   const [toggling, setToggling] = useState(false);
@@ -70,17 +72,17 @@ export default function LanAccessSection() {
       >
         <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
           <h3 className="card-title" style={{ margin: 0, display: "flex", alignItems: "center", gap: 6 }}>
-            <span>📱</span> 手机端访问与局域网共享 (PWA)
+            <span>📱</span> {isZh ? "手机端访问与局域网共享 (PWA)" : "Mobile Access & LAN Companion (PWA)"}
           </h3>
           {loading ? (
-            <span className="pill" style={{ fontSize: 11, opacity: 0.6 }}>检测中…</span>
+            <span className="pill" style={{ fontSize: 11, opacity: 0.6 }}>{isZh ? "检测中…" : "Checking..."}</span>
           ) : status?.enabled ? (
             <span className="pill good" style={{ fontSize: 11, fontWeight: 600 }}>
-              ● 局域网已开启 · 手机可直连
+              {isZh ? "● 局域网已开启 · 手机可直连" : "● LAN Enabled · Mobile Ready"}
             </span>
           ) : (
             <span className="pill" style={{ fontSize: 11, opacity: 0.7 }}>
-              ○ 已关闭 · 仅电脑本机
+              {isZh ? "○ 已关闭 · 仅电脑本机" : "○ Disabled · Localhost Only"}
             </span>
           )}
         </div>
@@ -88,7 +90,7 @@ export default function LanAccessSection() {
         {/* 开关控件 */}
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
           <span style={{ fontSize: 12.5, color: "var(--text-dim)", fontWeight: 500 }}>
-            {status?.enabled ? "允许局域网连入" : "仅本机私密模式"}
+            {status?.enabled ? (isZh ? "允许局域网连入" : "Allow LAN Access") : (isZh ? "仅本机私密模式" : "Localhost Sandbox")}
           </span>
           <label
             style={{

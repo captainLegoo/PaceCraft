@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { createPortal } from "react-dom";
 import type { AuthStatus, GarminMultiAuthStatus } from "../api";
+import { useI18n } from "../i18n";
 
 export default function ConnectWatchModal({
   open,
@@ -23,6 +24,7 @@ export default function ConnectWatchModal({
   onConnectGarmin: (apiKey: string, region: "auto" | "global" | "cn") => Promise<void>;
   onDisconnectGarmin: (region?: "cn" | "global") => Promise<void> | void;
 }) {
+  const { t, isZh } = useI18n();
   const [cnKey, setCnKey] = useState("");
   const [globalKey, setGlobalKey] = useState("");
   const [connectingRegion, setConnectingRegion] = useState<"cn" | "global" | null>(null);
@@ -35,7 +37,7 @@ export default function ConnectWatchModal({
   const handleGarminSubmit = async (region: "cn" | "global") => {
     const key = region === "cn" ? cnKey.trim() : globalKey.trim();
     if (!key) {
-      setErrorMsg(`请输入 Garmin (${region === "cn" ? "中国区" : "国际区"}) Personal API Key`);
+      setErrorMsg(t("connect.garminKeyEmptyWarn", { region: region === "cn" ? (isZh ? "中国区" : "China") : (isZh ? "国际区" : "Global") }));
       return;
     }
     setErrorMsg(null);
@@ -43,7 +45,7 @@ export default function ConnectWatchModal({
     setConnectingRegion(region);
     try {
       await onConnectGarmin(key, region);
-      setSuccessMsg(`Garmin ${region === "cn" ? "中国区" : "国际区"} 连接成功！`);
+      setSuccessMsg(t("connect.garminConnectSuccess", { region: region === "cn" ? (isZh ? "中国区" : "China") : (isZh ? "国际区" : "Global") }));
       if (region === "cn") setCnKey("");
       else setGlobalKey("");
     } catch (err) {
@@ -102,10 +104,10 @@ export default function ConnectWatchModal({
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 14 }}>
           <div>
             <h2 style={{ fontSize: 17, fontWeight: 700, margin: "0 0 4px 0", display: "flex", alignItems: "center", gap: 8 }}>
-              <span>⌚</span> 连接运动手表 / 数据源
+              <span>⌚</span> {t("connect.modalTitle")}
             </h2>
             <p style={{ fontSize: 12, color: "var(--text-dim)", margin: 0, lineHeight: 1.5 }}>
-              支持多品牌无缝并存。无论今天戴佳明、明天戴高驰，数据 100% 仅保存在你的本地电脑。
+              {t("connect.modalDesc")}
             </p>
           </div>
           <button
@@ -151,21 +153,21 @@ export default function ConnectWatchModal({
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
               <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                 <span style={{ fontSize: 16 }}>🏃</span>
-                <span style={{ fontSize: 14, fontWeight: 600 }}>COROS 高驰</span>
+                <span style={{ fontSize: 14, fontWeight: 600 }}>{t("connect.corosTab")}</span>
                 <span style={{ fontSize: 11, color: "#3b82f6", background: "rgba(59,130,246,0.1)", padding: "1px 6px", borderRadius: 10 }}>
-                  官方 Web OAuth
+                  OAuth 2.0
                 </span>
               </div>
               {corosAuth?.connected ? (
                 <span style={{ fontSize: 11.5, color: "#10b981", background: "rgba(16,185,129,0.1)", padding: "2px 8px", borderRadius: 12, fontWeight: 500 }}>
-                  ● 已连接 ({corosAuth.nickname || "已授权"})
+                  ● {t("connect.connected")} ({corosAuth.nickname || (isZh ? "已授权" : "Authorized")})
                 </span>
               ) : (
-                <span style={{ fontSize: 11.5, color: "var(--text-dim)" }}>未连接</span>
+                <span style={{ fontSize: 11.5, color: "var(--text-dim)" }}>{t("connect.notConnected")}</span>
               )}
             </div>
             <p style={{ fontSize: 12, color: "var(--text-dim)", margin: "0 0 10px 0", lineHeight: 1.4 }}>
-              通过高驰官方开放平台授权，支持一键拉取全部历史活动、分圈与体能负荷。
+              {t("connect.corosDesc")}
             </p>
 
             <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
@@ -191,7 +193,7 @@ export default function ConnectWatchModal({
                     gap: 6,
                   }}
                 >
-                  {corosConnecting ? "正在调起浏览器授权…" : "🔗 前往高驰网页一键授权"}
+                  {corosConnecting ? t("connect.connecting") : t("connect.connectCorosBtn")}
                 </button>
               ) : (
                 <>
@@ -204,7 +206,7 @@ export default function ConnectWatchModal({
                     disabled={corosConnecting}
                     style={{ fontSize: 12, padding: "5px 12px", background: "var(--surface)", border: "1px solid var(--border)", color: "var(--text)", borderRadius: 6, cursor: "pointer" }}
                   >
-                    重新授权
+                    {t("connect.reauth")}
                   </button>
                   {confirmDisconnect !== "coros" ? (
                     <button
@@ -212,11 +214,11 @@ export default function ConnectWatchModal({
                       onClick={() => setConfirmDisconnect("coros")}
                       style={{ fontSize: 12, padding: "5px 12px", background: "rgba(239,68,68,0.1)", color: "#ef4444", border: "1px solid rgba(239,68,68,0.2)", borderRadius: 6, cursor: "pointer" }}
                     >
-                      解除绑定
+                      {t("connect.disconnect")}
                     </button>
                   ) : (
                     <div style={{ display: "inline-flex", gap: 6, alignItems: "center" }}>
-                      <span style={{ fontSize: 11.5, color: "#ef4444" }}>确定解除？</span>
+                      <span style={{ fontSize: 11.5, color: "#ef4444" }}>{t("connect.disconnectConfirm")}</span>
                       <button
                         type="button"
                         onClick={async () => {
@@ -225,14 +227,14 @@ export default function ConnectWatchModal({
                         }}
                         style={{ fontSize: 11, padding: "3px 8px", background: "#ef4444", color: "#fff", border: "none", borderRadius: 4, cursor: "pointer" }}
                       >
-                        确认
+                        {t("common.confirm")}
                       </button>
                       <button
                         type="button"
                         onClick={() => setConfirmDisconnect(null)}
                         style={{ fontSize: 11, padding: "3px 6px", background: "transparent", color: "var(--text-dim)", border: "1px solid var(--border)", borderRadius: 4, cursor: "pointer" }}
                       >
-                        取消
+                        {t("common.cancel")}
                       </button>
                     </div>
                   )}
@@ -253,24 +255,24 @@ export default function ConnectWatchModal({
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
               <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                 <span style={{ fontSize: 16 }}>🇨🇳</span>
-                <span style={{ fontSize: 14, fontWeight: 600 }}>Garmin 佳明 (中国区)</span>
+                <span style={{ fontSize: 14, fontWeight: 600 }}>{t("connect.garminRegionCn")}</span>
                 <span style={{ fontSize: 11, color: "#10b981", background: "rgba(16,185,129,0.1)", padding: "1px 6px", borderRadius: 10 }}>
                   connect.garmin.cn
                 </span>
               </div>
               {isGarminCnConnected ? (
                 <span style={{ fontSize: 11.5, color: "#10b981", background: "rgba(16,185,129,0.1)", padding: "2px 8px", borderRadius: 12, fontWeight: 500 }}>
-                  ● 已连接 ({garminAuth?.cn?.userFullName || "中国区账号"})
+                  ● {t("connect.connected")} ({garminAuth?.cn?.userFullName || (isZh ? "中国区账号" : "CN Account")})
                 </span>
               ) : (
-                <span style={{ fontSize: 11.5, color: "var(--text-dim)" }}>未连接</span>
+                <span style={{ fontSize: 11.5, color: "var(--text-dim)" }}>{t("connect.notConnected")}</span>
               )}
             </div>
             <p style={{ fontSize: 12, color: "var(--text-dim)", margin: "0 0 10px 0", lineHeight: 1.4 }}>
-              适用于国行设备、Garmin Connect 中国版 App 用户，支持全量下载原始 .FIT 分圈文件。
+              {isZh ? "适用于国行设备、Garmin Connect 中国版 App 用户，支持全量下载原始 .FIT 分圈文件。" : "For China mainland devices and Garmin Connect CN app accounts. Supports raw .FIT downloads."}
             </p>
             <div style={{ fontSize: 11.5, color: "var(--text-dim)", marginBottom: 10, padding: "5px 8px", background: "rgba(255,255,255,0.03)", borderRadius: 5 }}>
-              ℹ️ 首次同步需回溯拉取 1 年历史分圈以构建全量预测模型与体能曲线，时间可能较长（约 20~60 秒）。
+              ℹ️ {isZh ? "首次同步需回溯拉取 1 年历史分圈以构建全量预测模型与体能曲线，时间可能较长（约 20~60 秒）。" : "Initial sync downloads past 1 year of workout laps to build EWMA load curves (~20-60s)."}
             </div>
 
             {isGarminCnConnected ? (
@@ -282,7 +284,7 @@ export default function ConnectWatchModal({
                   }}
                   style={{ fontSize: 12, padding: "5px 12px", background: "rgba(239,68,68,0.1)", color: "#ef4444", border: "1px solid rgba(239,68,68,0.2)", borderRadius: 6, cursor: "pointer" }}
                 >
-                  解除绑定
+                  {t("connect.disconnect")}
                 </button>
               </div>
             ) : (
@@ -290,7 +292,7 @@ export default function ConnectWatchModal({
                 <div style={{ display: "flex", gap: 8, marginBottom: 8, flexWrap: "wrap" }}>
                   <input
                     type="password"
-                    placeholder="粘贴中国区 Key (GCDC_...)"
+                    placeholder={isZh ? "粘贴中国区 Key (GCDC_...)" : "Paste CN Key (GCDC_...)"}
                     value={cnKey}
                     onChange={(e) => setCnKey(e.target.value)}
                     style={{
@@ -320,7 +322,7 @@ export default function ConnectWatchModal({
                       opacity: connectingRegion === "cn" || !cnKey.trim() ? 0.6 : 1,
                     }}
                   >
-                    {connectingRegion === "cn" ? "验证中…" : "连接中国区"}
+                    {connectingRegion === "cn" ? (isZh ? "验证中…" : "Connecting...") : (isZh ? "连接中国区" : "Connect CN")}
                   </button>
                 </div>
                 <div style={{ fontSize: 11.5 }}>
@@ -330,7 +332,7 @@ export default function ConnectWatchModal({
                     rel="noopener noreferrer"
                     style={{ color: "#60a5fa", textDecoration: "underline" }}
                   >
-                    🔗 打开 Garmin 中国区后台生成 Key (connect.garmin.cn)
+                    🔗 {isZh ? "打开 Garmin 中国区后台生成 Key (connect.garmin.cn)" : "Open Garmin CN Portal to generate Key (connect.garmin.cn)"}
                   </a>
                 </div>
               </div>
@@ -349,24 +351,24 @@ export default function ConnectWatchModal({
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
               <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                 <span style={{ fontSize: 16 }}>🌐</span>
-                <span style={{ fontSize: 14, fontWeight: 600 }}>Garmin 佳明 (国际区)</span>
+                <span style={{ fontSize: 14, fontWeight: 600 }}>{t("connect.garminRegionGlobal")}</span>
                 <span style={{ fontSize: 11, color: "#60a5fa", background: "rgba(96,165,250,0.1)", padding: "1px 6px", borderRadius: 10 }}>
                   connect.garmin.com
                 </span>
               </div>
               {isGarminGlobalConnected ? (
                 <span style={{ fontSize: 11.5, color: "#10b981", background: "rgba(16,185,129,0.1)", padding: "2px 8px", borderRadius: 12, fontWeight: 500 }}>
-                  ● 已连接 ({garminAuth?.global?.userFullName || "国际区账号"})
+                  ● {t("connect.connected")} ({garminAuth?.global?.userFullName || (isZh ? "国际区账号" : "Global Account")})
                 </span>
               ) : (
-                <span style={{ fontSize: 11.5, color: "var(--text-dim)" }}>未连接</span>
+                <span style={{ fontSize: 11.5, color: "var(--text-dim)" }}>{t("connect.notConnected")}</span>
               )}
             </div>
             <p style={{ fontSize: 12, color: "var(--text-dim)", margin: "0 0 10px 0", lineHeight: 1.4 }}>
-              适用于海外版设备、Garmin Connect 国际服 App 跑友。
+              {isZh ? "适用于海外版设备、Garmin Connect 国际服 App 跑友。" : "For global Garmin watches & Garmin Connect Global app users worldwide."}
             </p>
             <div style={{ fontSize: 11.5, color: "var(--text-dim)", marginBottom: 10, padding: "5px 8px", background: "rgba(255,255,255,0.03)", borderRadius: 5 }}>
-              ℹ️ 首次同步需回溯拉取 1 年历史分圈以构建全量预测模型与体能曲线，时间可能较长（约 20~60 秒）。
+              ℹ️ {isZh ? "首次同步需回溯拉取 1 年历史分圈以构建全量预测模型与体能曲线，时间可能较长（约 20~60 秒）。" : "Initial sync downloads past 1 year of workout laps to build EWMA load curves (~20-60s)."}
             </div>
 
             {isGarminGlobalConnected ? (
@@ -378,7 +380,7 @@ export default function ConnectWatchModal({
                   }}
                   style={{ fontSize: 12, padding: "5px 12px", background: "rgba(239,68,68,0.1)", color: "#ef4444", border: "1px solid rgba(239,68,68,0.2)", borderRadius: 6, cursor: "pointer" }}
                 >
-                  解除绑定
+                  {t("connect.disconnect")}
                 </button>
               </div>
             ) : (
@@ -386,7 +388,7 @@ export default function ConnectWatchModal({
                 <div style={{ display: "flex", gap: 8, marginBottom: 8, flexWrap: "wrap" }}>
                   <input
                     type="password"
-                    placeholder="粘贴国际区 Key (GCDC_...)"
+                    placeholder={isZh ? "粘贴国际区 Key (GCDC_...)" : "Paste Global Key (GCDC_...)"}
                     value={globalKey}
                     onChange={(e) => setGlobalKey(e.target.value)}
                     style={{
@@ -416,7 +418,7 @@ export default function ConnectWatchModal({
                       opacity: connectingRegion === "global" || !globalKey.trim() ? 0.6 : 1,
                     }}
                   >
-                    {connectingRegion === "global" ? "验证中…" : "连接国际区"}
+                    {connectingRegion === "global" ? (isZh ? "验证中…" : "Connecting...") : (isZh ? "连接国际区" : "Connect Global")}
                   </button>
                 </div>
                 <div style={{ fontSize: 11.5 }}>
@@ -426,7 +428,7 @@ export default function ConnectWatchModal({
                     rel="noopener noreferrer"
                     style={{ color: "#60a5fa", textDecoration: "underline" }}
                   >
-                    🔗 打开 Garmin 国际区后台生成 Key (connect.garmin.com)
+                    🔗 {isZh ? "打开 Garmin 国际区后台生成 Key (connect.garmin.com)" : "Open Garmin Global Portal to generate Key (connect.garmin.com)"}
                   </a>
                 </div>
               </div>
@@ -446,14 +448,14 @@ export default function ConnectWatchModal({
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
               <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                 <span style={{ fontSize: 15 }}>📁</span>
-                <span style={{ fontSize: 13, fontWeight: 600 }}>原始 .FIT / GPX 文件直读导入 & Suunto 颂拓</span>
+                <span style={{ fontSize: 13, fontWeight: 600 }}>{isZh ? "原始 .FIT / GPX 文件直读导入 & Suunto 颂拓" : "Raw .FIT / GPX File Direct Import & Suunto"}</span>
               </div>
               <span style={{ fontSize: 11, color: "var(--text-dim)", background: "var(--surface)", padding: "1px 6px", borderRadius: 8 }}>
-                规划中
+                {isZh ? "规划中" : "Upcoming"}
               </span>
             </div>
             <p style={{ fontSize: 11.5, color: "var(--text-dim)", margin: "4px 0 0 0" }}>
-              直接拖入任意运动手表导出的原始 .FIT 文件，本地即时解析。
+              {isZh ? "直接拖入任意运动手表导出的原始 .FIT 文件，本地即时解析。" : "Drop raw .FIT files directly for instant local parsing and analysis."}
             </p>
           </div>
         </div>
@@ -473,7 +475,7 @@ export default function ConnectWatchModal({
               cursor: "pointer",
             }}
           >
-            关闭
+            {t("common.close")}
           </button>
         </div>
       </div>

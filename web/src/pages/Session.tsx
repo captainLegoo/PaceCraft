@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { api, type Session, type SessionDetail } from "../api";
 import { AerobicDecouplingCard, AiDisclaimerNotice, LineChart, Markdown, ZoneBar, fmtDur, fmtPace, formatPace, paceColor } from "../charts";
 import { IconBack, IconHeart, IconLoad, IconRoute, IconStopwatch as IconStopwatch2, IconPulse, IconGauge, IconTrend, IconShoe } from "../icons";
+import { useI18n } from "../i18n";
 
 export default function SessionView({
   sessionKey, onBack, aiConfigured, onOpenActivity, onSessionKeyChange,
@@ -12,6 +13,7 @@ export default function SessionView({
   onOpenActivity?: (labelId: string, sessionKey?: string) => void;
   onSessionKeyChange?: (newKey: string) => void;
 }) {
+  const { t, isZh } = useI18n();
   const [d, setD] = useState<SessionDetail | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [focus, setFocus] = useState("");
@@ -199,13 +201,22 @@ export default function SessionView({
 
   const activityListCard = (
     <div className="card">
-      <h3 className="card-title">逐条记录</h3>
-      <p className="card-sub">点单条可进入该条独立的分圈明细</p>
+      <h3 className="card-title">{t("session.activitiesBreakdown")}</h3>
+      <p className="card-sub">{t("session.activitiesBreakdownDesc")}</p>
       <div className="table-scroll-wrap">
         <div className="table-scroll" style={{ maxHeight: 320, overflow: "auto" }}>
           <table>
             <thead>
-              <tr><th>设备 / 来源</th><th>开始</th><th>距离</th><th>用时</th><th>配速</th><th>心率</th><th>步频</th><th>负荷</th></tr>
+              <tr>
+                <th>{t("session.deviceSource")}</th>
+                <th>{t("session.start")}</th>
+                <th>{t("session.distance")}</th>
+                <th>{t("session.duration")}</th>
+                <th>{t("session.pace")}</th>
+                <th>{t("session.heartRate")}</th>
+                <th>{t("session.cadence")}</th>
+                <th>{t("session.load")}</th>
+              </tr>
             </thead>
             <tbody>
               {allActs.map((a) => (
@@ -213,15 +224,15 @@ export default function SessionView({
                   <td>
                     <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
                       {a.source === "garmin" ? (
-                        <span style={{ fontSize: 10, padding: "1px 5px", borderRadius: 4, background: "rgba(16, 185, 129, 0.12)", color: "#10b981", fontWeight: 600 }}>佳明</span>
+                        <span style={{ fontSize: 10, padding: "1px 5px", borderRadius: 4, background: "rgba(16, 185, 129, 0.12)", color: "#10b981", fontWeight: 600 }}>Garmin</span>
                       ) : (
-                        <span style={{ fontSize: 10, padding: "1px 5px", borderRadius: 4, background: "rgba(59, 130, 246, 0.12)", color: "#3b82f6", fontWeight: 600 }}>高驰</span>
+                        <span style={{ fontSize: 10, padding: "1px 5px", borderRadius: 4, background: "rgba(59, 130, 246, 0.12)", color: "#3b82f6", fontWeight: 600 }}>COROS</span>
                       )}
                       {a.isDuplicate === 1 ? (
-                        <span style={{ fontSize: 10, padding: "1px 5px", borderRadius: 4, background: "rgba(234, 179, 8, 0.15)", color: "#eab308", fontWeight: 600 }}>对比样本</span>
+                        <span style={{ fontSize: 10, padding: "1px 5px", borderRadius: 4, background: "rgba(234, 179, 8, 0.15)", color: "#eab308", fontWeight: 600 }}>{isZh ? "对比样本" : "Reference"}</span>
                       ) : (
                         hasConflict && (
-                          <span style={{ fontSize: 10, padding: "1px 5px", borderRadius: 4, background: "rgba(99, 102, 241, 0.12)", color: "#818cf8", fontWeight: 600 }}>主力有效</span>
+                          <span style={{ fontSize: 10, padding: "1px 5px", borderRadius: 4, background: "rgba(99, 102, 241, 0.12)", color: "#818cf8", fontWeight: 600 }}>{isZh ? "主力有效" : "Primary"}</span>
                         )
                       )}
                     </span>
@@ -242,12 +253,31 @@ export default function SessionView({
     </div>
   );
 
+  const getClassificationName = (c: string) => {
+    if (isZh) return c;
+    const map: Record<string, string> = {
+      "中等距离跑": "Medium Distance",
+      "长距离跑": "Long Run",
+      "间歇跑": "Intervals",
+      "间歇训练": "Interval Workout",
+      "恢复跑": "Recovery Run",
+      "乳酸阈值跑": "Threshold Run",
+      "节奏跑": "Tempo Run",
+      "马拉松配速跑": "Marathon Pace (MP)",
+      "法特莱克": "Fartlek",
+      "热身/放松": "Warmup / Cooldown",
+      "多次短距离": "Multiple Short Runs",
+      "组合训练": "Combo Training",
+    };
+    return map[c] || c;
+  };
+
   return (
     <>
       <div className="page-head">
         <div style={{ minWidth: 0, flex: 1 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
-            <h2 style={{ margin: 0 }}>{s.date} 训练场次</h2>
+            <h2 style={{ margin: 0 }}>{s.date} {t("session.workoutSession")}</h2>
             {hasConflict && actA && actB && (
               <div style={{ display: "inline-flex", background: "var(--border)", padding: 2, borderRadius: 8, gap: 2 }}>
                 <button
@@ -255,14 +285,14 @@ export default function SessionView({
                   onClick={() => setViewTab("overview")}
                   style={{ borderRadius: 6, fontWeight: viewTab === "overview" ? 600 : 400 }}
                 >
-                  🏃 整场概览
+                  🏃 {isZh ? "整场概览" : "Overview"}
                 </button>
                 <button
                   className={`btn xs ${viewTab === "compare" ? "primary" : "ghost"}`}
                   onClick={() => setViewTab("compare")}
                   style={{ borderRadius: 6, fontWeight: viewTab === "compare" ? 600 : 400, display: "inline-flex", alignItems: "center", gap: 4 }}
                 >
-                  <span>⚖️ 双表同屏对比</span>
+                  <span>⚖️ {isZh ? "双表同屏对比" : "Dual-Watch Comparison"}</span>
                   <span style={{ fontSize: 9, padding: "1px 5px", borderRadius: 4, background: "#10b981", color: "#fff", fontWeight: 700 }}>HOT</span>
                 </button>
               </div>
@@ -270,12 +300,14 @@ export default function SessionView({
           </div>
           <div className="sub" style={{ wordBreak: "break-word", marginTop: 4 }}>
             <span className={`pill ${s.kind === "multi" ? "accent" : ""}`}>
-              {s.kind === "multi" ? `${s.activityCount} 条记录合并` : "单次记录"}
+              {s.kind === "multi" ? (isZh ? `${s.activityCount} 条记录合并` : `${s.activityCount} activities merged`) : t("session.singleActivity")}
             </span>
-            {"  "}判定为 <strong style={{ color: "var(--accent)" }}>{s.classification}</strong> · {s.classificationReason}
+            {"  "}{t("session.categorizedAs")} <strong style={{ color: "var(--accent)" }}>{getClassificationName(s.classification)}</strong> · {s.classificationReason}
           </div>
         </div>
-        <button className="btn" style={{ flexShrink: 0 }} onClick={onBack} title="返回上一级（快捷键：Esc 或鼠标后退键）"><IconBack size={15} />返回</button>
+        <button className="btn" style={{ flexShrink: 0 }} onClick={onBack} title={isZh ? "返回上一级（快捷键：Esc 或鼠标后退键）" : "Back (Esc)"}>
+          <IconBack size={15} />{t("common.back")}
+        </button>
       </div>
 
       {viewTab === "compare" && hasConflict && actA && actB ? (
@@ -287,33 +319,33 @@ export default function SessionView({
               <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                   <span style={{ fontSize: 13, padding: "3px 8px", borderRadius: 6, background: colorA, color: "#fff", fontWeight: 700 }}>{brandA}</span>
-                  <span style={{ fontWeight: 600 }}>{actA.sportName || "主力记录"}</span>
-                  <span className="pill accent" style={{ fontSize: 11 }}>{isKeepBoth ? "独立有效" : "主力有效"}</span>
+                  <span style={{ fontWeight: 600 }}>{actA.sportName || (isZh ? "主力记录" : "Primary")}</span>
+                  <span className="pill accent" style={{ fontSize: 11 }}>{isKeepBoth ? (isZh ? "独立有效" : "Independent") : (isZh ? "主力有效" : "Primary")}</span>
                 </div>
                 <span style={{ color: "var(--text-faint)", fontWeight: 700 }}>VS</span>
                 <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                   <span style={{ fontSize: 13, padding: "3px 8px", borderRadius: 6, background: colorB, color: "#fff", fontWeight: 700 }}>{brandB}</span>
-                  <span style={{ fontWeight: 600 }}>{actB.sportName || "副表记录"}</span>
-                  <span className="pill" style={{ fontSize: 11, background: "rgba(234, 179, 8, 0.15)", color: "#eab308" }}>{isKeepBoth ? "独立有效" : "对比样本"}</span>
+                  <span style={{ fontWeight: 600 }}>{actB.sportName || (isZh ? "副表记录" : "Reference")}</span>
+                  <span className="pill" style={{ fontSize: 11, background: "rgba(234, 179, 8, 0.15)", color: "#eab308" }}>{isKeepBoth ? (isZh ? "独立有效" : "Independent") : (isZh ? "对比样本" : "Reference")}</span>
                 </div>
               </div>
               <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
                 {!isKeepBoth ? (
                   <>
                     <button className="btn sm" onClick={() => handleResolve(actB.labelId, actA.labelId, "set_primary")}>
-                      设 {brandB} 为主力
+                      {isZh ? `设 ${brandB} 为主力` : `Set ${brandB} as Primary`}
                     </button>
                     <button className="btn sm" onClick={() => handleResolve(actA.labelId, actB.labelId, "keep_both")}>
-                      保留两者（独立计入）
+                      {isZh ? "保留两者（独立计入）" : "Keep Both Independently"}
                     </button>
                   </>
                 ) : (
                   <button className="btn sm" onClick={() => handleResolve(actA.labelId, actB.labelId, "set_primary")}>
-                    恢复以 {brandA} 为主力去重
+                    {isZh ? `恢复以 ${brandA} 为主力去重` : `Restore ${brandA} as Primary`}
                   </button>
                 )}
                 <button className="btn sm ghost" onClick={() => setViewTab("overview")}>
-                  返回整场概览
+                  {t("session.backToOverview")}
                 </button>
               </div>
             </div>
@@ -323,7 +355,7 @@ export default function SessionView({
           <div className="grid g4" style={{ marginBottom: 14 }}>
             <div className="card stat-card">
               <div className="stat">
-                <span className="label"><IconRoute size={15} />总距离对比</span>
+                <span className="label"><IconRoute size={15} />{t("session.distanceComparison")}</span>
                 <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginTop: 4 }}>
                   <span style={{ fontSize: 18, fontWeight: 700, color: colorA }}>{compStats?.primary?.distanceKm ?? actA.distanceKm ?? "—"}<span style={{ fontSize: 12, fontWeight: 400 }}>km</span></span>
                   <span style={{ color: "var(--text-faint)", fontSize: 12 }}>vs</span>
@@ -332,7 +364,7 @@ export default function SessionView({
                 <div style={{ marginTop: 6 }}>
                   {compStats?.delta?.distanceDiffKm != null ? (
                     <span className="pill" style={{ fontSize: 11, padding: "1px 6px" }}>
-                      差异: {compStats.delta.distanceDiffKm > 0 ? `+${compStats.delta.distanceDiffKm}` : compStats.delta.distanceDiffKm} km ({compStats.delta.distanceDiffPct > 0 ? `+${compStats.delta.distanceDiffPct}` : compStats.delta.distanceDiffPct}%)
+                      {t("common.diff")}: {compStats.delta.distanceDiffKm > 0 ? `+${compStats.delta.distanceDiffKm}` : compStats.delta.distanceDiffKm} km ({compStats.delta.distanceDiffPct > 0 ? `+${compStats.delta.distanceDiffPct}` : compStats.delta.distanceDiffPct}%)
                     </span>
                   ) : "—"}
                 </div>
@@ -341,7 +373,7 @@ export default function SessionView({
 
             <div className="card stat-card">
               <div className="stat">
-                <span className="label"><IconHeart size={15} />平均心率对比</span>
+                <span className="label"><IconHeart size={15} />{t("session.avgHrComparison")}</span>
                 <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginTop: 4 }}>
                   <span style={{ fontSize: 18, fontWeight: 700, color: colorA }}>{compStats?.primary?.avgHr ?? actA.avgHr ?? "—"}<span style={{ fontSize: 12, fontWeight: 400 }}>bpm</span></span>
                   <span style={{ color: "var(--text-faint)", fontSize: 12 }}>vs</span>
@@ -350,7 +382,7 @@ export default function SessionView({
                 <div style={{ marginTop: 6 }}>
                   {compStats?.delta?.avgHrDiff != null ? (
                     <span className="pill" style={{ fontSize: 11, padding: "1px 6px", color: Math.abs(compStats.delta.avgHrDiff) > 3 ? "var(--warn)" : undefined }}>
-                      差异: {compStats.delta.avgHrDiff > 0 ? `+${compStats.delta.avgHrDiff}` : compStats.delta.avgHrDiff} bpm
+                      {t("common.diff")}: {compStats.delta.avgHrDiff > 0 ? `+${compStats.delta.avgHrDiff}` : compStats.delta.avgHrDiff} bpm
                     </span>
                   ) : "—"}
                 </div>
@@ -359,7 +391,7 @@ export default function SessionView({
 
             <div className="card stat-card">
               <div className="stat">
-                <span className="label"><IconStopwatch2 size={15} />全场总用时</span>
+                <span className="label"><IconStopwatch2 size={15} />{t("session.totalDuration")}</span>
                 <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginTop: 4 }}>
                   <span style={{ fontSize: 18, fontWeight: 700, color: colorA }}>{fmtDur(compStats?.primary?.durationSec ?? actA.durationSec ?? 0)}</span>
                   <span style={{ color: "var(--text-faint)", fontSize: 12 }}>vs</span>
@@ -368,7 +400,7 @@ export default function SessionView({
                 <div style={{ marginTop: 6 }}>
                   {compStats?.delta?.durationDiffSec != null ? (
                     <span className="pill" style={{ fontSize: 11, padding: "1px 6px" }}>
-                      差异: {compStats.delta.durationDiffSec > 0 ? `+${compStats.delta.durationDiffSec}s` : `${compStats.delta.durationDiffSec}s`}
+                      {t("common.diff")}: {compStats.delta.durationDiffSec > 0 ? `+${compStats.delta.durationDiffSec}s` : `${compStats.delta.durationDiffSec}s`}
                     </span>
                   ) : "—"}
                 </div>
@@ -377,7 +409,7 @@ export default function SessionView({
 
             <div className="card stat-card">
               <div className="stat">
-                <span className="label"><IconLoad size={15} />统一负荷 (TRIMP)</span>
+                <span className="label"><IconLoad size={15} />{isZh ? "统一负荷 (TRIMP)" : "Unified TRIMP"}</span>
                 <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginTop: 4 }}>
                   <span style={{ fontSize: 18, fontWeight: 700, color: colorA }}>{compStats?.primary?.trainingLoad ?? "—"}</span>
                   <span style={{ color: "var(--text-faint)", fontSize: 12 }}>vs</span>
@@ -386,7 +418,7 @@ export default function SessionView({
                 <div style={{ marginTop: 6 }}>
                   {compStats?.delta?.trainingLoadDiff != null ? (
                     <span className="pill" style={{ fontSize: 11, padding: "1px 6px" }}>
-                      差异: {compStats.delta.trainingLoadDiff > 0 ? `+${compStats.delta.trainingLoadDiff}` : compStats.delta.trainingLoadDiff}
+                      {t("common.diff")}: {compStats.delta.trainingLoadDiff > 0 ? `+${compStats.delta.trainingLoadDiff}` : compStats.delta.trainingLoadDiff}
                     </span>
                   ) : "—"}
                 </div>
@@ -397,7 +429,7 @@ export default function SessionView({
           <div className="grid g4" style={{ marginBottom: 14 }}>
             <div className="card stat-card">
               <div className="stat">
-                <span className="label"><IconGauge size={15} />平均配速对比</span>
+                <span className="label"><IconGauge size={15} />{t("session.paceComparison")}</span>
                 <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginTop: 4 }}>
                   <span style={{ fontSize: 18, fontWeight: 700, color: colorA }}>{fmtPace(compStats?.primary?.avgPaceSec ?? actA.avgPaceSec)}</span>
                   <span style={{ color: "var(--text-faint)", fontSize: 12 }}>vs</span>
@@ -406,7 +438,7 @@ export default function SessionView({
                 <div style={{ marginTop: 6 }}>
                   {compStats?.delta?.paceDiffSec != null ? (
                     <span className="pill" style={{ fontSize: 11, padding: "1px 6px" }}>
-                      {compStats.delta.paceDiffSec === 0 ? "配速持平" : compStats.delta.paceDiffSec > 0 ? `副表慢 ${compStats.delta.paceDiffSec}秒` : `副表快 ${Math.abs(compStats.delta.paceDiffSec)}秒`}
+                      {compStats.delta.paceDiffSec === 0 ? (isZh ? "配速持平" : "Equal pace") : compStats.delta.paceDiffSec > 0 ? (isZh ? `副表慢 ${compStats.delta.paceDiffSec}秒` : `Sec表 -${compStats.delta.paceDiffSec}s`) : (isZh ? `副表快 ${Math.abs(compStats.delta.paceDiffSec)}秒` : `Sec表 +${Math.abs(compStats.delta.paceDiffSec)}s`)}
                     </span>
                   ) : "—"}
                 </div>
@@ -415,7 +447,7 @@ export default function SessionView({
 
             <div className="card stat-card">
               <div className="stat">
-                <span className="label"><IconPulse size={15} />最高心率对比</span>
+                <span className="label"><IconPulse size={15} />{t("session.maxHrComparison")}</span>
                 <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginTop: 4 }}>
                   <span style={{ fontSize: 18, fontWeight: 700, color: colorA }}>{compStats?.primary?.maxHr ?? "—"}<span style={{ fontSize: 12, fontWeight: 400 }}>bpm</span></span>
                   <span style={{ color: "var(--text-faint)", fontSize: 12 }}>vs</span>
@@ -424,7 +456,7 @@ export default function SessionView({
                 <div style={{ marginTop: 6 }}>
                   {compStats?.delta?.maxHrDiff != null ? (
                     <span className="pill" style={{ fontSize: 11, padding: "1px 6px" }}>
-                      差异: {compStats.delta.maxHrDiff > 0 ? `+${compStats.delta.maxHrDiff}` : compStats.delta.maxHrDiff} bpm
+                      {t("common.diff")}: {compStats.delta.maxHrDiff > 0 ? `+${compStats.delta.maxHrDiff}` : compStats.delta.maxHrDiff} bpm
                     </span>
                   ) : "—"}
                 </div>
@@ -433,7 +465,7 @@ export default function SessionView({
 
             <div className="card stat-card">
               <div className="stat">
-                <span className="label"><IconShoe size={15} />平均步频对比</span>
+                <span className="label"><IconShoe size={15} />{t("session.cadenceComparison")}</span>
                 <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginTop: 4 }}>
                   <span style={{ fontSize: 18, fontWeight: 700, color: colorA }}>{compStats?.primary?.avgCadence ?? "—"}<span style={{ fontSize: 12, fontWeight: 400 }}>spm</span></span>
                   <span style={{ color: "var(--text-faint)", fontSize: 12 }}>vs</span>
@@ -442,7 +474,7 @@ export default function SessionView({
                 <div style={{ marginTop: 6 }}>
                   {compStats?.delta?.avgCadenceDiff != null ? (
                     <span className="pill" style={{ fontSize: 11, padding: "1px 6px" }}>
-                      差异: {compStats.delta.avgCadenceDiff > 0 ? `+${compStats.delta.avgCadenceDiff}` : compStats.delta.avgCadenceDiff} spm
+                      {t("common.diff")}: {compStats.delta.avgCadenceDiff > 0 ? `+${compStats.delta.avgCadenceDiff}` : compStats.delta.avgCadenceDiff} spm
                     </span>
                   ) : "—"}
                 </div>
@@ -551,20 +583,20 @@ export default function SessionView({
 
           {/* 逐圈横向指标明细对照明细 */}
           <div className="card" style={{ marginBottom: 14 }}>
-            <h3 className="card-title">逐圈横向数据对照表</h3>
-            <p className="card-sub">逐圈比对单圈用时、配速、心率与步频（括号内显示副表相对于主表的偏差）</p>
+            <h3 className="card-title">{t("session.lapComparison")}</h3>
+            <p className="card-sub">{isZh ? "逐圈比对单圈用时、配速、心率与步频（括号内显示副表相对于主表的偏差）" : "Lap-by-lap comparison of time, pace, heart rate, and cadence"}</p>
             <div className="table-scroll-wrap">
               <div className="table-scroll" style={{ maxHeight: 380, overflow: "auto" }}>
                 <table>
                   <thead>
                     <tr>
-                      <th>分圈</th>
-                      <th>距离 ({brandA} / {brandB})</th>
-                      <th>平均配速 ({brandA} vs {brandB})</th>
-                      <th>平均心率 ({brandA} vs {brandB})</th>
-                      <th>最大心率 ({brandA} vs {brandB})</th>
-                      <th>平均步频 ({brandA} vs {brandB})</th>
-                      <th>单圈用时 ({brandA} vs {brandB})</th>
+                      <th>{isZh ? "分圈" : "Lap"}</th>
+                      <th>{isZh ? `距离 (${brandA} / ${brandB})` : `Dist (${brandA} / ${brandB})`}</th>
+                      <th>{isZh ? `平均配速 (${brandA} vs ${brandB})` : `Avg Pace (${brandA} vs ${brandB})`}</th>
+                      <th>{isZh ? `平均心率 (${brandA} vs ${brandB})` : `Avg HR (${brandA} vs ${brandB})`}</th>
+                      <th>{isZh ? `最大心率 (${brandA} vs ${brandB})` : `Max HR (${brandA} vs ${brandB})`}</th>
+                      <th>{isZh ? `平均步频 (${brandA} vs ${brandB})` : `Avg Cadence (${brandA} vs ${brandB})`}</th>
+                      <th>{isZh ? `单圈用时 (${brandA} vs ${brandB})` : `Lap Time (${brandA} vs ${brandB})`}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -578,7 +610,7 @@ export default function SessionView({
 
                       return (
                         <tr key={idx}>
-                          <td style={{ fontWeight: 600 }}>第 {idx} 圈</td>
+                          <td style={{ fontWeight: 600 }}>{isZh ? `第 ${idx} 圈` : `Lap ${idx}`}</td>
                           <td className="num">
                             {lapA ? (lapA.distanceM / 1000).toFixed(2) : "—"} / {lapB ? (lapB.distanceM / 1000).toFixed(2) : "—"} km
                           </td>
@@ -701,58 +733,64 @@ export default function SessionView({
           <div className="grid g4" style={{ marginBottom: 14 }}>
             <div className="card stat-card">
               <div className="stat">
-                <span className="label"><IconRoute size={15} />全场总距离</span>
+                <span className="label"><IconRoute size={15} />{t("session.totalDistance")}</span>
                 <span className="value num" style={{ color: "var(--accent)" }}>{s.totals.distanceKm}<span className="unit">km</span></span>
-                <span className="hint">{s.activityCount} 条记录合计</span>
+                <span className="hint">{t("session.activitiesCount", { count: s.activityCount })}</span>
               </div>
             </div>
             <div className="card stat-card">
               <div className="stat">
-                <span className="label"><IconStopwatch2 size={15} />全场总时长</span>
+                <span className="label"><IconStopwatch2 size={15} />{t("session.totalDuration")}</span>
                 <span className="value num">{fmtDur(s.totals.durationSec)}</span>
                 <span className="hint">
                   {multi
-                    ? `含记录间休息 ${fmtDur(s.maxGapSec)}`
-                    : `均配 ${fmtPace(s.totals.distanceKm ? s.totals.durationSec / s.totals.distanceKm : null)}/km`}
+                    ? (isZh ? `含记录间休息 ${fmtDur(s.maxGapSec)}` : `Rest: ${fmtDur(s.maxGapSec)}`)
+                    : t("session.avgPaceLabel", { pace: fmtPace(s.totals.distanceKm ? s.totals.durationSec / s.totals.distanceKm : null) })}
                 </span>
               </div>
             </div>
             <div className="card stat-card">
               <div className="stat">
-                <span className="label"><IconHeart size={15} />平均心率</span>
+                <span className="label"><IconHeart size={15} />{t("session.avgHr")}</span>
                 <span className="value num">{s.totals.avgHr ?? "—"}<span className="unit">bpm</span></span>
-                <span className="hint">按时长加权</span>
+                <span className="hint">{t("session.durationWeighted")}</span>
               </div>
             </div>
             <div className="card stat-card">
               <div className="stat">
-                <span className="label"><IconLoad size={15} />训练负荷合计</span>
+                <span className="label"><IconLoad size={15} />{t("session.trainingLoadTotal")}</span>
                 <span className="value num">{s.totals.trainingLoad || "—"}</span>
-                <span className="hint">爬升 {s.totals.elevGain} m · {s.totals.calories} kcal</span>
+                <span className="hint">{t("session.climbAndCal", { elev: s.totals.elevGain, cal: s.totals.calories })}</span>
               </div>
             </div>
           </div>
 
           {s.sets.length > 0 && (
             <div className="card" style={{ marginBottom: 14 }}>
-              <h3 className="card-title">组结构识别</h3>
+              <h3 className="card-title">{isZh ? "组结构识别" : "Interval Sets Structure"}</h3>
               <p className="card-sub">
-                从 {s.activityCount} 条记录中按距离与配速的一致性自动识别出 {s.sets.length} 组重复（共 {setCount} 组次）。
-                这只是基于数据模式的推断，最终以你的实际安排为准。
+                {isZh
+                  ? `从 ${s.activityCount} 条记录中按距离与配速的一致性自动识别出 ${s.sets.length} 组重复（共 ${setCount} 组次）。`
+                  : `Identified ${s.sets.length} repeated sets (${setCount} reps) across ${s.activityCount} activities based on pace & distance.`}
               </p>
               <div className="table-scroll-wrap">
                 <div className="table-scroll">
                   <table>
                     <thead>
                       <tr>
-                        <th>组</th><th>单组距离</th><th>组数</th><th>平均单组用时</th>
-                        <th>平均配速</th><th>平均心率</th><th>组间休息</th>
+                        <th>{isZh ? "组" : "Set"}</th>
+                        <th>{isZh ? "单组距离" : "Distance"}</th>
+                        <th>{isZh ? "组数" : "Reps"}</th>
+                        <th>{isZh ? "平均单组用时" : "Avg Time"}</th>
+                        <th>{isZh ? "平均配速" : "Avg Pace"}</th>
+                        <th>{isZh ? "平均心率" : "Avg HR"}</th>
+                        <th>{isZh ? "组间休息" : "Rest"}</th>
                       </tr>
                     </thead>
                     <tbody>
                       {s.sets.map((set, i) => (
                         <tr key={i}>
-                          <td>第 {i + 1} 组</td>
+                          <td>{isZh ? `第 ${i + 1} 组` : `Set ${i + 1}`}</td>
                           <td className="num" style={{ textAlign: "left", color: "var(--accent)" }}>{set.distanceLabel}</td>
                           <td className="num">× {set.reps}</td>
                           <td className="num">{fmtDur(set.avgDurationSec)}</td>
@@ -773,20 +811,17 @@ export default function SessionView({
           {laps.length > 2 && (
             <>
               <div className="card" style={{ marginBottom: 14 }}>
-                <h3 className="card-title">整场连贯曲线</h3>
+                <h3 className="card-title">{t("session.continuousCurve")}</h3>
                 <p className="card-sub">
-                  这张图回答的问题是：<strong>整场跑下来，状态是怎么变化的？</strong>
-                  手表常把间歇、放松、拉伸拆成多条记录，单看每条只看到片段；这里把它们并到同一条
-                  <strong>累计时间轴</strong>（含组间休息）上，配速起伏、心率漂移、组与组之间歇了多久，一眼可见。
-                  短于 900m 的分段不参与配速线，所以配速线常比心率线短。
+                  {t("session.continuousCurveDesc")}
                 </p>
                 <LineChart
                   labels={chartLabels}
                   xValues={chartX}
                   xFmt={fmtDur}
                   series={[
-                    { key: "pace", label: "配速（左轴）", color: "var(--chart-accent)", values: paceSeries },
-                    { key: "hr", label: "平均心率（右轴）", color: "var(--chart-hr)", axis: "right", values: hrSeries },
+                    { key: "pace", label: t("session.paceLeftAxis"), color: "var(--chart-accent)", values: paceSeries },
+                    { key: "hr", label: t("session.hrRightAxis"), color: "var(--chart-hr)", axis: "right", values: hrSeries },
                   ]}
                   yFmt={fmtPace}
                   yFmtRight={(n) => String(Math.round(n))}
@@ -811,8 +846,8 @@ export default function SessionView({
 
               <div className="grid g2" style={{ marginBottom: 14 }}>
                 <div className="card">
-                  <h3 className="card-title">心率区间分布</h3>
-                  <p className="card-sub">把整场所有分段合并后计算</p>
+                  <h3 className="card-title">{isZh ? "心率区间分布" : "Heart Rate Zones"}</h3>
+                  <p className="card-sub">{isZh ? "把整场所有分段合并后计算" : "Aggregated across all segments"}</p>
                   <div style={{ marginTop: 16 }}>
                     <ZoneBar
                       zones={zones.zones.map((z) => ({ ...z, color: z.zone.toLowerCase() }))}
@@ -834,16 +869,22 @@ export default function SessionView({
 
           {laps.length > 2 && (
             <div className="card" style={{ marginBottom: 14 }}>
-              <h3 className="card-title">全场分段明细</h3>
-              <p className="card-sub">按累计时间排序，休息段不会出现数据点</p>
+              <h3 className="card-title">{isZh ? "全场分段明细" : "Lap & Segment Splits"}</h3>
+              <p className="card-sub">{isZh ? "按累计时间排序，休息段不会出现数据点" : "Ordered by continuous timeline; rest gaps omitted"}</p>
               <div className="table-scroll-wrap">
                 <div className="table-scroll" style={{ maxHeight: 380, overflow: "auto" }}>
                   <table>
                     <thead>
                       <tr>
-                        <th>累计时间</th><th>段</th><th>距离</th><th>配速</th>
-                        <th>心率</th><th>最大</th><th>步频</th><th>步幅</th>
-                        <th>爬升</th>
+                        <th>{isZh ? "累计时间" : "Elapsed"}</th>
+                        <th>{isZh ? "段" : "Lap"}</th>
+                        <th>{isZh ? "距离" : "Dist"}</th>
+                        <th>{isZh ? "配速" : "Pace"}</th>
+                        <th>{isZh ? "心率" : "HR"}</th>
+                        <th>{isZh ? "最大" : "Max"}</th>
+                        <th>{isZh ? "步频" : "Cadence"}</th>
+                        <th>{isZh ? "步幅" : "Stride"}</th>
+                        <th>{isZh ? "爬升" : "Gain"}</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -868,27 +909,34 @@ export default function SessionView({
           )}
 
           <div className="card">
-            <h3 className="card-title">AI 场次分析</h3>
+            <h3 className="card-title">{isZh ? "AI 场次分析" : "AI Session Retrospective"}</h3>
             <p className="card-sub">
-              把这 {s.activityCount} 条记录作为<strong>一整场</strong>送进模型，而不是逐条点评。
-              {multi && " 间歇训练会被当成一组整体结构来解读。"}
+              {isZh
+                ? `把这 ${s.activityCount} 条记录作为一整场送进模型，而不是逐条点评。${multi ? " 间歇训练会被当成一组整体结构来解读。" : ""}`
+                : `Feeds all ${s.activityCount} activities as a single holistic endurance session to the LLM coach.`}
             </p>
 
             {!aiConfigured && (
-              <div className="banner info">还没有配置 AI 模型，请到「设置」页填写模型地址、API Key 和模型名。</div>
+              <div className="banner info">
+                {isZh ? "还没有配置 AI 模型，请到「设置」页填写模型地址、API Key 和模型名。" : "AI Coach model not configured yet. Go to Settings to set up your LLM API Key."}
+              </div>
             )}
             {aiErr && <div className="banner error">{aiErr}</div>}
 
             <div style={{ display: "flex", gap: 8, marginBottom: 14, minWidth: 0, width: "100%" }}>
               <input
                 style={{ flex: 1, minWidth: 0 }}
-                placeholder={multi ? "关注点（可选），例如：400m 组掉速，是不是组间休息不够？" : "关注点（可选），例如：这次长距离后程掉速，是不是强度太高了？"}
+                placeholder={
+                  multi
+                    ? (isZh ? "关注点（可选），例如：400m 组掉速，是不是组间休息不够？" : "Focus area (optional), e.g. paced drop in 400m reps?")
+                    : (isZh ? "关注点（可选），例如：这次长距离后程掉速，是不是强度太高了？" : "Focus area (optional), e.g. cardiac drift in late miles?")
+                }
                 value={focus}
                 onChange={(e) => setFocus(e.target.value)}
                 onKeyDown={(e) => { if (e.key === "Enter" && aiConfigured && !busy) runAnalyze(); }}
               />
               <button className="btn primary" style={{ flexShrink: 0, whiteSpace: "nowrap" }} disabled={!aiConfigured || busy} onClick={runAnalyze}>
-                {busy ? <><span className="spin" /> 分析中…</> : reports.length > 0 ? "重新分析" : "开始分析"}
+                {busy ? <><span className="spin" /> {isZh ? "分析中…" : "Analyzing..."}</> : reports.length > 0 ? (isZh ? "重新分析" : "Re-analyze") : (isZh ? "开始分析" : "Analyze Session")}
               </button>
             </div>
 

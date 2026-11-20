@@ -9,6 +9,7 @@ import { DEFAULT_APP_VERSION } from "../version";
 import { openExternal, ExternalLink } from "../openExternal";
 import FeedbackSection from "./FeedbackSection";
 import LanAccessSection from "../components/LanAccessSection";
+import { useI18n, LanguageSettingsCard } from "../i18n";
 
 export type PopularModel = {
   model: string;
@@ -342,6 +343,7 @@ export default function Settings({
   hasNewUpdate?: boolean;
   onCheckUpdate?: () => void;
 }) {
+  const { t, dict, isZh } = useI18n();
   const {
     auth,
     loading: authLoading,
@@ -551,10 +553,10 @@ export default function Settings({
     if (typeof heightCm !== "number" || typeof weightKg !== "number" || heightCm <= 0 || weightKg <= 0) return null;
     const hM = heightCm / 100;
     const bmi = Math.round((weightKg / (hM * hM)) * 10) / 10;
-    if (bmi < 18.5) return { bmi, label: "偏瘦", color: "var(--accent)" };
-    if (bmi <= 23.9) return { bmi, label: "正常 · 耐力跑适宜", color: "var(--success, #10b981)" };
-    if (bmi <= 27.9) return { bmi, label: "微胖 / 超重", color: "var(--warning, #f59e0b)" };
-    return { bmi, label: "偏重 / 肥胖", color: "var(--danger, #ef4444)" };
+    if (bmi < 18.5) return { bmi, label: isZh ? "偏瘦" : "Underweight", color: "var(--accent)" };
+    if (bmi <= 23.9) return { bmi, label: isZh ? "正常 · 耐力跑适宜" : "Normal · Ideal for Endurance", color: "var(--success, #10b981)" };
+    if (bmi <= 27.9) return { bmi, label: isZh ? "微胖 / 超重" : "Overweight", color: "var(--warning, #f59e0b)" };
+    return { bmi, label: isZh ? "偏重 / 肥胖" : "Obese", color: "var(--danger, #ef4444)" };
   };
 
   // 跑者身体档案与心率配置
@@ -979,6 +981,17 @@ export default function Settings({
 
   return (
     <>
+      {/* 语言与区域偏好设置 (Language Preferences) */}
+      <div className="card" style={{ marginBottom: 14 }}>
+        <h3 className="card-title" style={{ marginBottom: 2 }}>
+          🌐 {dict.settings.langSectionTitle}
+        </h3>
+        <p className="card-sub" style={{ margin: "2px 0 0" }}>
+          {dict.settings.langSectionDesc}
+        </p>
+        <LanguageSettingsCard />
+      </div>
+
       {/* 手机端访问与局域网共享 (PWA)：全宽横向展开，保持下方双列网格自然对称平衡 */}
       <LanAccessSection />
 
@@ -988,24 +1001,26 @@ export default function Settings({
           <div className="card">
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 2 }}>
               <h3 className="card-title" style={{ marginBottom: 0 }}>
-                <IconGear size={14} /> AI 教练模型
+                <IconGear size={14} /> {isZh ? "AI 教练模型" : "AI Coach Model"}
               </h3>
               {status?.aiConfigured ? (
                 <span className="pill good" style={{ fontSize: 11, fontWeight: 500 }}>
-                  已就绪 · {cfg.model || "已配置"}
+                  {isZh ? `已就绪 · ${cfg.model || "已配置"}` : `Ready · ${cfg.model || "Configured"}`}
                 </span>
               ) : (
-                <span className="pill" style={{ fontSize: 11, fontWeight: 500 }}>未配置</span>
+                <span className="pill" style={{ fontSize: 11, fontWeight: 500 }}>{isZh ? "未配置" : "Not Configured"}</span>
               )}
             </div>
             <p className="card-sub" style={{ margin: "2px 0 12px" }}>
-              配置大语言模型用于训练场次深度复盘、周报评析与赛事备战推演。支持主流模型平台与自定义接口。
+              {isZh
+                ? "配置大语言模型用于训练场次深度复盘、周报评析与赛事备战推演。支持主流模型平台与自定义接口。"
+                : "Configure Large Language Models for workout debriefs, weekly progress analysis, and race strategy predictions."}
             </p>
 
             {/* 1. 服务商平台选择（平铺报菜名 / 网格排列方式展示） */}
             <div style={{ marginBottom: 12 }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-                <span style={{ fontSize: 12.5, fontWeight: 600, color: "var(--fg)" }}>服务商平台</span>
+                <span style={{ fontSize: 12.5, fontWeight: 600, color: "var(--fg)" }}>{isZh ? "服务商平台" : "Model Provider"}</span>
                 {/* 紧凑下拉备选：方便快速直接切换 */}
                 <select
                   value={currentProviderId}
@@ -1203,22 +1218,22 @@ export default function Settings({
                 onChange={(e) => setCfg({ ...cfg, apiKey: e.target.value })}
                 placeholder={
                   currentProvider?.id === "ollama"
-                    ? "本地 Ollama 无需鉴权（可留空或填 ollama）"
+                    ? (isZh ? "本地 Ollama 无需鉴权（可留空或填 ollama）" : "Local Ollama requires no auth")
                     : currentHasSavedKey
-                    ? "已安全保存（留空则继续使用已保存的密钥）"
-                    : "请输入 API Key"
+                    ? (isZh ? "已安全保存（留空则继续使用已保存的密钥）" : "Secured (leave empty to keep current key)")
+                    : (isZh ? "请输入 API Key" : "Enter API Key")
                 }
               />
             </label>
 
             {/* 3. 模型名 */}
             <label className="field" style={{ marginBottom: 12 }}>
-              <span>模型名称</span>
+              <span>{isZh ? "模型名称" : "Model Name"}</span>
               <input
                 list="ai-model-datalist"
                 value={cfg.model}
                 onChange={(e) => setCfg({ ...cfg, model: e.target.value })}
-                placeholder="例如 deepseek-chat、qwen-plus 或 gpt-4o-mini"
+                placeholder={isZh ? "例如 deepseek-chat、qwen-plus 或 gpt-4o-mini" : "e.g. gpt-4o-mini, deepseek-chat, or claude-3-5-sonnet"}
               />
               <datalist id="ai-model-datalist">
                 {currentProvider?.popularModels?.map((pm) => (
@@ -1247,14 +1262,14 @@ export default function Settings({
                 }}
                 onClick={() => setShowAdvanced(!showAdvanced)}
               >
-                <span>{showAdvanced ? "▾ 收起高级超参数 (Temperature / Token)" : "▸ 展开高级超参数 (Temperature / Token)"}</span>
+                <span>{showAdvanced ? (isZh ? "▾ 收起高级超参数 (Temperature / Token)" : "▾ Collapse Advanced Params") : (isZh ? "▸ 展开高级超参数 (Temperature / Token)" : "▸ Expand Advanced Params")}</span>
               </button>
 
               {showAdvanced && (
                 <div style={{ marginTop: 8, padding: "12px", background: "var(--surface-2)", borderRadius: 8, display: "flex", flexDirection: "column", gap: 10, border: "1px solid var(--border)" }}>
                   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
                     <label className="field" style={{ margin: 0 }}>
-                      <span>温度 (Temperature)</span>
+                      <span>{isZh ? "温度 (Temperature)" : "Temperature"}</span>
                       <input
                         type="number"
                         step="0.1"
@@ -1265,7 +1280,7 @@ export default function Settings({
                       />
                     </label>
                     <label className="field" style={{ margin: 0 }}>
-                      <span>最大输出 Token</span>
+                      <span>{isZh ? "最大输出 Token" : "Max Tokens"}</span>
                       <input
                         type="number"
                         step="1000"
@@ -1277,7 +1292,9 @@ export default function Settings({
                     </label>
                   </div>
                   <div className="hint">
-                    提示：默认 64000。像 DeepSeek-R1、OpenAI o1/o3-mini 等推理模型，其深度思考（Thinking）与最终正文共用 Token 预算；针对官方硬性限制较低的平台（如 DeepSeek 官方 8K），系统会在调用时自动做安全封顶。
+                    {isZh
+                      ? "提示：默认 64000。像 DeepSeek-R1、OpenAI o1/o3-mini 等推理模型，其深度思考（Thinking）与最终正文共用 Token 预算；针对官方硬性限制较低的平台（如 DeepSeek 官方 8K），系统会在调用时自动做安全封顶。"
+                      : "Default: 64,000. Reasoning models (DeepSeek-R1, o1, o3-mini) share tokens between reasoning and completion. Caps are applied automatically per provider limit."}
                   </div>
                 </div>
               )}
@@ -1290,14 +1307,14 @@ export default function Settings({
                 onClick={save}
                 disabled={!canSubmit}
               >
-                {saving ? "保存中…" : "保存配置"}
+                {saving ? (isZh ? "保存中…" : "Saving…") : (isZh ? "保存配置" : "Save Config")}
               </button>
               <button
                 className="btn"
                 onClick={testAi}
                 disabled={!canSubmit}
               >
-                {testing ? <><span className="spin" /> 测试连接中…</> : "测试连接"}
+                {testing ? <><span className="spin" /> {isZh ? "测试连接中…" : "Testing Connection…"}</> : (isZh ? "测试连接" : "Test Connection")}
               </button>
             </div>
 
@@ -1310,20 +1327,21 @@ export default function Settings({
 
           {/* 跑者个人档案与心率配置 */}
           <div className="card">
-            <h3 className="card-title"><IconHeart size={14} />跑者档案与心率</h3>
+            <h3 className="card-title"><IconHeart size={14} />{isZh ? "跑者档案与心率" : "Athlete Profile & Heart Rate Zones"}</h3>
             <p className="card-sub">
-              管理你的身体基础指标（生日、身高、体重）与心率区间配置。
-              心率区间决定训练和周报中的 Z1–Z5 分布；身高与体重用于精确计算运动卡路里、步态特征与爬坡能耗。
+              {isZh
+                ? "管理你的身体基础指标（生日、身高、体重）与心率区间配置。心率区间决定训练和周报中的 Z1–Z5 分布；身高与体重用于精确计算运动卡路里、步态特征与爬坡能耗。"
+                : "Manage biometrics (birthday, height, weight) and HR zones. Zones define Z1-Z5 distribution in workouts and reports."}
             </p>
 
             {/* 1. 身体基础指标表单 */}
             <div style={{ marginBottom: 18, paddingBottom: 16, borderBottom: "1px solid var(--border)" }}>
               <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text-main)", marginBottom: 10 }}>
-                🏃 身体基础生理指标
+                {isZh ? "🏃 身体基础生理指标" : "🏃 Biometrics & Baseline"}
               </div>
               <div className="grid g2" style={{ marginBottom: 10 }}>
                 <label className="field">
-                  <span>出生日期</span>
+                  <span>{t("settings.birthday")}</span>
                   <input
                     type="date"
                     value={hr.birthday}
@@ -1332,55 +1350,55 @@ export default function Settings({
                   <div className="hint">
                     {computeAge(hr.birthday) !== null ? (
                       <>
-                        当前 <strong>{computeAge(hr.birthday)} 岁</strong> · Tanaka 推算理论最大心率约 <strong>{Math.round(208 - 0.7 * computeAge(hr.birthday)!)} bpm</strong>
+                        {t("settings.birthdayAgeTanaka", { age: computeAge(hr.birthday), hr: Math.round(208 - 0.7 * computeAge(hr.birthday)!) })}
                       </>
                     ) : (
-                      "用于推算最大心率基准、疲劳恢复曲线与赛事年龄组对标"
+                      t("settings.birthdayHint")
                     )}
                   </div>
                 </label>
 
                 <label className="field">
-                  <span>生理性别</span>
+                  <span>{t("settings.gender")}</span>
                   <select
                     value={hr.gender}
                     onChange={(e) => setHr({ ...hr, gender: e.target.value as any })}
                   >
-                    <option value="">未指定（保密）</option>
-                    <option value="male">男 (Male)</option>
-                    <option value="female">女 (Female)</option>
+                    <option value="">{t("settings.genderUnspecified")}</option>
+                    <option value="male">{t("settings.genderMale")}</option>
+                    <option value="female">{t("settings.genderFemale")}</option>
                   </select>
-                  <div className="hint">用于生理心率储备计算与同性别水平对齐</div>
+                  <div className="hint">{t("settings.genderHint")}</div>
                 </label>
               </div>
 
               <div className="grid g2" style={{ marginBottom: 10 }}>
                 <label className="field">
-                  <span>身高 (cm)</span>
+                  <span>{t("settings.height")}</span>
                   <input
                     type="number"
                     step="0.5"
                     min="50"
                     max="250"
-                    placeholder="例如 175"
+                    placeholder="175"
                     value={hr.heightCm}
                     onChange={(e) => setHr({ ...hr, heightCm: e.target.value === "" ? "" : Number(e.target.value) })}
                   />
-                  <div className="hint">用于评估步频步幅比（Stride-to-Height Ratio）与跑姿防伤</div>
+                  <div className="hint">{t("settings.heightHint")}</div>
                 </label>
 
                 <label className="field">
-                  <span>体重 (kg)</span>
+                  <span>{t("settings.weight")}</span>
                   <input
                     type="number"
                     step="0.1"
                     min="25"
                     max="250"
-                    placeholder="例如 65.5"
+                    placeholder="65.5"
                     value={hr.weightKg}
                     onChange={(e) => setHr({ ...hr, weightKg: e.target.value === "" ? "" : Number(e.target.value) })}
                   />
-                  <div className="hint">用于精准计算单次与周运动卡路里及越野爬坡做功</div>
+                  <div className="hint">{t("settings.weightHint")}</div>
                 </label>
               </div>
 
@@ -1397,7 +1415,7 @@ export default function Settings({
                     marginTop: 6,
                   }}
                 >
-                  <span style={{ fontSize: 13, color: "var(--text-dim)" }}>身体质量指数 (BMI):</span>
+                  <span style={{ fontSize: 13, color: "var(--text-dim)" }}>{t("settings.bmi")}:</span>
                   <strong style={{ fontSize: 14, color: computeBmi(hr.heightCm, hr.weightKg)!.color }}>
                     {computeBmi(hr.heightCm, hr.weightKg)!.bmi}
                   </strong>
@@ -1412,7 +1430,7 @@ export default function Settings({
                     {computeBmi(hr.heightCm, hr.weightKg)!.label}
                   </span>
                   <span style={{ fontSize: 12, color: "var(--text-faint)", marginLeft: "auto" }}>
-                    体重不直接削减平路配速预测，专注身体做功与能量计算
+                    {t("settings.bmiNotice")}
                   </span>
                 </div>
               )}
@@ -1420,7 +1438,7 @@ export default function Settings({
 
             {/* 2. 心率区间设置 */}
             <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text-main)", marginBottom: 10 }}>
-              ❤️ 心率区间与极限基准
+              {t("settings.hrSectionTitle")}
             </div>
 
             <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
@@ -1430,7 +1448,7 @@ export default function Settings({
                 style={{ cursor: "pointer", fontWeight: hr.calcMode === "auto" ? 600 : 400 }}
                 onClick={() => setHr((h) => ({ ...h, calcMode: "auto" }))}
               >
-                自动推算（HRR 储备心率）
+                {t("settings.hrAutoHrr")}
               </button>
               <button
                 type="button"
@@ -1438,7 +1456,7 @@ export default function Settings({
                 style={{ cursor: "pointer", fontWeight: hr.calcMode === "custom" ? 600 : 400 }}
                 onClick={() => setHr((h) => ({ ...h, calcMode: "custom" }))}
               >
-                自定义五区间（可照抄手表设置）
+                {t("settings.hrCustom5")}
               </button>
             </div>
 
@@ -1446,24 +1464,24 @@ export default function Settings({
               <>
                 <div className="grid g2" style={{ marginBottom: 10 }}>
                   <label className="field">
-                    <span>实测最大心率</span>
+                    <span>{t("settings.measuredMaxHr")}</span>
                     <input
-                      type="number" value={hr.maxHr ?? ""} placeholder="留空 = 自动推算"
+                      type="number" value={hr.maxHr ?? ""} placeholder={t("settings.emptyAutoEstimate")}
                       onChange={(e) => setHr({ ...hr, maxHr: e.target.value === "" ? null : Number(e.target.value) })}
                     />
                     <div className="hint">
-                      留空则从你的历史分圈推算（取高强度分圈峰值中位数），再兜底到 Tanaka 公式
-                      {hr.observedMaxHr ? <>。当前数据推算值约 <strong>{hr.observedMaxHr}</strong></> : null}
+                      {t("settings.maxHrHint")}
+                      {hr.observedMaxHr ? <>{t("settings.observedMaxHrSuffix")}<strong>{hr.observedMaxHr}</strong></> : null}
                     </div>
                   </label>
                   <label className="field">
-                    <span>实测静息心率</span>
+                    <span>{t("settings.measuredRestingHr")}</span>
                     <input
-                      type="number" value={hr.restingHr ?? ""} placeholder="留空 = 用 55"
+                      type="number" value={hr.restingHr ?? ""} placeholder={t("settings.emptyDefault55")}
                       onChange={(e) => setHr({ ...hr, restingHr: e.target.value === "" ? null : Number(e.target.value) })}
                     />
                     <div className="hint">
-                      早晨清醒未起床时的心率。留空则使用生理中位数 55。
+                      {t("settings.restingHrHint")}
                     </div>
                   </label>
                 </div>
@@ -1474,14 +1492,14 @@ export default function Settings({
                     style={{ fontSize: 12, cursor: "pointer" }}
                     onClick={copyEffectiveToCustom}
                   >
-                    📋 将当前推算值复制到自定义区间微调
+                    {t("settings.copyEffectiveToCustom")}
                   </button>
                 </div>
               </>
             ) : (
               <div style={{ marginBottom: 14 }}>
                 <div className="hint" style={{ marginBottom: 8, lineHeight: 1.5 }}>
-                  填写各个区间的起止心率（bpm），低于 Z1 下限将自动归为「Z0 积极恢复」，Z5 无氧动力默认无上限（直接照抄手表留空即可）：
+                  {t("settings.hrFormDesc")}
                 </div>
                 <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                   {/* Z0 积极恢复：与手表 6 行列表 1:1 对齐，自动跟随 Z1 下限 */}
@@ -1499,14 +1517,14 @@ export default function Settings({
                   >
                     <span style={{ width: 120, fontSize: 13, fontWeight: 500, color: "var(--text-dim)" }}>
                       <span className="pill" style={{ marginRight: 6, fontSize: 11, background: "var(--surface-3)", color: "var(--text-dim)" }}>Z0</span>
-                      积极恢复
+                      {t("settings.z0Label")}
                     </span>
                     <span style={{ width: 85, textAlign: "center", fontSize: 13, color: "var(--text-faint)", fontWeight: 500 }}>
                       &lt; {hr.customZones[0]?.hrLo || "—"}
                     </span>
                     <span style={{ color: "var(--text-faint)" }}>~</span>
                     <span style={{ fontSize: 12, color: "var(--text-faint)" }}>
-                      bpm（自动跟随 Z1 下限，无需单独填写）
+                      {t("settings.z0Hint")}
                     </span>
                   </div>
 
@@ -1527,12 +1545,12 @@ export default function Settings({
                       >
                         <span style={{ width: 120, fontSize: 13, fontWeight: 500 }}>
                           <span className="pill" style={{ marginRight: 6, fontSize: 11 }}>{z.zone}</span>
-                          {z.label}
+                          {t(`settings.${z.zone.toLowerCase()}Label`) || z.label}
                         </span>
                         <input
                           type="number"
                           style={{ width: 85, textAlign: "center" }}
-                          placeholder="下限"
+                          placeholder={t("settings.lowerLimit")}
                           value={z.hrLo}
                           onChange={(e) => {
                             const val = e.target.value === "" ? "" : Number(e.target.value);
@@ -1547,7 +1565,7 @@ export default function Settings({
                             <input
                               type="number"
                               style={{ width: 95, textAlign: "center" }}
-                              placeholder="无上限"
+                              placeholder={t("settings.z5NoUpper")}
                               value={z.hrHi}
                               onChange={(e) => {
                                 const val = e.target.value === "" ? "" : Number(e.target.value);
@@ -1557,7 +1575,7 @@ export default function Settings({
                               }}
                             />
                             <span style={{ fontSize: 12, color: "var(--text-faint)" }}>
-                              bpm（手表「&gt; {z.hrLo || 190}」无上限，留空即可）
+                              {t("settings.z5Hint", { val: z.hrLo || 190 })}
                             </span>
                           </div>
                         ) : (
@@ -1565,7 +1583,7 @@ export default function Settings({
                             <input
                               type="number"
                               style={{ width: 85, textAlign: "center" }}
-                              placeholder="上限"
+                              placeholder={t("settings.upperLimit")}
                               value={z.hrHi}
                               onChange={(e) => {
                                 const val = e.target.value === "" ? "" : Number(e.target.value);
@@ -1588,7 +1606,7 @@ export default function Settings({
             )}
 
             <div className="hint" style={{ marginBottom: 10 }}>
-              当前生效模式：<strong>{hr.method ?? (hr.calcMode === "custom" ? "自定义五区间心率法" : "五区间心率法（HRR）")}</strong>
+              {t("settings.currentHrMode")}：<strong>{hr.method ?? (hr.calcMode === "custom" ? t("settings.customMethod") : t("settings.hrrMethod"))}</strong>
               {hr.effectiveZones.length > 0 && (
                 <div style={{ marginTop: 4 }}>
                   <span style={{ color: "var(--text-faint)", marginRight: 8 }}>
@@ -1600,7 +1618,7 @@ export default function Settings({
             </div>
 
             <button className="btn primary" onClick={saveHr} disabled={hr.saving}>
-              {hr.saving ? "保存中…" : "保存跑者档案与心率"}
+              {hr.saving ? t("settings.saving") : t("settings.saveHrProfile")}
             </button>
             {hr.msg && (
               <div className={`banner ${hr.msg.kind === "ok" ? "info" : "error"}`} style={{ marginTop: 12, marginBottom: 0 }}>
@@ -1713,14 +1731,16 @@ export default function Settings({
           >
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6, flexWrap: "wrap", gap: 8 }}>
               <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700, display: "flex", alignItems: "center", gap: 8 }}>
-                <span>⌚</span> 运动手表账号连接
+                <span>⌚</span> {isZh ? "运动手表账号连接" : "Sports Watch Accounts"}
               </h3>
               <span style={{ fontSize: 12, color: "var(--text-dim)", background: "var(--surface-2)", padding: "2px 8px", borderRadius: 12 }}>
-                多品牌并存 · 本地安全加密
+                {isZh ? "多品牌并存 · 本地安全加密" : "Multi-brand · Secure Local Storage"}
               </span>
             </div>
             <p style={{ margin: "0 0 16px 0", fontSize: 12.5, color: "var(--text-dim)", lineHeight: 1.5 }}>
-              管理你的运动手表数据源。支持<strong>高驰 (COROS) 与佳明 (中国区 / 国际区)</strong> 同时绑定与多源数据汇聚，凭证仅保存在本地设备。
+              {isZh
+                ? "管理你的运动手表数据源。支持高驰 (COROS) 与佳明 (中国区 / 国际区) 同时绑定与多源数据汇聚，凭证仅保存在本地设备。"
+                : "Manage sports watch connections. Supports concurrent COROS and Garmin (China & Global) sync with credentials kept on your local device."}
             </p>
 
             <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
@@ -1728,7 +1748,7 @@ export default function Settings({
               <div className="card" style={{ margin: 0, background: "var(--surface-2, rgba(255,255,255,0.02))", border: "1px solid var(--border)" }}>
                 <h3 className="card-title">
                   <span style={{ display: "inline-block", width: 8, height: 8, borderRadius: "50%", background: auth?.connected ? "#10b981" : "#f59e0b", marginRight: 6 }} />
-                  COROS 高驰账号连接
+                  {isZh ? "COROS 高驰账号连接" : "COROS Account Connection"}
                   {status?.profile && (
                     <span style={{ fontSize: 11, fontWeight: "normal", color: "var(--text-dim)", marginLeft: 8 }}>
                       (档案: {status.profile.nickname && status.profile.nickname !== status.profile.name ? `${status.profile.name}（${status.profile.nickname}）` : status.profile.name})
@@ -2090,20 +2110,20 @@ export default function Settings({
 
           {/* 跨品牌运动类型过滤 */}
           <div className="card">
-            <h3 className="card-title"><IconSync size={14} />跨品牌运动类型过滤</h3>
+            <h3 className="card-title"><IconSync size={14} />{t("settings.sportsFilterTitle")}</h3>
             <p className="card-sub" style={{ marginBottom: 10 }}>
-              决定数据同步时会拉回哪些训练类别，已对<strong>高驰 (COROS) 与佳明 (Garmin) 双生态</strong>全量生效。没勾选的类别在同步时会自动忽略。
+              {t("settings.sportsFilterDesc")}
             </p>
 
             {sports && (
               <>
                 <div style={{ display: "flex", gap: 10, marginBottom: 12, alignItems: "center", flexWrap: "wrap" }}>
                   <span className="hint" style={{ marginTop: 0 }}>
-                    已选 <strong>{picked.length}</strong> 项
-                    {picked.length !== sports.selected.length && "（未保存）"}
+                    {t("settings.selectedCount", { count: picked.length })}
+                    {picked.length !== sports.selected.length && t("settings.unsaved")}
                   </span>
-                  <button className="sport-link" onClick={() => setPicked(sports.defaults)}>恢复默认</button>
-                  <button className="sport-link" onClick={() => setPicked([])}>清空</button>
+                  <button className="sport-link" onClick={() => setPicked(sports.defaults)}>{t("settings.restoreDefault")}</button>
+                  <button className="sport-link" onClick={() => setPicked([])}>{t("settings.clearAll")}</button>
                 </div>
 
                 {/* 核心耐力运动（跑步、骑行、游泳、健步、日常有氧） */}
@@ -2114,19 +2134,19 @@ export default function Settings({
                     return (
                       <div className="sport-group" key={g.key}>
                         <div className="sport-group-head">
-                          <span className="sport-group-name">{g.label}</span>
+                          <span className="sport-group-name">{isZh ? g.label : (t(`settings.${g.key}`) || g.label)}</span>
                           <button className="sport-link" onClick={() => setGroup(g.types, !allOn)}>
-                            {allOn ? "清空" : "全选"}
+                            {allOn ? t("settings.clearAll") : t("settings.selectAll")}
                           </button>
                         </div>
                         <div className="sport-chips">
-                          {g.types.map((t) => (
+                          {g.types.map((tItem) => (
                             <button
-                              key={t.code}
-                              className={`sport-chip ${picked.includes(t.code) ? "on" : ""}`}
-                              onClick={() => toggleSport(t.code)}
+                              key={tItem.code}
+                              className={`sport-chip ${picked.includes(tItem.code) ? "on" : ""}`}
+                              onClick={() => toggleSport(tItem.code)}
                             >
-                              {t.label}
+                              {tItem.label}
                             </button>
                           ))}
                         </div>
@@ -2148,8 +2168,8 @@ export default function Settings({
                         onClick={() => setShowMoreSports((v) => !v)}
                       >
                         {showMoreSports
-                          ? "▲ 收起其他运动类型"
-                          : `▼ 展开更多运动分类（球类/攀岩/水上等${morePickedCount > 0 ? ` · 已选 ${morePickedCount} 项` : ""}）`}
+                          ? t("settings.collapseOtherSports")
+                          : t("settings.expandOtherSports", { extra: morePickedCount > 0 ? t("settings.sportsPickedCount", { count: morePickedCount }) : "" })}
                       </button>
 
                       {showMoreSports && (
@@ -2159,19 +2179,19 @@ export default function Settings({
                             return (
                               <div className="sport-group" key={g.key}>
                                 <div className="sport-group-head">
-                                  <span className="sport-group-name">{g.label}</span>
+                                  <span className="sport-group-name">{isZh ? g.label : (t(`settings.${g.key}`) || g.label)}</span>
                                   <button className="sport-link" onClick={() => setGroup(g.types, !allOn)}>
-                                    {allOn ? "清空" : "全选"}
+                                    {allOn ? t("settings.clearAll") : t("settings.selectAll")}
                                   </button>
                                 </div>
                                 <div className="sport-chips">
-                                  {g.types.map((t) => (
+                                  {g.types.map((tItem) => (
                                     <button
-                                      key={t.code}
-                                      className={`sport-chip ${picked.includes(t.code) ? "on" : ""}`}
-                                      onClick={() => toggleSport(t.code)}
+                                      key={tItem.code}
+                                      className={`sport-chip ${picked.includes(tItem.code) ? "on" : ""}`}
+                                      onClick={() => toggleSport(tItem.code)}
                                     >
-                                      {t.label}
+                                      {tItem.label}
                                     </button>
                                   ))}
                                 </div>
@@ -2190,10 +2210,10 @@ export default function Settings({
                   disabled={sportsSaving || picked.length === 0}
                   style={{ marginTop: 4 }}
                 >
-                  {sportsSaving ? "保存中…" : "保存运动类型"}
+                  {sportsSaving ? t("settings.saving") : t("settings.saveSports")}
                 </button>
                 {picked.length === 0 && (
-                  <div className="hint" style={{ color: "var(--warn-text)" }}>至少要选一种，否则同步不到任何数据。</div>
+                  <div className="hint" style={{ color: "var(--warn-text)" }}>{t("settings.minOneSportWarn")}</div>
                 )}
                 {sportsMsg && (
                   <div className={`banner ${sportsMsg.kind === "ok" ? "info" : "error"}`} style={{ marginTop: 12, marginBottom: 0 }}>
@@ -2201,7 +2221,7 @@ export default function Settings({
                   </div>
                 )}
                 <div className="hint" style={{ marginTop: 14, marginBottom: 0 }}>
-                  勾选只影响<strong>之后</strong>的同步，不会删除库里已有的记录。
+                  {t("settings.saveSportsHint")}
                 </div>
               </>
             )}
@@ -2209,16 +2229,16 @@ export default function Settings({
 
           {/* 回溯天数与数据同步 (独立 Card) */}
           <div className="card">
-            <h3 className="card-title"><IconCalendar size={14} />回溯天数与数据同步</h3>
+            <h3 className="card-title"><IconCalendar size={14} />{t("settings.syncDaysTitle")}</h3>
             <p className="card-sub" style={{ marginBottom: 12 }}>
-              设置历史训练数据的同步时间范围。平台采用纯本地拉取机制，数据完全保存在你本机。
+              {t("settings.syncDaysDesc")}
             </p>
 
             <div style={{ display: "flex", gap: 8, marginBottom: 8, flexWrap: "wrap" }}>
               {[
-                { label: "近 90 天", days: 90 },
-                { label: "近 1 年 (推荐)", days: 365 },
-                { label: "近 2 年", days: 730 },
+                { label: t("settings.days90"), days: 90 },
+                { label: t("settings.days365"), days: 365 },
+                { label: t("settings.days730"), days: 730 },
               ].map((b) => (
                 <button
                   key={b.days}
@@ -2241,7 +2261,7 @@ export default function Settings({
             <label className="field" style={{ marginBottom: 12 }}>
               <input type="number" value={syncDays} onChange={(e) => setSyncDays(Number(e.target.value))} />
               <div className="hint">
-                <strong>推荐回溯 365 天（1 年）</strong>：长周期训练数据能自动提取半马、全马等真实比赛作为基准锚点，大幅提升马拉松完赛预测准确度。已存在的训练会自动跳过分圈，不会重复消耗耗时。
+                {t("settings.syncDaysTip")}
               </div>
             </label>
 
@@ -2265,16 +2285,16 @@ export default function Settings({
               className="btn primary"
               onClick={doSync}
               disabled={syncing || !hasAnyWatch}
-              title={!hasAnyWatch ? "请先在上方连接 COROS 或 Garmin 账号" : undefined}
+              title={!hasAnyWatch ? t("settings.connectWatchFirst") : undefined}
             >
               {syncing ? (
                 <>
-                  <span className="spin" /> 同步中 {syncProgress ? `(${syncProgress.percent}%)` : "..."}
+                  <span className="spin" /> {t("settings.syncing")} {syncProgress ? `(${syncProgress.percent}%)` : "..."}
                 </>
               ) : !hasAnyWatch ? (
-                "请先连接运动手表"
+                t("settings.connectWatchBtn")
               ) : (
-                "立即同步"
+                t("settings.syncNow")
               )}
             </button>
             {msg && (

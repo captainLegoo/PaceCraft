@@ -1,0 +1,21 @@
+{
+  "workoutSession": "Workout Session",
+  "totalDistance": "Total Distance",
+  "totalDuration": "Total Duration",
+  "avgHeartRate": "Avg Heart Rate",
+  "totalTrainingLoad": "Total Training Load",
+  "continuousCurve": "Continuous Pace & HR Curve",
+  "continuousCurveDesc": "Tracks pace stability, rest intervals, cardiac drift, and lap progression",
+  "paceLeftAxis": "Pace (Left Axis)",
+  "hrRightAxis": "Avg HR (Right Axis)",
+  "activitiesList": "Activities in this Session",
+  "splitsBreakdown": "Splits & Laps Breakdown",
+  "aerobicDecoupling": "Aerobic Decoupling Analysis",
+  "rockSolidBase": "Rock-Solid Base (Drift < 5%)",
+  "moderateDrift": "Mild Drift (5% ~ 8%)",
+  "severeDrift": "Significant Drift (> 8%)",
+  "firstHalf": "First Half (First 50% Time)",
+  "secondHalf": "Second Half (Second 50% Time)",
+  "secondHalfSensations": "Second-half Sensations",
+  "diagnosis": "Diagnosis"
+}

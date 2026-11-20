@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { api, type Activity, type LoadPoint, type Race, type Session, type Weekly } from "../api";
 import { BarChart, LineChart, fmtDate, fmtDur, fmtPace } from "../charts";
 import { IconCalendar, IconFlag, IconLoad, IconPulse, IconRoute, IconRun, IconShoe } from "../icons";
+import { useI18n } from "../i18n";
 
 export default function Training({
   onOpen,
@@ -18,6 +19,7 @@ export default function Training({
   onGoReadiness?: () => void;
   onGoCoach?: () => void;
 }) {
+  const { t, isZh } = useI18n();
   const [weekly, setWeekly] = useState<Weekly[]>([]);
   const [load, setLoad] = useState<LoadPoint[]>([]);
   const [acts, setActs] = useState<Activity[]>([]);
@@ -225,7 +227,7 @@ export default function Training({
       <div className="grid g4" style={{ marginBottom: 14 }}>
         <div className="card stat-card">
           <div className="stat">
-            <span className="label"><IconRoute size={15} />本周跑量</span>
+            <span className="label"><IconRoute size={15} />{isZh ? "本周跑量" : "This Week"}</span>
             <span className="value num">
               {last.distanceKm}<span className="unit">km</span>
               {deltaKm != null && (
@@ -238,27 +240,27 @@ export default function Training({
               )}
             </span>
             <span className="hint">
-              {deltaKm == null ? "仅一周数据" : deltaKm >= 0 ? "较上周持续累积" : "较上周主动减量"}
+              {deltaKm == null ? (isZh ? "仅一周数据" : "1 week of data") : deltaKm >= 0 ? (isZh ? "较上周持续累积" : "Building mileage") : (isZh ? "较上周主动减量" : "Deload week")}
             </span>
           </div>
         </div>
         <div className="card stat-card">
           <div className="stat">
-            <span className="label"><IconShoe size={15} />本周次数 / 最长单次</span>
-            <span className="value num">{last.count}<span className="unit">次 · {last.longestRunKm}km</span></span>
-            <span className="hint">周均配速 {fmtPace(last.avgPaceSec)} /km</span>
+            <span className="label"><IconShoe size={15} />{isZh ? "本周次数 / 最长单次" : "Sessions / Longest"}</span>
+            <span className="value num">{last.count}<span className="unit">{isZh ? "次 · " : " · "}{last.longestRunKm}km</span></span>
+            <span className="hint">{isZh ? `周均配速 ${fmtPace(last.avgPaceSec)} /km` : `Avg Pace ${fmtPace(last.avgPaceSec)} /km`}</span>
           </div>
         </div>
         <div className="card stat-card">
           <div className="stat">
-            <span className="label"><IconCalendar size={15} />近 {weeks} 周累计</span>
+            <span className="label"><IconCalendar size={15} />{isZh ? `近 ${weeks} 周累计` : `Past ${weeks} Weeks`}</span>
             <span className="value num">{Math.round(totalKm)}<span className="unit">km</span></span>
-            <span className="hint">{totalRun} 次训练</span>
+            <span className="hint">{totalRun} {isZh ? "次训练" : "runs"}</span>
           </div>
         </div>
         <div className="card stat-card">
           <div className="stat">
-            <span className="label"><IconLoad size={15} />当前负荷比 (ACWR)</span>
+            <span className="label"><IconLoad size={15} />{isZh ? "当前负荷比 (ACWR)" : "Current ACWR"}</span>
             <div style={{ display: "flex", alignItems: "baseline", gap: 8, flexWrap: "wrap" }}>
               <span className="value num" style={{ color: ratioColor(latestLoad?.ratio) }}>
                 {latestLoad?.ratio != null ? latestLoad.ratio.toFixed(2) : "—"}
@@ -284,10 +286,10 @@ export default function Training({
             {latestLoad?.ratio != null && (
               <div style={{ marginTop: 8, marginBottom: 4 }}>
                 <div style={{ position: "relative", height: 6, borderRadius: 3, background: "var(--surface-3)", display: "flex", overflow: "hidden" }}>
-                  <div title="减量区 (<0.8)" style={{ width: "30%", background: "var(--info)", opacity: 0.85 }} />
-                  <div title="安全甜点区 (0.8–1.3)" style={{ width: "35%", background: "var(--good)" }} />
-                  <div title="警示区 (1.3–1.5)" style={{ width: "15%", background: "var(--warn)" }} />
-                  <div title="高危区 (>1.5)" style={{ width: "20%", background: "var(--bad)" }} />
+                  <div title={isZh ? "减量区 (<0.8)" : "Undertraining (<0.8)"} style={{ width: "30%", background: "var(--info)", opacity: 0.85 }} />
+                  <div title={isZh ? "安全甜点区 (0.8–1.3)" : "Optimal Sweet Spot (0.8-1.3)"} style={{ width: "35%", background: "var(--good)" }} />
+                  <div title={isZh ? "警示区 (1.3–1.5)" : "Caution (1.3-1.5)"} style={{ width: "15%", background: "var(--warn)" }} />
+                  <div title={isZh ? "高危区 (>1.5)" : "High Risk (>1.5)"} style={{ width: "20%", background: "var(--bad)" }} />
                 </div>
                 <div style={{ position: "relative", width: "100%", height: 7, marginTop: 2 }}>
                   <div
@@ -307,7 +309,7 @@ export default function Training({
             )}
 
             <span className="hint">
-              {latestLoad?.comment ?? "—"}｜短期 {latestLoad?.shortLoad ?? "—"} / 长期 {latestLoad?.longLoad ?? "—"}
+              {latestLoad?.comment ?? "—"}｜{isZh ? `短期 ${latestLoad?.shortLoad ?? "—"} / 长期 ${latestLoad?.longLoad ?? "—"}` : `ATL ${latestLoad?.shortLoad ?? "—"} / CTL ${latestLoad?.longLoad ?? "—"}`}
             </span>
           </div>
         </div>
@@ -317,26 +319,26 @@ export default function Training({
         <div className="card">
           <div className="seg" style={{ marginBottom: 12 }}>
             {[12, 16, 26].map((w) => (
-              <button key={w} className={weeks === w ? "active" : ""} onClick={() => setWeeks(w)}>{w} 周</button>
+              <button key={w} className={weeks === w ? "active" : ""} onClick={() => setWeeks(w)}>{w} {isZh ? "周" : "w"}</button>
             ))}
           </div>
-          <h3 className="card-title">周跑量</h3>
-          <p className="card-sub">柱状为周总公里数，折线为该周平均心率。点柱子看这一周的汇总</p>
+          <h3 className="card-title">{isZh ? "周跑量" : "Weekly Mileage"}</h3>
+          <p className="card-sub">{isZh ? "柱状为周总公里数，折线为该周平均心率。点柱子看这一周的汇总" : "Weekly mileage and avg HR trend. Click bar to view weekly summary."}</p>
           <BarChart
             data={weekly.map((w) => ({
               label: fmtDate(w.weekStart),
               value: w.distanceKm,
               extra: w.avgHr ?? 0,
               tip: [
-                [`${w.distanceKm} km`, "距离"],
-                [`${w.count} 次`, "次数"],
-                [`${w.longestRunKm} km`, "最长单次"],
-                [fmtPace(w.avgPaceSec) + " /km", "周均配速"],
-                [`${w.avgHr ?? "—"} bpm`, "周均心率"],
+                [`${w.distanceKm} km`, isZh ? "距离" : "Dist"],
+                [`${w.count} ${isZh ? "次" : "runs"}`, isZh ? "次数" : "Count"],
+                [`${w.longestRunKm} km`, isZh ? "最长单次" : "Longest"],
+                [fmtPace(w.avgPaceSec) + " /km", isZh ? "周均配速" : "Avg Pace"],
+                [`${w.avgHr ?? "—"} bpm`, isZh ? "周均心率" : "Avg HR"],
               ] as [string, string][],
             }))}
             overlayColor="var(--hr)"
-            overlayLabel="平均心率"
+            overlayLabel={isZh ? "平均心率" : "Avg HR"}
             height={200}
             onSelect={(i) => onOpenWeek(weekly[i].weekStart)}
           />
@@ -345,19 +347,19 @@ export default function Training({
         <div className="card">
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 10, flexWrap: "wrap", gap: 8 }}>
             <div>
-              <h3 className="card-title" style={{ marginBottom: 2 }}>训练负荷与伤病监控</h3>
+              <h3 className="card-title" style={{ marginBottom: 2 }}>{isZh ? "训练负荷与伤病监控" : "Training Load & Injury Risk"}</h3>
               <p className="card-sub" style={{ margin: 0 }}>
                 {loadMode === "combo"
-                  ? "短期(疲劳) / 长期(体能)与急慢性负荷比，双轴联动"
-                  : "Tim Gabbett 理论：ACWR 7日均比值与 0.8–1.3 最佳甜点区"}
+                  ? (isZh ? "短期(疲劳) / 长期(体能)与急慢性负荷比，双轴联动" : "Banister model: ATL(Fatigue) / CTL(Fitness) with ACWR")
+                  : (isZh ? "Tim Gabbett 理论：ACWR 7日均比值与 0.8–1.3 最佳甜点区" : "Tim Gabbett model: ACWR sweet spot between 0.8 and 1.3")}
               </p>
             </div>
             <div className="seg">
               <button className={loadMode === "combo" ? "active" : ""} onClick={() => setLoadMode("combo")}>
-                体能与疲劳
+                {isZh ? "体能与疲劳" : "Fitness & Fatigue"}
               </button>
               <button className={loadMode === "acwr" ? "active" : ""} onClick={() => setLoadMode("acwr")}>
-                ACWR 甜点区
+                {isZh ? "ACWR 甜点区" : "ACWR Sweet Spot"}
               </button>
             </div>
           </div>
@@ -366,9 +368,9 @@ export default function Training({
             <LineChart
               labels={recentLoad.map((p) => p.date)}
               series={[
-                { key: "short", label: "短期负荷", color: "var(--chart-accent)", values: recentLoad.map((p) => p.shortLoad) },
-                { key: "long", label: "长期负荷", color: "var(--chart-muted)", values: recentLoad.map((p) => p.longLoad) },
-                { key: "ratio", label: "负荷比 (ACWR)", color: "var(--chart-warn)", values: recentLoad.map((p) => p.ratio), axis: "right" },
+                { key: "short", label: isZh ? "短期负荷" : "Acute Load (ATL)", color: "var(--chart-accent)", values: recentLoad.map((p) => p.shortLoad) },
+                { key: "long", label: isZh ? "长期负荷" : "Chronic Load (CTL)", color: "var(--chart-muted)", values: recentLoad.map((p) => p.longLoad) },
+                { key: "ratio", label: isZh ? "负荷比 (ACWR)" : "Workload Ratio (ACWR)", color: "var(--chart-warn)", values: recentLoad.map((p) => p.ratio), axis: "right" },
               ]}
               height={190}
               yFmt={(n) => String(Math.round(n))}
@@ -377,7 +379,7 @@ export default function Training({
           ) : (
             <LineChart
               labels={recentLoad.map((p) => p.date)}
-              series={[{ key: "ratio", label: "负荷比（7日均）", color: "var(--chart-warn)", values: recentLoad.map((p) => p.ratioAvg7 ?? p.ratio) }]}
+              series={[{ key: "ratio", label: isZh ? "负荷比（7日均）" : "ACWR (7-day Avg)", color: "var(--chart-warn)", values: recentLoad.map((p) => p.ratioAvg7 ?? p.ratio) }]}
               bands={[{ from: 0.8, to: 1.3, color: "var(--chart-good)" }]}
               height={190}
               yMin={0.4}
@@ -453,19 +455,19 @@ export default function Training({
       <div className="card">
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12, flexWrap: "wrap", gap: 10 }}>
           <div>
-            <h3 className="card-title" style={{ marginBottom: 2 }}>{view === "session" ? "训练场次" : "训练记录（逐条）"}</h3>
+            <h3 className="card-title" style={{ marginBottom: 2 }}>{view === "session" ? (isZh ? "训练场次" : "Sessions") : (isZh ? "训练记录（逐条）" : "Raw Activities")}</h3>
             <p className="card-sub" style={{ marginBottom: 0 }}>
               {view === "session"
-                ? "同一天的多次记录已合并为一场；脱钩率评估持续稳态跑（保护性门槛：≥4km 且 ≥25min），<5% 证明基础有氧扎实"
-                : "这是手表记录的原始条目，一条一次训练"}
+                ? (isZh ? "同一天的多次记录已合并为一场；脱钩率评估持续稳态跑（保护性门槛：≥4km 且 ≥25min），<5% 证明基础有氧扎实" : "Aggregated daily sessions with aerobic decoupling evaluation (threshold: ≥4km & ≥25min).")
+                : (isZh ? "这是手表记录的原始条目，一条一次训练" : "Raw unmerged activities imported directly from your sports watch.")}
             </p>
           </div>
           <div className="seg">
             <button className={view === "session" ? "active" : ""} onClick={() => setView("session")}>
-              按场次 {sessions.length}
+              {isZh ? `按场次 ${sessions.length}` : `Sessions ${sessions.length}`}
             </button>
             <button className={view === "record" ? "active" : ""} onClick={() => setView("record")}>
-              逐条 {acts.length}
+              {isZh ? `逐条 ${acts.length}` : `Raw ${acts.length}`}
             </button>
           </div>
         </div>
@@ -474,40 +476,49 @@ export default function Training({
           <div className="table-wrap" key="session-table-wrap">
             {multiSessions.length > 0 && (
               <div className="banner info" style={{ marginBottom: 12 }}>
-                有 <strong>{multiSessions.length}</strong> 场训练包含多条记录
-                {intervalSessions.length > 0 && <>，其中 <strong>{intervalSessions.length}</strong> 场被识别为间歇训练</>}
-                。点任意一行进入场次详情，AI 会一次分析整场而不是逐条点评。
+                {isZh ? (
+                  <>
+                    有 <strong>{multiSessions.length}</strong> 场训练包含多条记录
+                    {intervalSessions.length > 0 && <>，其中 <strong>{intervalSessions.length}</strong> 场被识别为间歇训练</>}
+                    。点任意一行进入场次详情，AI 会一次分析整场而不是逐条点评。
+                  </>
+                ) : (
+                  <>
+                    <strong>{multiSessions.length}</strong> multi-activity sessions detected
+                    {intervalSessions.length > 0 && <> ({intervalSessions.length} intervals)</>}. Click any row to view session details and full AI review.
+                  </>
+                )}
               </div>
             )}
             <div className="range-bar">
               <div className="seg">
-                {([["2w", "近 2 周"], ["1m", "近 1 月"], ["3m", "近 3 月"], ["all", "全部"]] as const).map(([k, lbl]) => (
+                {([["2w", isZh ? "近 2 周" : "2 Weeks"], ["1m", isZh ? "近 1 月" : "1 Month"], ["3m", isZh ? "近 3 月" : "3 Months"], ["all", isZh ? "全部" : "All"]] as const).map(([k, lbl]) => (
                   <button key={k} className={range === k ? "active" : ""} onClick={() => setRange(k)}>{lbl}</button>
                 ))}
               </div>
               <span className="range-info">
-                共 <strong>{sessions.length}</strong> 场，当前显示 <strong>{sessionsInRange.length}</strong> 场
-                {range !== "all" && <> · {Math.round(rangeKm)} km{multiInRange.length > 0 && ` · ${multiInRange.length} 场多记录`}</>}
+                {isZh ? `共 ${sessions.length} 场，当前显示 ${sessionsInRange.length} 场` : `${sessionsInRange.length} of ${sessions.length} sessions shown`}
+                {range !== "all" && <> · {Math.round(rangeKm)} km{multiInRange.length > 0 && (isZh ? ` · ${multiInRange.length} 场多记录` : ` · ${multiInRange.length} multi-records`)}</>}
               </span>
             </div>
             <table>
               <thead>
                 <tr>
-                  <th>日期</th>
-                  <th>类型</th>
-                  <th>记录数</th>
-                  <th>总距离</th>
-                  <th>总时长</th>
-                  <th>均配速</th>
-                  <th>均心率</th>
-                  <th>负荷</th>
+                  <th>{isZh ? "日期" : "Date"}</th>
+                  <th>{isZh ? "类型" : "Type"}</th>
+                  <th>{isZh ? "记录数" : "Records"}</th>
+                  <th>{isZh ? "总距离" : "Distance"}</th>
+                  <th>{isZh ? "总时长" : "Duration"}</th>
+                  <th>{isZh ? "均配速" : "Avg Pace"}</th>
+                  <th>{isZh ? "均心率" : "Avg HR"}</th>
+                  <th>{isZh ? "负荷" : "Load"}</th>
                   <th
-                    title="基于 Joe Friel 耐力模型：稳态有氧跑对比前后半程效率因子（EF = 配速 / 心率）。保护性过滤：需满足时长 ≥25min、距离 ≥4km、分圈 ≥4 且非间歇跑。"
+                    title={isZh ? "基于 Joe Friel 耐力模型：稳态有氧跑对比前后半程效率因子（EF = 配速 / 心率）。" : "Joe Friel model: Aerobic decoupling factor between 1st and 2nd halves."}
                     style={{ cursor: "help" }}
                   >
-                    有氧脱钩率 (Pw:Hr) ⓘ
+                    {isZh ? "有氧脱钩率 (Pw:Hr) ⓘ" : "Decoupling (Pw:Hr) ⓘ"}
                   </th>
-                  <th>组结构</th>
+                  <th>{isZh ? "组结构" : "Sets"}</th>
                 </tr>
               </thead>
               <tbody>

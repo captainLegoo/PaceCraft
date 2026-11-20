@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { apiUrl } from "../api";
 import { fmtP, fmtT, useWidth } from "../charts";
 import { IconFlag, IconPulse, IconTrophy } from "../icons";
+import { useI18n } from "../i18n";
 
 type Weekly = {
   weekStart: string; distanceKm: number; sessions: number;
@@ -32,6 +33,7 @@ const STATUS = {
 } as const;
 
 export default function RacePrep({ aiConfigured, dataVersion = 0 }: { aiConfigured: boolean; dataVersion?: number }) {
+  const { isZh } = useI18n();
   const [weeks, setWeeks] = useState(8);
   const [raceDate, setRaceDate] = useState("");
   const [d, setD] = useState<Report | null>(null);
@@ -79,26 +81,26 @@ export default function RacePrep({ aiConfigured, dataVersion = 0 }: { aiConfigur
   return (
     <>
       <div className="banner info">
-        这里只看<strong>最近 {d.weeks} 周</strong>的数据 —— 备赛决策关心的是当前状态，
-        半年前的跑量对「能不能跑进目标成绩」没有参考价值。
-        点「AI 备赛分析」会把这些数据整理好交给模型，给出可执行的周计划。
+        {isZh
+          ? `这里只看最近 ${d.weeks} 周的数据 —— 备赛决策关心的是当前状态，半年前的跑量对「能不能跑进目标成绩」没有参考价值。点「AI 备赛分析」会把这些数据整理好交给模型，给出可执行的周计划。`
+          : `Focusing on the past ${d.weeks} weeks — race prep decisions depend on current physiological readiness. Click "AI Prep Review" to synthesize training blocks into actionable recommendations.`}
       </div>
 
       {/* 比赛设置 */}
       <div className="card" style={{ marginBottom: 14 }}>
-        <h3 className="card-title"><IconFlag size={14} />比赛设置</h3>
-        <p className="card-sub">填上比赛日期，体检项会按剩余周数切换视角（爬坡期 / 关键期 / 减量期）</p>
+        <h3 className="card-title"><IconFlag size={14} />{isZh ? "比赛设置" : "Race Target Settings"}</h3>
+        <p className="card-sub">{isZh ? "填上比赛日期，体检项会按剩余周数切换视角（爬坡期 / 关键期 / 减量期）" : "Set your target race date to switch prep perspectives (Base / Peak / Taper phases)"}</p>
         <div className="prep-controls">
           <div>
-            <span className="ctl-label">回溯周数</span>
+            <span className="ctl-label">{isZh ? "回溯周数" : "Lookback Weeks"}</span>
             <div className="seg">
               {[4, 6, 8, 12, 16].map((w) => (
-                <button key={w} className={weeks === w ? "active" : ""} onClick={() => setWeeks(w)}>{w} 周</button>
+                <button key={w} className={weeks === w ? "active" : ""} onClick={() => setWeeks(w)}>{w} {isZh ? "周" : "w"}</button>
               ))}
             </div>
           </div>
           <div>
-            <span className="ctl-label">比赛日期</span>
+            <span className="ctl-label">{isZh ? "比赛日期" : "Race Date"}</span>
             <input
               type="date" value={raceDate} onChange={(e) => setRaceDate(e.target.value)}
               style={{ maxWidth: 190 }}
@@ -106,10 +108,10 @@ export default function RacePrep({ aiConfigured, dataVersion = 0 }: { aiConfigur
           </div>
           <div className="prep-dday">
             {d.daysToRace == null
-              ? <span className="hint">未设定比赛日期</span>
+              ? <span className="hint">{isZh ? "未设定比赛日期" : "No race date set"}</span>
               : d.daysToRace < 0
-                ? <span className="pill">比赛已结束</span>
-                : <><span className="dday-num">{d.daysToRace}</span><span className="hint">天后比赛</span></>}
+                ? <span className="pill">{isZh ? "比赛已结束" : "Race completed"}</span>
+                : <><span className="dday-num">{d.daysToRace}</span><span className="hint">{isZh ? "天后比赛" : " days to race"}</span></>}
           </div>
         </div>
       </div>
@@ -118,23 +120,23 @@ export default function RacePrep({ aiConfigured, dataVersion = 0 }: { aiConfigur
       <div className="grid g4" style={{ marginBottom: 14 }}>
         <div className="card stat-card">
           <div className="stat">
-            <span className="label"><IconPulse size={15} />周均跑量</span>
+            <span className="label"><IconPulse size={15} />{isZh ? "周均跑量" : "Weekly Volume"}</span>
             <span className="value num">{s.avgWeeklyKm}<span className="unit">km</span></span>
-            <span className="hint">峰值 {s.peakWeeklyKm} km｜共 {s.totalKm} km</span>
+            <span className="hint">{isZh ? `峰值 ${s.peakWeeklyKm} km｜共 ${s.totalKm} km` : `Peak ${s.peakWeeklyKm} km | Total ${s.totalKm} km`}</span>
           </div>
         </div>
         <div className="card stat-card">
           <div className="stat">
-            <span className="label"><IconFlag size={15} />最长单跑</span>
+            <span className="label"><IconFlag size={15} />{isZh ? "最长单跑" : "Longest Run"}</span>
             <span className="value num">{s.longestRunKm}<span className="unit">km</span></span>
             <span className="hint">{s.longestRunDate ?? "—"}</span>
           </div>
         </div>
         <div className="card stat-card">
           <div className="stat">
-            <span className="label"><IconTrophy size={15} />强度课密度</span>
-            <span className="value num">{s.qualityPerWeek}<span className="unit">次/周</span></span>
-            <span className="hint">周均 {s.avgSessionsPerWeek} 场训练</span>
+            <span className="label"><IconTrophy size={15} />{isZh ? "强度课密度" : "Quality Sessions"}</span>
+            <span className="value num">{s.qualityPerWeek}<span className="unit">{isZh ? "次/周" : "/wk"}</span></span>
+            <span className="hint">{isZh ? `周均 ${s.avgSessionsPerWeek} 场训练` : `${s.avgSessionsPerWeek} sessions/wk`}</span>
           </div>
         </div>
         <div className="card stat-card">

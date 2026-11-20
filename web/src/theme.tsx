@@ -49,17 +49,17 @@ export function useTheme() {
   };
 }
 
-export function ThemeToggle({ theme, onToggle }: { theme: Theme; onToggle: () => void }) {
+export function ThemeToggle({ theme, onToggle, isEn = false }: { theme: Theme; onToggle: () => void; isEn?: boolean }) {
   const light = theme === "light";
   return (
     <button
-      className="theme-toggle"
+      className="sidebar-ctrl-btn"
       onClick={onToggle}
-      title={light ? "切到黑夜模式" : "切到白天模式"}
-      aria-label={light ? "切到黑夜模式" : "切到白天模式"}
+      title={light ? (isEn ? "Switch to Dark Mode" : "切到黑夜模式") : (isEn ? "Switch to Light Mode" : "切到白天模式")}
+      aria-label={light ? (isEn ? "Switch to Dark Mode" : "切到黑夜模式") : (isEn ? "Switch to Light Mode" : "切到白天模式")}
     >
-      <span className="theme-icon" aria-hidden>{light ? <IconSun size={15} /> : <IconMoon size={15} />}</span>
-      <span>{light ? "白天" : "黑夜"}</span>
+      <span className="ctrl-icon" aria-hidden>{light ? <IconSun size={14} /> : <IconMoon size={14} />}</span>
+      <span>{light ? (isEn ? "Light" : "白天") : (isEn ? "Dark" : "黑夜")}</span>
     </button>
   );
 }

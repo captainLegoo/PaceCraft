@@ -2,6 +2,7 @@ import { Fragment, useEffect, useState } from "react";
 import { apiUrl } from "../api";
 import { fmtP, fmtT } from "../charts";
 import { IconGauge, IconLayers, IconStopwatch, IconTrend } from "../icons";
+import { useI18n } from "../i18n";
 
 type Report = {
   generatedAt: number;
@@ -56,13 +57,15 @@ type Report = {
   candidateCounts: Record<string, number>;
 };
 
-const TIER_DESC: Record<string, { label: string; color: string; desc: string }> = {
-  A: { label: "A 级", color: "var(--accent)", desc: "长距离锚点：训练强度≈比赛强度，外推最可信" },
-  B: { label: "B 级", color: "var(--warn)", desc: "阈值/中等距离锚点：需要模型外推" },
-  C: { label: "C 级", color: "var(--text-faint)", desc: "短距离锚点：训练中的短距离几乎不是全力，系统性偏保守" },
-};
+const getTierDesc = (isZh: boolean): Record<string, { label: string; color: string; desc: string }> => ({
+  A: { label: isZh ? "A 级" : "Tier A", color: "var(--accent)", desc: isZh ? "长距离锚点：训练强度≈比赛强度，外推最可信" : "Long-distance: Training intensity ≈ race effort, highest reliability" },
+  B: { label: isZh ? "B 级" : "Tier B", color: "var(--warn)", desc: isZh ? "阈值/中等距离锚点：需要模型外推" : "Threshold/Mid-distance: Extrapolated via models" },
+  C: { label: isZh ? "C 级" : "Tier C", color: "var(--text-faint)", desc: isZh ? "短距离锚点：训练中的短距离几乎不是全力，系统性偏保守" : "Short-distance: Workouts rarely full-out, conservatively weighted" },
+});
 
 export default function Prediction() {
+  const { isZh } = useI18n();
+  const TIER_DESC = getTierDesc(isZh);
   const [d, setD] = useState<Report | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [openModels, setOpenModels] = useState<string | null>(null);
@@ -80,38 +83,38 @@ export default function Prediction() {
   return (
     <>
       <div className="banner info">
-        这页的预测<strong>完全基于你自己的真实训练数据</strong>独立计算，不依赖单一手表的封闭评分。
-        做法是：从全品牌训练中提取连续跑出的最好成绩作为基准锚点，
-        再用多个经典运动生理学模型加权合成。下方每个数字都可以展开看它是怎么来的。
+        {isZh
+          ? "这页的预测完全基于你自己的真实训练数据独立计算，不依赖单一手表的封闭评分。做法是：从全品牌训练中提取连续跑出的最好成绩作为基准锚点，再用多个经典运动生理学模型加权合成。下方每个数字都可以展开看它是怎么来的。"
+          : "These predictions are calibrated directly from your real training activities across all devices. We extract continuous best efforts as anchor points and synthesize them through classical exercise physiology models."}
       </div>
 
       <div className="grid g4" style={{ marginBottom: 14 }}>
         <div className="card stat-card">
           <div className="stat">
-            <span className="label"><IconGauge size={15} />自建阈值配速</span>
+            <span className="label"><IconGauge size={15} />{isZh ? "自建阈值配速" : "Threshold Pace"}</span>
             <span className="value num" style={{ color: "var(--accent)" }}>{fmtP(d.threshold.paceSec)}<span className="unit">/km</span></span>
-            <span className="hint">{d.official.thresholdPaceSec ? `官方参照 ${fmtP(d.official.thresholdPaceSec)}/km` : "多品牌实测拟合"}</span>
+            <span className="hint">{d.official.thresholdPaceSec ? (isZh ? `官方参照 ${fmtP(d.official.thresholdPaceSec)}/km` : `Official ref ${fmtP(d.official.thresholdPaceSec)}/km`) : (isZh ? "多品牌实测拟合" : "Multi-brand regression")}</span>
           </div>
         </div>
         <div className="card stat-card">
           <div className="stat">
-            <span className="label"><IconTrend size={15} />你的 Riegel 指数 k</span>
+            <span className="label"><IconTrend size={15} />{isZh ? "你的 Riegel 指数 k" : "Riegel Exponent (k)"}</span>
             <span className="value num">{d.exponent.k.toFixed(3)}</span>
-            <span className="hint">理论值 1.06，{d.exponent.pairs} 组配对拟合</span>
+            <span className="hint">{isZh ? `理论值 1.06，${d.exponent.pairs} 组配对拟合` : `Standard 1.06, ${d.exponent.pairs} pairs fit`}</span>
           </div>
         </div>
         <div className="card stat-card">
           <div className="stat">
-            <span className="label"><IconLayers size={15} />参与计算的锚点</span>
-            <span className="value num">{d.meta.anchorCount}<span className="unit">个距离档</span></span>
-            <span className="hint">{d.meta.activitiesAnalyzed} 次训练 / {d.meta.lapsAnalyzed} 段（滤噪 {d.meta.lapsDropped}）</span>
+            <span className="label"><IconLayers size={15} />{isZh ? "参与计算的锚点" : "Calibration Anchors"}</span>
+            <span className="value num">{d.meta.anchorCount}<span className="unit">{isZh ? "个距离档" : " distances"}</span></span>
+            <span className="hint">{isZh ? `${d.meta.activitiesAnalyzed} 次训练 / ${d.meta.lapsAnalyzed} 段（滤噪 ${d.meta.lapsDropped}）` : `${d.meta.activitiesAnalyzed} runs / ${d.meta.lapsAnalyzed} laps (filtered ${d.meta.lapsDropped})`}</span>
           </div>
         </div>
         <div className="card stat-card">
           <div className="stat">
-            <span className="label"><IconStopwatch size={15} />数据区间</span>
+            <span className="label"><IconStopwatch size={15} />{isZh ? "数据区间" : "Data Window"}</span>
             <span className="value num" style={{ fontSize: 17 }}>{d.meta.dateRange?.[0]}<br />{d.meta.dateRange?.[1]}</span>
-            <span className="hint">年龄 {d.age} 岁，推算最大心率 {d.hrMax.toFixed(0)} bpm</span>
+            <span className="hint">{isZh ? `年龄 ${d.age} 岁，推算最大心率 ${d.hrMax.toFixed(0)} bpm` : `Age ${d.age}, estimated max HR ${d.hrMax.toFixed(0)} bpm`}</span>
           </div>
         </div>
       </div>
@@ -120,28 +123,27 @@ export default function Prediction() {
       {d.fatigue && (
         <div className="card" style={{ marginBottom: 14 }}>
           <h3 className="card-title">
-            疲劳指数
+            {isZh ? "疲劳指数" : "Fatigue Index"}
             <span className={`pill ${d.fatigue.tone}`} style={{ marginLeft: 10 }}>
               {d.fatigue.label}
             </span>
             <span className="pill" style={{ marginLeft: 6 }}>
-              可信度 {d.fatigue.reliability}
+              {isZh ? `可信度 ${d.fatigue.reliability}` : `Reliability: ${d.fatigue.reliability === "高" ? "High" : d.fatigue.reliability === "中" ? "Med" : "Low"}`}
             </span>
           </h3>
           <p className="card-sub">
-            由三项合成：<strong>负荷累积</strong>（7 天指数加权 vs 28 天基线）、
-            <strong>恢复不足</strong>（静息心率相对基线的抬升）、
-            <strong>累积压力</strong>（连续高负荷天数）。
-            仅纳入具备生理区分度与连续性的指标动态加权；若夜间佩戴天数较少（如静息心率/睡眠不连续），模型会自动降权并平滑补偿，确保疲劳评分不失真。
+            {isZh
+              ? "由三项合成：负荷累积（7 天指数加权 vs 28 天基线）、恢复不足（静息心率相对基线的抬升）、累积压力（连续高负荷天数）。仅纳入具备生理区分度与连续性的指标动态加权；若夜间佩戴天数较少（如静息心率/睡眠不连续），模型会自动降权并平滑补偿，确保疲劳评分不失真。"
+              : "Synthesized from 3 components: Acute-to-Chronic Load (7d EWMA vs 28d baseline), Insufficient Recovery (resting HR elevation above baseline), and Accumulated Stress (consecutive high-load days)."}
           </p>
 
           <div style={{ display: "flex", gap: 22, alignItems: "center", flexWrap: "wrap", marginTop: 14 }}>
             {/* 主分数：百分比刻度 */}
             <div style={{ minWidth: 260, flex: "1 1 260px" }}>
               <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: "var(--text-faint)", marginBottom: 6 }}>
-                <span>0 · 状态充沛</span>
+                <span>{isZh ? "0 · 状态充沛" : "0 · Fresh"}</span>
                 <span>50</span>
-                <span>100 · 过度负荷</span>
+                <span>{isZh ? "100 · 过度负荷" : "100 · Overload"}</span>
               </div>
               <div style={{ height: 12, background: "var(--bg-2)", borderRadius: 6, overflow: "hidden", position: "relative" }}>
                 {/* 底色分级 */}
@@ -171,7 +173,7 @@ export default function Prediction() {
 
             {/* 1–10 分刻度 */}
             <div style={{ minWidth: 210, flex: "0 1 210px" }}>
-              <div style={{ fontSize: 11, color: "var(--text-faint)", marginBottom: 6 }}>1–10 分</div>
+              <div style={{ fontSize: 11, color: "var(--text-faint)", marginBottom: 6 }}>{isZh ? "1–10 分" : "Scale 1–10"}</div>
               <div style={{ display: "flex", gap: 3 }}>
                 {Array.from({ length: 10 }, (_, i) => i + 1).map((n) => (
                   <div key={n} style={{
@@ -203,9 +205,9 @@ export default function Prediction() {
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 6 }}>
                   <strong style={{ fontSize: 13 }}>
                     {c.label}
-                    {!c.active && <span className="hint" style={{ marginLeft: 6, fontWeight: 400 }}>· 未计入</span>}
+                    {!c.active && <span className="hint" style={{ marginLeft: 6, fontWeight: 400 }}>{isZh ? "· 未计入" : "· Inactive"}</span>}
                   </strong>
-                  <span className="hint">权重 {(c.weight * 100).toFixed(0)}%</span>
+                  <span className="hint">{isZh ? "权重 " : "Weight "}{(c.weight * 100).toFixed(0)}%</span>
                 </div>
                 <div style={{ height: 5, background: "var(--bg-2)", borderRadius: 3, overflow: "hidden", marginBottom: 7 }}>
                   <div style={{
@@ -250,51 +252,65 @@ export default function Prediction() {
         </div>
       )}
       <div className="card" style={{ marginBottom: 14 }}>
-        <h3 className="card-title">爬升与地形</h3>
+        <h3 className="card-title">{isZh ? "爬升与地形" : "Elevation & Terrain"}</h3>
         <p className="card-sub">
-          阈值配速和上方所有预测用的都是<strong>平路等效配速</strong>：先用你历史数据拟合出的爬升代价
-          （每 1 m/km 爬升多耗 <strong>{d.climb.model.costSecPerRate.toFixed(2)} s/km</strong>，
-          {d.climb.model.samples} 段样本、R²={d.climb.model.r2.toFixed(2)}）
-          把爬升路段的配速折算回平路，再做回归。所以起伏路段配速慢不会被误判成体能退步。
+          {isZh ? (
+            <>
+              阈值配速和上方所有预测用的都是<strong>平路等效配速</strong>：先用你历史数据拟合出的爬升代价
+              （每 1 m/km 爬升多耗 <strong>{d.climb.model.costSecPerRate.toFixed(2)} s/km</strong>，
+              {d.climb.model.samples} 段样本、R²={d.climb.model.r2.toFixed(2)}）
+              把爬升路段的配速折算回平路，再做回归。所以起伏路段配速慢不会被误判成体能退步。
+            </>
+          ) : (
+            <>
+              Predictions and threshold paces are converted to <strong>grade-adjusted pace (GAP)</strong>: using your historical climbing cost (extra <strong>{d.climb.model.costSecPerRate.toFixed(2)} s/km</strong> per 1 m/km climb, {d.climb.model.samples} segments, R²={d.climb.model.r2.toFixed(2)}) before performing regressions.
+            </>
+          )}
         </p>
 
         <div className="grid g3" style={{ marginTop: 12, marginBottom: 14 }}>
           <div className="stat">
-            <span className="label">爬升短板</span>
+            <span className="label">{isZh ? "爬升短板" : "Climb Penalty"}</span>
             <span className="value num" style={{ color: d.climb.penaltyPct != null && d.climb.penaltyPct > 8 ? "var(--warn)" : "var(--accent)" }}>
               {d.climb.penaltySecPerKm != null ? `+${d.climb.penaltySecPerKm.toFixed(0)}` : "—"}
               <span className="unit">s/km</span>
             </span>
             <span className="hint">
               {d.climb.penaltyPct != null
-                ? `同心率下爬升比平路慢 ${d.climb.penaltyPct.toFixed(1)}%`
-                : "样本不足"}
+                ? (isZh ? `同心率下爬升比平路慢 ${d.climb.penaltyPct.toFixed(1)}%` : `Climb is ${d.climb.penaltyPct.toFixed(1)}% slower vs flat at same HR`)
+                : (isZh ? "样本不足" : "Insufficient samples")}
             </span>
           </div>
           <div className="stat">
-            <span className="label">爬升代价系数</span>
+            <span className="label">{isZh ? "爬升代价系数" : "Grade Cost Factor"}</span>
             <span className="value num" style={{ fontSize: 20 }}>
               {d.climb.model.costSecPerRate.toFixed(2)}<span className="unit">s/(m/km)</span>
             </span>
             <span className="hint">
               {d.climb.model.usable
-                ? `11 m/km 路段 ≈ 慢 ${(d.climb.model.costSecPerRate * 11).toFixed(0)} s/km`
-                : "地形变化不足，已退回不修正"}
+                ? (isZh ? `11 m/km 路段 ≈ 慢 ${(d.climb.model.costSecPerRate * 11).toFixed(0)} s/km` : `11 m/km grade ≈ +${(d.climb.model.costSecPerRate * 11).toFixed(0)} s/km`)
+                : (isZh ? "地形变化不足，已退回不修正" : "Insufficient elevation variation")}
             </span>
           </div>
           <div className="stat">
-            <span className="label">爬升率噪声阈值</span>
+            <span className="label">{isZh ? "爬升率噪声阈值" : "Noise Threshold"}</span>
             <span className="value num" style={{ fontSize: 20 }}>&lt; 1<span className="unit">m/km</span></span>
-            <span className="hint">低于此值按操场平路处理（气压计噪声）</span>
+            <span className="hint">{isZh ? "低于此值按操场平路处理（气压计噪声）" : "Below this threshold treated as flat track (barometer noise)"}</span>
           </div>
         </div>
 
         <h4 style={{ margin: "4px 0 8px", fontSize: 13, color: "var(--text-dim)" }}>
-          同心率下的爬升 vs 平路配速
+          {isZh ? "同心率下的爬升 vs 平路配速" : "Grade-Adjusted Pace vs Flat at Equal HR"}
         </h4>
         <table>
           <thead>
-            <tr><th>心率区间</th><th>爬升路段配速</th><th>平路配速</th><th>爬升代价</th><th>样本（爬升/平路）</th></tr>
+            <tr>
+              <th>{isZh ? "心率区间" : "HR Zone"}</th>
+              <th>{isZh ? "爬升路段配速" : "Climbing Pace"}</th>
+              <th>{isZh ? "平路配速" : "Flat Pace"}</th>
+              <th>{isZh ? "爬升代价" : "Climb Penalty"}</th>
+              <th>{isZh ? "样本（爬升/平路）" : "Samples (Climb/Flat)"}</th>
+            </tr>
           </thead>
           <tbody>
             {d.climb.bands.map((b) => (
@@ -314,11 +330,18 @@ export default function Prediction() {
         </table>
 
         <h4 style={{ margin: "16px 0 8px", fontSize: 13, color: "var(--text-dim)" }}>
-          训练量的地形分布
+          {isZh ? "训练量的地形分布" : "Terrain Distribution of Mileage"}
         </h4>
         <table>
           <thead>
-            <tr><th>地形</th><th>次数</th><th>距离</th><th>占比</th><th>累计爬升</th><th>平均爬升率</th></tr>
+            <tr>
+              <th>{isZh ? "地形" : "Terrain"}</th>
+              <th>{isZh ? "次数" : "Activities"}</th>
+              <th>{isZh ? "距离" : "Distance"}</th>
+              <th>{isZh ? "占比" : "Share"}</th>
+              <th>{isZh ? "累计爬升" : "Elevation Gain"}</th>
+              <th>{isZh ? "平均爬升率" : "Avg Climb Rate"}</th>
+            </tr>
           </thead>
           <tbody>
             {d.terrainSplit.map((t) => (
@@ -340,15 +363,23 @@ export default function Prediction() {
       </div>
 
       <div className="card" style={{ marginBottom: 14 }}>
-        <h3 className="card-title">日常综合训练能力预测（跨品牌实测多模型集成）</h3>
+        <h3 className="card-title">{isZh ? "日常综合训练能力预测（跨品牌实测多模型集成）" : "Training Performance Predictions (Multi-Model Ensemble)"}</h3>
         <p className="card-sub">
-          基于日常乳酸阈值、间歇及训练拉练数据加权集成。日常长距离多为轻松跑（LSD），外推相对保守，反映日常体能基线；特定赛事的实战预测请前往「赛事」查看备赛简报。点任意一行可展开查看子模型构成。
+          {isZh
+            ? "基于日常乳酸阈值、间歇及训练拉练数据加权集成。日常长距离多为轻松跑（LSD），外推相对保守，反映日常体能基线；特定赛事的实战预测请前往「赛事」查看备赛简报。点任意一行可展开查看子模型构成。"
+            : "Calibrated from continuous best efforts across daily logs. LSD runs are conservately weighted to reflect baseline aerobic capacity. Click any row to expand model weights."}
         </p>
         <table>
           <thead>
             <tr>
-              <th>距离</th><th>日常综合预测</th><th>配速</th><th>可信区间</th>
-              <th>信心</th><th>实测校验</th><th>官方参照</th><th>差异</th>
+              <th>{isZh ? "距离" : "Distance"}</th>
+              <th>{isZh ? "日常综合预测" : "Ensemble Pred"}</th>
+              <th>{isZh ? "配速" : "Pace"}</th>
+              <th>{isZh ? "可信区间" : "Confidence Range"}</th>
+              <th>{isZh ? "信心" : "Confidence"}</th>
+              <th>{isZh ? "实测校验" : "Actual Check"}</th>
+              <th>{isZh ? "官方参照" : "Official Ref"}</th>
+              <th>{isZh ? "差异" : "Delta"}</th>
             </tr>
           </thead>
           <tbody>
@@ -444,10 +475,10 @@ export default function Prediction() {
 
       <div className="grid g2" style={{ marginBottom: 14 }}>
         <div className="card">
-          <h3 className="card-title">训练区间（由你的阈值配速反推）</h3>
-          <p className="card-sub">心率由「心率 = a + b × 配速」的实测回归换算，不是拍的</p>
+          <h3 className="card-title">{isZh ? "训练区间（由你的阈值配速反推）" : "Training Zones (Derived from Threshold)"}</h3>
+          <p className="card-sub">{isZh ? "心率由「心率 = a + b × 配速」的实测回归换算，不是拍的" : "Heart rate mapped via linear regression (HR = a + b × Pace) from workouts"}</p>
           <table>
-            <thead><tr><th>训练类型</th><th>配速</th><th>预估心率</th><th>用途</th></tr></thead>
+            <thead><tr><th>{isZh ? "训练类型" : "Zone"}</th><th>{isZh ? "配速" : "Pace"}</th><th>{isZh ? "预估心率" : "Est. HR"}</th><th>{isZh ? "用途" : "Target"}</th></tr></thead>
             <tbody>
               {d.zones.map((z) => (
                 <tr key={z.name}>
@@ -462,22 +493,23 @@ export default function Prediction() {
         </div>
 
         <div className="card">
-          <h3 className="card-title">算法参数是怎么来的</h3>
+          <h3 className="card-title">{isZh ? "算法参数是怎么来的" : "Calibration Methodology"}</h3>
           <table>
             <tbody>
               <tr>
-                <td style={{ textAlign: "left", color: "var(--text-dim)" }}>阈值配速</td>
+                <td style={{ textAlign: "left", color: "var(--text-dim)" }}>{isZh ? "阈值配速" : "Threshold Pace"}</td>
                 <td className="num" style={{ textAlign: "left", whiteSpace: "normal" }}>{d.threshold.method}</td>
               </tr>
               <tr>
-                <td style={{ textAlign: "left", color: "var(--text-dim)" }}>个人 k 值</td>
+                <td style={{ textAlign: "left", color: "var(--text-dim)" }}>{isZh ? "个人 k 值" : "Individual k-Exponent"}</td>
                 <td className="num" style={{ textAlign: "left", whiteSpace: "normal" }}>{d.exponent.note}</td>
               </tr>
               <tr>
-                <td style={{ textAlign: "left", color: "var(--text-dim)" }}>为什么不用短距离</td>
+                <td style={{ textAlign: "left", color: "var(--text-dim)" }}>{isZh ? "为什么不用短距离" : "Why discount short efforts?"}</td>
                 <td className="num" style={{ textAlign: "left", whiteSpace: "normal" }}>
-                  训练里的「最快 1 公里/5 公里」通常只是间歇课的一组，跑完还有余力，
-                  拿它当锚点会系统性低估你的短距离能力。所以短距离锚点只给 C 级权重。
+                  {isZh
+                    ? "训练里的「最快 1 公里/5 公里」通常只是间歇课的一组，跑完还有余力，拿它当锚点会系统性低估你的短距离能力。所以短距离锚点只给 C 级权重。"
+                    : "Fast 1km/5km efforts in daily logs are often just interval reps with reserve in the tank. Using them as anchors would underestimate true capacity, so they receive Tier C weights."}
                 </td>
               </tr>
             </tbody>
@@ -486,13 +518,25 @@ export default function Prediction() {
       </div>
 
       <div className="card">
-        <h3 className="card-title">锚点明细：每个距离的最佳连续成绩</h3>
+        <h3 className="card-title">{isZh ? "锚点明细：每个距离的最佳连续成绩" : "Calibration Anchors: Continuous Best Efforts"}</h3>
         <p className="card-sub">
-          所有成绩均取自单次跑步中<strong>一口气不间断跑完</strong>的最佳区间。系统不会跳过间歇休息去强行拼凑碎片（例如「10 组 1km 间歇跑」不会被剔除休息强行拼成 10 公里成绩），确保每个锚点都是货真价实的持续耐力表现。
+          {isZh
+            ? "所有成绩均取自单次跑步中一口气不间断跑完的最佳区间。系统不会跳过间歇休息去强行拼凑碎片（例如「10 组 1km 间歇跑」不会被剔除休息强行拼成 10 公里成绩），确保每个锚点都是货真价实的持续耐力表现。"
+            : "Extracted strictly from continuous, unbroken efforts within a single workout. Rest periods between interval sets are never skipped or stitched together, ensuring authentic endurance metrics."}
         </p>
         <table>
           <thead>
-            <tr><th>目标距离</th><th>实际跑出</th><th>用时</th><th>配速</th><th>平均心率</th><th>日期</th><th>当日负荷</th><th>候选数</th><th>层级</th></tr>
+            <tr>
+              <th>{isZh ? "目标距离" : "Target Dist"}</th>
+              <th>{isZh ? "实际跑出" : "Logged Dist"}</th>
+              <th>{isZh ? "用时" : "Time"}</th>
+              <th>{isZh ? "配速" : "Pace"}</th>
+              <th>{isZh ? "平均心率" : "Avg HR"}</th>
+              <th>{isZh ? "日期" : "Date"}</th>
+              <th>{isZh ? "当日负荷" : "Load"}</th>
+              <th>{isZh ? "候选数" : "Candidates"}</th>
+              <th>{isZh ? "层级" : "Tier"}</th>
+            </tr>
           </thead>
           <tbody>
             {d.anchors.map((e) => {
@@ -500,7 +544,7 @@ export default function Prediction() {
               return (
                 <tr key={e.targetKm}>
                   <td>
-                    {e.targetKm >= 42.195 ? "全程马拉松" : e.targetKm >= 21.0975 ? "半程马拉松" : `${e.targetKm} km`}
+                    {e.targetKm >= 42.195 ? (isZh ? "全程马拉松" : "Marathon") : e.targetKm >= 21.0975 ? (isZh ? "半程马拉松" : "Half Marathon") : `${e.targetKm} km`}
                   </td>
                   <td className="num">{e.actualKm.toFixed(2)} km</td>
                   <td className="num">{fmtT(e.seconds)}</td>
@@ -515,7 +559,7 @@ export default function Prediction() {
                       style={{ color: TIER_DESC[tier].color }}
                       title={`${tier} 级（${tier === "A" ? "≥15km" : tier === "B" ? "8~15km" : "<8km"}）：${TIER_DESC[tier].desc}`}
                     >
-                      {tier} 级
+                      {TIER_DESC[tier].label}
                     </span>
                   </td>
                 </tr>
@@ -527,7 +571,7 @@ export default function Prediction() {
           {Object.entries(TIER_DESC).map(([k, v]) => (
             <div className="legend-item" key={k} style={{ fontSize: 12 }}>
               <span className="legend-swatch" style={{ background: v.color }} />
-              <strong style={{ color: v.color }}>{k} 级</strong>（{k === "A" ? "≥15km" : k === "B" ? "8~15km" : "<8km"}）：{v.desc}
+              <strong style={{ color: v.color }}>{v.label}</strong>（{k === "A" ? "≥15km" : k === "B" ? "8~15km" : "<8km"}）：{v.desc}
             </div>
           ))}
         </div>
