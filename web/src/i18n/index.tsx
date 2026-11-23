@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useEffect, useState, useMemo } from "react";
-import { resources, type Locale, type AppTranslations } from "./resources";
+import { resources, type Locale, type AppTranslations, type TxKey } from "./resources";
 
 const STORAGE_KEY = "coros-dashboard-locale";
 
@@ -25,7 +25,7 @@ interface I18nContextValue {
   locale: Locale;
   setLocale: (locale: Locale) => void;
   toggleLocale: () => void;
-  t: (keyPath: string, params?: Record<string, string | number>) => string;
+  t: (keyPath: TxKey, params?: Record<string, string | number>) => string;
   isZh: boolean;
   isEn: boolean;
   dict: AppTranslations;
@@ -57,7 +57,7 @@ export function I18nProvider({ children }: { children: React.ReactNode }) {
   const dict = useMemo(() => dictionaries[locale] || dictionaries["zh-CN"], [locale]);
 
   const t = useMemo(() => {
-    return (keyPath: string, params?: Record<string, string | number>): string => {
+    return (keyPath: TxKey, params?: Record<string, string | number>): string => {
       const keys = keyPath.split(".");
       let current: any = dict;
 

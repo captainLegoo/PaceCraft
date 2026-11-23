@@ -10,6 +10,8 @@
   "loading": "加载中…",
   "empty": "暂无数据",
   "refresh": "刷新",
+  "error": "出错了",
+  "diff": "差异",
   "syncNow": "立即同步",
   "syncing": "同步中…",
   "distance": "距离",

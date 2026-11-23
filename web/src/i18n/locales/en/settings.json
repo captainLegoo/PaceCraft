@@ -102,6 +102,7 @@
   "days365": "Past 1 Year (Recommended)",
   "days730": "Past 2 Years",
   "syncNow": "Sync Now",
+  "syncing": "Syncing...",
   "syncDaysTip": "Recommended 365 days: Historical records extract continuous benchmark efforts for accurate race predictions. Existing activities are de-duplicated automatically.",
   "watchAccountsTitle": "Sports Watch Accounts",
   "watchAccountsBadge": "Multi-brand · Secure Local Storage",

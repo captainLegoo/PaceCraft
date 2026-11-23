@@ -16,5 +16,7 @@
   "garminRegionCn": "Garmin China",
   "garminRegionGlobal": "Garmin Global",
   "garminApiKeyPlaceholder": "Enter your Garmin API Key / Token",
-  "garminGetApiKeyHint": "Obtain your personal API token from the Garmin Developer Portal"
+  "garminGetApiKeyHint": "Obtain your personal API token from the Garmin Developer Portal",
+  "garminKeyEmptyWarn": "Please enter your Garmin ({region}) Personal API Key",
+  "garminConnectSuccess": "Garmin {region} connected successfully!"
 }

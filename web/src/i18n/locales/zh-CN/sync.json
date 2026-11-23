@@ -11,5 +11,15 @@
   "closeSummary": "关闭通知",
   "corosBrand": "高驰 COROS",
   "garminBrand": "佳明 Garmin",
-  "dedupBrand": "智能去重"
+  "dedupBrand": "智能去重",
+  "corosNewRecords": "新增 {count} 笔训练记录",
+  "corosNoNew": "已是最新，无新增训练",
+  "corosSkippedTimeout": "{count} 项网络请求超时已跳过",
+  "garminScanned": "扫描 {count} 条",
+  "garminNewRecords": "新增 {count} 笔训练",
+  "garminNoNew": "无新记录",
+  "garminParsedFit": "解析 FIT {count} 份",
+  "dedupDesc": "自动识别并归档 {count} 对同场双表重叠训练（主力有效成绩计入周跑量）",
+  "completedAt": "{time} 完成同步",
+  "resyncHint": "可随时在设置页重新全量拉取"
 }

@@ -11,5 +11,15 @@
   "closeSummary": "Dismiss",
   "corosBrand": "COROS",
   "garminBrand": "Garmin",
-  "dedupBrand": "Smart Dedup"
+  "dedupBrand": "Smart Dedup",
+  "corosNewRecords": "{count} new activities imported",
+  "corosNoNew": "Up to date, no new activities",
+  "corosSkippedTimeout": "{count} requests timed out and were skipped",
+  "garminScanned": "Scanned {count} records",
+  "garminNewRecords": "{count} new activities",
+  "garminNoNew": "No new activities",
+  "garminParsedFit": "{count} FIT files parsed",
+  "dedupDesc": "Identified and merged {count} dual-watch overlapping sessions (primary record counted in weekly mileage)",
+  "completedAt": "Completed at {time}",
+  "resyncHint": "You can trigger a full historical resync in Settings anytime."
 }

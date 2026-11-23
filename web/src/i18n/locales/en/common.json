@@ -10,6 +10,8 @@
   "loading": "Loading…",
   "empty": "No data",
   "refresh": "Refresh",
+  "error": "Error",
+  "diff": "Diff",
   "syncNow": "Sync Now",
   "syncing": "Syncing…",
   "distance": "Distance",

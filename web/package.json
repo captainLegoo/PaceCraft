@@ -1,12 +1,13 @@
 {
   "name": "@coros-dashboard/web",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "license": "MIT",
   "private": true,
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc -b --noCheck && vite build",
+    "check-i18n": "node scripts/check-i18n.mjs",
+    "build": "npm run check-i18n && tsc -b --noCheck && vite build",
     "preview": "vite preview"
   },
   "dependencies": {

@@ -12,6 +12,7 @@ import zhSync from "./locales/zh-CN/sync.json";
 import zhProfile from "./locales/zh-CN/profile.json";
 import zhHeader from "./locales/zh-CN/header.json";
 import zhConnect from "./locales/zh-CN/connect.json";
+import zhWelcome from "./locales/zh-CN/welcome.json";
 
 // en JSON namespaces
 import enCommon from "./locales/en/common.json";
@@ -27,6 +28,7 @@ import enSync from "./locales/en/sync.json";
 import enProfile from "./locales/en/profile.json";
 import enHeader from "./locales/en/header.json";
 import enConnect from "./locales/en/connect.json";
+import enWelcome from "./locales/en/welcome.json";
 
 export const resources = {
   "zh-CN": {
@@ -43,6 +45,7 @@ export const resources = {
     profile: zhProfile,
     header: zhHeader,
     connect: zhConnect,
+    welcome: zhWelcome,
   },
   "en-US": {
     common: enCommon,
@@ -58,6 +61,7 @@ export const resources = {
     profile: enProfile,
     header: enHeader,
     connect: enConnect,
+    welcome: enWelcome,
   },
   "en": {
     common: enCommon,
@@ -73,8 +77,17 @@ export const resources = {
     profile: enProfile,
     header: enHeader,
     connect: enConnect,
+    welcome: enWelcome,
   },
 } as const;
 
 export type Locale = "zh-CN" | "en-US";
 export type AppTranslations = typeof resources["zh-CN"];
+
+/**
+ * 严格类型推导：由中文基准字典自动生成全量合法 key 路径联合类型（如 "sync.corosNoNew" | "common.save"）
+ * 彻底杜绝在代码中手滑写错 key 或漏配词条导致线上白字回退
+ */
+export type TxKey = {
+  [N in keyof AppTranslations]: `${N}.${Extract<keyof AppTranslations[N], string>}`;
+}[keyof AppTranslations];

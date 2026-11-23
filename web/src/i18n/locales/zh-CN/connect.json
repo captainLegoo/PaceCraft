@@ -16,5 +16,7 @@
   "garminRegionCn": "佳明中国区 (Garmin CN)",
   "garminRegionGlobal": "佳明国际区 (Garmin Global)",
   "garminApiKeyPlaceholder": "请输入 Garmin API Key / Token",
-  "garminGetApiKeyHint": "可在 Garmin 开发者后台获取个人 API 访问凭证"
+  "garminGetApiKeyHint": "可在 Garmin 开发者后台获取个人 API 访问凭证",
+  "garminKeyEmptyWarn": "请输入 Garmin ({region}) Personal API Key",
+  "garminConnectSuccess": "Garmin {region} 连接成功！"
 }
